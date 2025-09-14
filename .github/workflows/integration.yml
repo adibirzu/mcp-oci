@@ -1,0 +1,42 @@
+name: Integration
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'integration-*'
+
+jobs:
+  integration:
+    if: ${{ secrets.OCI_CONFIG_B64 != '' && secrets.TEST_OCI_TENANCY_OCID != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare OCI config
+        env:
+          OCI_CONFIG_B64: ${{ secrets.OCI_CONFIG_B64 }}
+        run: |
+          mkdir -p $HOME/.oci
+          echo "$OCI_CONFIG_B64" | base64 -d > $HOME/.oci/config
+          chmod 600 $HOME/.oci/config
+      - name: Install deps
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -U pip
+          pip install -e .[dev]
+      - name: Run integration tests (Frankfurt)
+        env:
+          OCI_INTEGRATION: '1'
+          TEST_OCI_PROFILE: ${{ secrets.TEST_OCI_PROFILE || 'DEFAULT' }}
+          TEST_OCI_REGION: ${{ secrets.TEST_OCI_REGION || 'eu-frankfurt-1' }}
+          TEST_OCI_TENANCY_OCID: ${{ secrets.TEST_OCI_TENANCY_OCID }}
+          TEST_LOGANALYTICS_NAMESPACE: ${{ secrets.TEST_LOGANALYTICS_NAMESPACE }}
+          TEST_OCI_OS_BUCKET: ${{ secrets.TEST_OCI_OS_BUCKET }}
+          TEST_OCI_OS_NAMESPACE: ${{ secrets.TEST_OCI_OS_NAMESPACE }}
+        run: |
+          . .venv/bin/activate
+          pytest -q tests/integration

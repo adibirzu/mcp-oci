@@ -27,11 +27,12 @@ def register_tools() -> List[Dict[str, Any]]:
     tools: List[Dict[str, Any]] = [
         {
             "name": "oci:iam:list-users",
-            "description": "List IAM users in a compartment (paginated).",
+            "description": "List IAM users in a compartment; optional exact name filter.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "compartment_id": {"type": "string"},
+                    "name": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
                     "page": {"type": "string"},
                     "profile": {"type": "string"},
@@ -56,6 +57,20 @@ def register_tools() -> List[Dict[str, Any]]:
                 "required": ["compartment_id"],
             },
             "handler": list_policy_statements,
+        },
+        {
+            "name": "oci:iam:list-api-keys",
+            "description": "List API keys for a user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["user_id"],
+            },
+            "handler": list_api_keys,
         },
         {
             "name": "oci:iam:add-user-to-group",
@@ -161,10 +176,12 @@ def register_tools() -> List[Dict[str, Any]]:
     return tools
 
 
-def list_users(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
+def list_users(compartment_id: str, name: Optional[str] = None, limit: Optional[int] = None, page: Optional[str] = None,
                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client(profile=profile, region=region)
     kwargs: Dict[str, Any] = {}
+    if name:
+        kwargs["name"] = name
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -282,3 +299,10 @@ def add_user_to_group(user_id: str, group_id: str, dry_run: bool = False, confir
     resp = client.add_user_to_group(add_user_to_group_details=model)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
     return {"item": data}
+
+
+def list_api_keys(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    resp = client.list_api_keys(user_id=user_id)
+    items = [k.__dict__ for k in getattr(resp, "data", [])]
+    return {"items": items}

@@ -5,7 +5,7 @@ BLACK = .venv/bin/black
 MYPY = .venv/bin/mypy
 PYTEST = .venv/bin/pytest
 
-.PHONY: setup dev test lint fmt
+.PHONY: setup dev test lint fmt vendor-examples doctor test-integration integration-env
 
 setup:
 	python -m venv .venv
@@ -30,3 +30,32 @@ lint:
 fmt:
 	$(RUFF) check --fix .
 	$(BLACK) .
+
+vendor-examples:
+	ORACLE_SDK_PATH?=
+	@if [ -z "$$ORACLE_SDK_PATH" ]; then echo "Set ORACLE_SDK_PATH to your oci-python-sdk clone"; exit 1; fi
+	bash scripts/vendor_oracle_examples.sh
+
+doctor:
+	. .venv/bin/activate && mcp-oci doctor
+
+integration-env:
+	@echo "Required env vars for direct OCI tests:"
+	@echo "  export OCI_INTEGRATION=1"
+	@echo "  export TEST_OCI_PROFILE=DEFAULT"
+	@echo "  export TEST_OCI_REGION=eu-frankfurt-1"
+	@echo "  export TEST_OCI_TENANCY_OCID=ocid1.tenancy.oc1..."
+	@echo "Optional:"
+	@echo "  export TEST_LOGANALYTICS_NAMESPACE=<namespace_name>"
+	@echo "  export TEST_OCI_OS_BUCKET=<bucket_name>"
+	@echo "  export TEST_OCI_OS_NAMESPACE=<namespace_name>"
+
+test-integration:
+	@echo "Running direct OCI integration tests..."
+	@if [ -z "$$TEST_OCI_PROFILE" ] || [ -z "$$TEST_OCI_REGION" ] && [ ! -f $$HOME/.oci/config ]; then \
+		echo "Missing required env vars."; \
+		$(MAKE) integration-env; \
+		exit 1; \
+	fi
+	@if [ ! -d .venv ]; then $(MAKE) setup; fi
+	OCI_INTEGRATION=1 . .venv/bin/activate && pytest -q tests/integration
