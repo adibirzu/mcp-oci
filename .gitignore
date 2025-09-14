@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage/Reports
+.coverage*
+htmlcov/
+
+# Env/Secrets
+.env
+*.env.local
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Docs cache
+docs/.docusaurus/
+docs/build/
