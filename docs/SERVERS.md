@@ -22,5 +22,10 @@ This repository hosts MCP servers for common OCI services. Each server follows A
 - mcp_oci_vault — Vault (Secrets)
 - mcp_oci_kms — Key Management (KMS)
 - mcp_oci_resourcemanager — Resource Manager
+ - mcp_oci_usageapi — Usage API (Cost & Usage)
+ - mcp_oci_budgets — Budgets (Cost Control)
+ - mcp_oci_limits — Limits and Quotas (Cost Control)
+ - mcp_oci_loganalytics — Log Analytics
+ - mcp_oci_osub — Subscriptions (OSUB)
 
 See each package under `src/` for details.

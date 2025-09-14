@@ -1,8 +1,19 @@
 # mcp_oci_monitoring
 
-See docs/templates/README_SERVER.md for the standard MCP server README format (adapted from AWS MCP).
+## Overview
+OCI Monitoring MCP server. Provides tools to list metrics, summarize metric data, and read alarms.
 
-Service: OCI Monitoring
+## Tools / Resources
+- `oci:monitoring:list-metrics` — List metric definitions; filter by namespace/name/resource_group.
+- `oci:monitoring:summarize-metrics` — Summarize data with query and time window.
+- `oci:monitoring:list-alarms` — List alarms.
+- `oci:monitoring:get-alarm` — Get an alarm by OCID.
 
-- Overview, Installation, Configuration, Tools/Resources, Usage, Development, License
-- Next: see ../../docs/SERVERS.md for links to all OCI MCP servers.
+## Usage
+```
+mcp-oci-serve-monitoring --profile DEFAULT --region eu-frankfurt-1
+mcp-oci call monitoring oci:monitoring:list-metrics --params '{"compartment_id":"ocid1.compartment...","namespace":"oci_computeagent"}'
+```
+
+## Next
+See ../../docs/servers/monitoring.md for parameters and examples.

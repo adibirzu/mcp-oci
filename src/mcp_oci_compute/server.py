@@ -39,12 +39,13 @@ def register_tools() -> List[Dict[str, Any]]:
         },
         {
             "name": "oci:compute:list-images",
-            "description": "List images in a compartment.",
+            "description": "List images in a compartment; filter by OS and version.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "compartment_id": {"type": "string"},
                     "operating_system": {"type": "string"},
+                    "operating_system_version": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
                     "page": {"type": "string"},
                     "profile": {"type": "string"},
@@ -84,6 +85,39 @@ def register_tools() -> List[Dict[str, Any]]:
                 "required": ["instance_id"],
             },
             "handler": get_instance,
+        },
+        {
+            "name": "oci:compute:list-boot-volumes",
+            "description": "List boot volumes in an availability domain (Blockstorage).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "availability_domain": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id", "availability_domain"],
+            },
+            "handler": list_boot_volumes,
+        },
+        {
+            "name": "oci:compute:list-instance-configurations",
+            "description": "List instance configurations (Compute Management).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": list_instance_configurations,
         },
         {
             "name": "oci:compute:list-shapes",
@@ -141,13 +175,15 @@ def list_instances(compartment_id: str, availability_domain: Optional[str] = Non
     return {"items": items, "next_page": next_page}
 
 
-def list_images(compartment_id: str, operating_system: Optional[str] = None,
+def list_images(compartment_id: str, operating_system: Optional[str] = None, operating_system_version: Optional[str] = None,
                 limit: Optional[int] = None, page: Optional[str] = None,
                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client(profile=profile, region=region)
     kwargs: Dict[str, Any] = {}
     if operating_system:
         kwargs["operating_system"] = operating_system
+    if operating_system_version:
+        kwargs["operating_system_version"] = operating_system_version
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -188,6 +224,43 @@ def instance_action(instance_id: str, action: str, dry_run: bool = False, confir
     resp = client.instance_action(instance_id=instance_id, action=action)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
     return {"item": data}
+
+
+def list_boot_volumes(compartment_id: str, availability_domain: str,
+                      limit: Optional[int] = None, page: Optional[str] = None,
+                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    if oci is None:
+        raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
+    from mcp_oci_common import make_client as _make
+
+    blk = _make(oci.core.BlockstorageClient, profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = blk.list_boot_volumes(availability_domain=availability_domain, compartment_id=compartment_id, **kwargs)
+    items = [b.__dict__ for b in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
+    return {"items": items, "next_page": next_page}
+
+
+def list_instance_configurations(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
+                                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    if oci is None:
+        raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
+    from mcp_oci_common import make_client as _make
+
+    mgmt = _make(oci.core.ComputeManagementClient, profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = mgmt.list_instance_configurations(compartment_id=compartment_id, **kwargs)
+    items = [c.__dict__ for c in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
+    return {"items": items, "next_page": next_page}
 
 
 def list_shapes(compartment_id: str, availability_domain: Optional[str] = None, image_id: Optional[str] = None,

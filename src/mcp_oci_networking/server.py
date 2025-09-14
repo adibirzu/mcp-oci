@@ -54,6 +54,57 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_vcns,
         },
         {
+            "name": "oci:networking:list-vcns-by-dns",
+            "description": "List VCNs filtered by dns_label (client-side filter).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "dns_label": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id", "dns_label"],
+            },
+            "handler": list_vcns_by_dns,
+        },
+        {
+            "name": "oci:networking:list-route-tables",
+            "description": "List route tables in a compartment; optionally filter by VCN.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "vcn_id": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": list_route_tables,
+        },
+        {
+            "name": "oci:networking:list-security-lists",
+            "description": "List security lists in a compartment; optionally filter by VCN.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "vcn_id": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": list_security_lists,
+        },
+        {
             "name": "oci:networking:create-vcn",
             "description": "Create a VCN (confirm=true supports required; dry_run available).",
             "parameters": {
@@ -103,6 +154,47 @@ def list_vcns(compartment_id: str, limit: Optional[int] = None, page: Optional[s
         kwargs["page"] = page
     resp = client.list_vcns(compartment_id=compartment_id, **kwargs)
     items = [v.__dict__ for v in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
+    return {"items": items, "next_page": next_page}
+
+
+def list_vcns_by_dns(compartment_id: str, dns_label: str, limit: Optional[int] = None, page: Optional[str] = None,
+                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    out = list_vcns(compartment_id=compartment_id, limit=limit, page=page, profile=profile, region=region)
+    items = [v for v in out.get("items", []) if (v.get("dns_label") if isinstance(v, dict) else getattr(v, "dns_label", None)) == dns_label]
+    return {"items": items, "next_page": out.get("next_page")}
+
+
+def list_route_tables(compartment_id: str, vcn_id: Optional[str] = None,
+                      limit: Optional[int] = None, page: Optional[str] = None,
+                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if vcn_id:
+        kwargs["vcn_id"] = vcn_id
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = client.list_route_tables(compartment_id=compartment_id, **kwargs)
+    items = [r.__dict__ for r in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
+    return {"items": items, "next_page": next_page}
+
+
+def list_security_lists(compartment_id: str, vcn_id: Optional[str] = None,
+                        limit: Optional[int] = None, page: Optional[str] = None,
+                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if vcn_id:
+        kwargs["vcn_id"] = vcn_id
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = client.list_security_lists(compartment_id=compartment_id, **kwargs)
+    items = [s.__dict__ for s in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
     return {"items": items, "next_page": next_page}
 

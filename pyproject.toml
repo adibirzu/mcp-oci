@@ -53,6 +53,13 @@ mcp-oci-serve-ons = "mcp_oci_ons.__main__:main"
 mcp-oci-serve-vault = "mcp_oci_vault.__main__:main"
 mcp-oci-serve-kms = "mcp_oci_kms.__main__:main"
 mcp-oci-serve-resourcemanager = "mcp_oci_resourcemanager.__main__:main"
+mcp-oci-serve-usageapi = "mcp_oci_usageapi.__main__:main"
+mcp-oci-serve-budgets = "mcp_oci_budgets.__main__:main"
+mcp-oci-serve-limits = "mcp_oci_limits.__main__:main"
+mcp-oci-serve-inventory = "mcp_oci_inventory.__main__:main"
+mcp-oci-serve-loganalytics = "mcp_oci_loganalytics.__main__:main"
+mcp-oci-serve-osub = "mcp_oci_osub.__main__:main"
+mcp-oci-serve-introspect = "mcp_oci_introspect.__main__:main"
 
 [tool.black]
 line-length = 100

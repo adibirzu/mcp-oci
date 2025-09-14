@@ -26,12 +26,28 @@ const sidebars = {
         'servers/vault',
         'servers/kms',
         'servers/resourcemanager',
+        'servers/usageapi',
+        'servers/budgets',
+        'servers/limits',
+        'servers/loganalytics',
+        'servers/osub',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'How-To',
+      items: [
+        'howto/cost-analysis',
+        'howto/rate-cards',
       ],
     },
     {
       type: 'category',
       label: 'Development',
-      items: [],
+      items: [
+        'integrations',
+        'development/testing',
+      ],
     },
   ],
 };

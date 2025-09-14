@@ -49,8 +49,38 @@ def main() -> None:
     cp.add_argument("--params", default="{}", help="JSON object of parameters")
     cp.set_defaults(func=cmd_call)
 
+    dp = sub.add_parser("doctor", help="Check OCI SDK/config connectivity")
+    dp.add_argument("--profile")
+    dp.add_argument("--region")
+    dp.set_defaults(func=cmd_doctor)
+
     args = p.parse_args()
     args.func(args)
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    try:
+        import oci  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise SystemExit(f"OCI SDK not installed: {e}")
+    profile = args.profile
+    region = args.region
+    try:
+        cfg = oci.config.from_file(profile_name=profile)
+        if region:
+            cfg["region"] = region
+        client = oci.identity.IdentityClient(cfg)
+        resp = client.list_regions()
+        regions = [r.key for r in getattr(resp, "data", [])]
+        print(json.dumps({
+            "status": "ok",
+            "profile": profile or cfg.get("profile", "DEFAULT"),
+            "region": cfg.get("region"),
+            "tenancy": cfg.get("tenancy"),
+            "regions_available": regions,
+        }, indent=2))
+    except Exception as e:
+        raise SystemExit(f"Doctor check failed: {e}")
 
 
 if __name__ == "__main__":

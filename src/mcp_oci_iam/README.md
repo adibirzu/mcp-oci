@@ -17,6 +17,10 @@ Uses OCI SDK with `~/.oci/config` or env vars. Optional defaults via `mcp-oci-se
 - `oci:iam:list-compartments` — List compartments; supports subtree and access level.
 - `oci:iam:list-groups` — List groups.
 - `oci:iam:list-policies` — List policies.
+ - `oci:iam:list-user-groups` — List a user’s group memberships; optional group expansion.
+ - `oci:iam:list-policy-statements` — Flatten policy statements across policies.
+ - `oci:iam:list-api-keys` — List API keys for a user.
+ - `oci:iam:add-user-to-group` — Mutating. Add user to group (confirm/dry_run supported).
 
 ## Usage
 Serve over stdio (for MCP hosts):
@@ -27,6 +31,13 @@ Dev call examples:
 ```
 mcp-oci call iam oci:iam:list-users --params '{"compartment_id":"ocid1.tenancy..."}'
 mcp-oci call iam oci:iam:get-user --params '{"user_id":"ocid1.user..."}'
+mcp-oci call iam oci:iam:list-user-groups --params '{"compartment_id":"ocid1.tenancy...","user_id":"ocid1.user...","include_groups":true}'
+mcp-oci call iam oci:iam:list-policy-statements --params '{"compartment_id":"ocid1.tenancy..."}'
+\# API keys
+mcp-oci call iam oci:iam:list-api-keys --params '{"user_id":"ocid1.user..."}'
+\# Dry run then confirm a mutating call
+mcp-oci call iam oci:iam:add-user-to-group --params '{"user_id":"ocid1.user...","group_id":"ocid1.group...","dry_run":true}'
+mcp-oci call iam oci:iam:add-user-to-group --params '{"user_id":"ocid1.user...","group_id":"ocid1.group...","confirm":true}'
 ```
 
 ### Example Host Config (MCP)
