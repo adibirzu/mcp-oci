@@ -25,7 +25,29 @@ def main() -> None:
         defaults["profile"] = args.profile
     if args.region:
         defaults["region"] = args.region
-    run_with_tools(register_tools(), defaults=defaults, require_confirm=args.require_confirm, log_level=args.log_level)
+    tools = register_tools()
+    # Add generic server info and ping tools to help hosts probe
+    def _server_info() -> Dict[str, Any]:  # type: ignore
+        return {"service": args.service, "defaults": defaults, "runtime": "stdio"}
+
+    def _ping() -> Dict[str, Any]:  # type: ignore
+        return {"ok": True}
+
+    tools.extend([
+        {
+            "name": "mcp:server:info",
+            "description": "Return server information (service, defaults, runtime).",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": _server_info,
+        },
+        {
+            "name": "mcp:server:ping",
+            "description": "Ping tool for connectivity checks.",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": _ping,
+        },
+    ])
+    run_with_tools(tools, defaults=defaults, require_confirm=args.require_confirm, log_level=args.log_level)
 
 
 if __name__ == "__main__":

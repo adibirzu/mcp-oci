@@ -1,7 +1,7 @@
 # Server Name (OCI <Service>)
 
 ## Overview
-Brief description of the MCP server for OCI <Service>. Implements tools following AWS MCP best practices.
+Brief description of the MCP server for OCI <Service>. Implements tools following MCP best practices and FastMCP framework guidelines.
 
 ## Installation
 ```

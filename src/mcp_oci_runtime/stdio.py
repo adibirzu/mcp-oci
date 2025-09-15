@@ -29,6 +29,7 @@ class StdioServer:
     def _read_message(self) -> Json | None:
         # Try LSP-style framing first
         header = ""
+        length = 0
         while True:
             line = sys.stdin.readline()
             if not line:
@@ -64,14 +65,27 @@ class StdioServer:
 
     # ---------------- Handlers -----------------
     def _handle_initialize(self, req: Json) -> Json:
+        params = req.get("params", {}) if isinstance(req, dict) else {}
+        client_version = None
+        try:
+            client_version = params.get("protocolVersion")
+        except Exception:
+            client_version = None
+        # Log handshake for host compatibility diagnostics
+        self._log("INFO", f"initialize received (client protocol={client_version})")
         return {
-            "protocolVersion": "2024-05-01",
+            "protocolVersion": client_version or "2024-05-01",
             "capabilities": {
                 "tools": {},
+            },
+            "serverInfo": {
+                "name": "mcp-oci",
+                "version": "0.1.0",
             },
         }
 
     def _handle_tools_list(self, req: Json) -> Json:
+        self._log("INFO", f"tools/list requested; returning {len(self.tools)} tools")
         items = []
         for t in self.tools:
             items.append(
@@ -108,7 +122,7 @@ class StdioServer:
         if self.require_confirm and tool.get("mutating"):
             if not args.get("confirm"):
                 raise ValueError("Confirmation required: pass `confirm=true` for mutating action")
-        self._log("DEBUG", f"Calling tool {name} with args keys: {list(args.keys())}")
+        self._log("INFO", f"tools/call {name} args={list(args.keys())}")
         result = handler(**args)
         # MCP expects an array of outputs; we return a single json block
         return {"content": [{"type": "json", "json": result}]}
@@ -136,8 +150,23 @@ class StdioServer:
                     raise ValueError(f"Unsupported method: {method}")
                 self._write({"jsonrpc": "2.0", "id": rid, "result": result})
             except Exception as e:
+                # Enrich error with OCI request id if present
+                data = {}
+                try:
+                    import oci  # type: ignore
+                    if isinstance(e, oci.exceptions.ServiceError):  # type: ignore
+                        headers = getattr(e, "headers", {}) or {}
+                        rid = headers.get("opc-request-id") or headers.get("opc_request_id")
+                        if rid:
+                            data["opc_request_id"] = rid
+                        data["service_code"] = getattr(e, "code", None)
+                except Exception:
+                    pass
                 self._log("ERROR", f"{type(e).__name__}: {e}")
-                self._write({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": str(e)}})
+                err_obj = {"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": str(e)}}
+                if data:
+                    err_obj["error"]["data"] = data
+                self._write(err_obj)
 
 
 def run_with_tools(tools: List[Dict[str, Any]], *, defaults: Dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN") -> None:

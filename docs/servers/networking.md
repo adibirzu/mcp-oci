@@ -7,8 +7,9 @@ Exposes `oci:networking:*` tools.
 - `oci:networking:list-vcns` — List VCNs.
 - `oci:networking:list-vcns-by-dns` — Filter VCNs by dns_label.
 - `oci:networking:create-vcn` — Mutating. Create VCN (confirm/dry_run).
- - `oci:networking:list-route-tables` — List route tables; optional VCN filter.
- - `oci:networking:list-security-lists` — List security lists; optional VCN filter.
+- `oci:networking:list-route-tables` — List route tables; optional VCN filter.
+- `oci:networking:list-security-lists` — List security lists; optional VCN filter.
+- `oci:networking:list-network-security-groups` — List NSGs; optional VCN filter.
 
 ## Usage
 Serve:
@@ -31,6 +32,9 @@ mcp-oci call networking oci:networking:create-vcn --params '{"compartment_id":"o
 - list-route-tables: `compartment_id` (required), `vcn_id?`, `limit?`, `page?`.
 - list-security-lists: `compartment_id` (required), `vcn_id?`, `limit?`, `page?`.
 - create-vcn: `compartment_id`, `cidr_block`, `display_name` (required); `dns_label?`, `dry_run?`, `confirm?`.
+
+## Responses
+- Responses include `opc_request_id` and pagination tokens where available.
 
 ## Troubleshooting
 - 404 or empty results: verify compartment OCID and region.

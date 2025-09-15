@@ -188,8 +188,24 @@ def request_summarized_usages(tenant_id: str, time_usage_started: str, time_usag
             group_by=group_by or None,
         )  # type: ignore
     resp = client.request_summarized_usages(request_summarized_usages_details=model)
-    items = [i.__dict__ for i in getattr(resp, "data", [])] if hasattr(resp, "data") else []
-    return {"items": items}
+    # Normalize response across SDK versions
+    items: List[Dict[str, Any]] = []
+    if hasattr(resp, "data"):
+        data = getattr(resp, "data")
+        if isinstance(data, list):
+            items = [getattr(i, "__dict__", i) for i in data]
+        elif hasattr(data, "items"):
+            try:
+                items = [getattr(i, "__dict__", i) for i in getattr(data, "items")]
+            except Exception:
+                items = [getattr(data, "__dict__", data)]
+        else:
+            items = [getattr(data, "__dict__", data)]
+    elif hasattr(resp, "items"):
+        data_items = getattr(resp, "items")
+        items = [getattr(i, "__dict__", i) for i in (data_items or [])]
+    from mcp_oci_common.response import with_meta
+    return with_meta(resp, {"items": items})
 
 
 def cost_by_service(tenant_id: str, days: int = 7, granularity: str = "DAILY",
@@ -330,7 +346,8 @@ def list_rate_cards(subscription_id: str, time_from: Optional[str] = None, time_
     items = [i.__dict__ for i in getattr(resp, "data", [])]
     if part_number:
         items = [i for i in items if str(i.get("partNumber")) == part_number]
-    return {"items": items}
+    from mcp_oci_common.response import with_meta
+    return with_meta(resp, {"items": items})
 
 
 def showusage_run(start: str, end: str, granularity: str = "DAILY", groupby: Optional[str] = None,

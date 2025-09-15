@@ -5,6 +5,7 @@ Exposes tools as `oci:budgets:<action>`.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -101,14 +102,14 @@ def list_budgets(compartment_id: str, limit: Optional[int] = None, page: Optiona
     resp = client.list_budgets(compartment_id=compartment_id, **kwargs)
     items = [b.__dict__ for b in getattr(resp, "items", getattr(resp, "data", []) or [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def get_budget(budget_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_budget(budget_id)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})
 
 
 def list_alert_rules(budget_id: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -122,7 +123,7 @@ def list_alert_rules(budget_id: str, limit: Optional[int] = None, page: Optional
     resp = client.list_alert_rules(budget_id=budget_id, **kwargs)
     items = [a.__dict__ for a in getattr(resp, "items", getattr(resp, "data", []) or [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def create_budget(compartment_id: str, amount: float, reset_period: str = "MONTHLY",
@@ -146,5 +147,4 @@ def create_budget(compartment_id: str, amount: float, reset_period: str = "MONTH
     client = create_client(profile=profile, region=region)
     resp = client.create_budget(create_budget_details=model)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
-
+    return with_meta(resp, {"item": data})

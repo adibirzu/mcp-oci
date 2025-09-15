@@ -5,6 +5,7 @@ Tools as `oci:objectstorage:<action>`.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -123,6 +124,22 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": create_preauth_request,
             "mutating": True,
         },
+        {
+            "name": "oci:objectstorage:head-object",
+            "description": "Get object metadata (HEAD).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace_name": {"type": "string"},
+                    "bucket_name": {"type": "string"},
+                    "object_name": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["namespace_name", "bucket_name", "object_name"],
+            },
+            "handler": head_object,
+        },
     ]
 
 
@@ -138,7 +155,7 @@ def list_buckets(namespace_name: str, compartment_id: str, limit: Optional[int] 
     resp = client.list_buckets(namespace_name=namespace_name, compartment_id=compartment_id, **kwargs)
     items = [b.__dict__ for b in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def get_namespace(compartment_id: Optional[str] = None, profile: Optional[str] = None,
@@ -149,7 +166,7 @@ def get_namespace(compartment_id: Optional[str] = None, profile: Optional[str] =
     else:
         resp = client.get_namespace()
     ns = resp.data if hasattr(resp, "data") else resp
-    return {"namespace": ns}
+    return with_meta(resp, {"namespace": ns})
 
 
 def list_objects(namespace_name: str, bucket_name: str, prefix: Optional[str] = None,
@@ -168,8 +185,8 @@ def list_objects(namespace_name: str, bucket_name: str, prefix: Optional[str] = 
     if data and hasattr(data, "objects"):
         items = [o.__dict__ for o in data.objects]
         next_start = getattr(data, "next_start_with", None)
-        return {"items": items, "next_start_with": next_start}
-    return {"items": []}
+        return with_meta(resp, {"items": items, "next_start_with": next_start})
+    return with_meta(resp, {"items": []})
 
 
 def get_bucket(namespace_name: str, bucket_name: str, profile: Optional[str] = None,
@@ -177,7 +194,15 @@ def get_bucket(namespace_name: str, bucket_name: str, profile: Optional[str] = N
     client = create_client(profile=profile, region=region)
     resp = client.get_bucket(namespace_name=namespace_name, bucket_name=bucket_name)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})
+
+
+def head_object(namespace_name: str, bucket_name: str, object_name: str,
+                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    resp = client.head_object(namespace_name=namespace_name, bucket_name=bucket_name, object_name=object_name)
+    headers = getattr(resp, "headers", {})
+    return with_meta(resp, {"item": dict(headers)})
 
 
 def list_preauth_requests(namespace_name: str, bucket_name: str, object_name: Optional[str] = None,
@@ -194,7 +219,7 @@ def list_preauth_requests(namespace_name: str, bucket_name: str, object_name: Op
     resp = client.list_preauthenticated_requests(namespace_name=namespace_name, bucket_name=bucket_name, **kwargs)
     items = [r.__dict__ for r in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def create_preauth_request(namespace_name: str, bucket_name: str, name: str, access_type: str,
@@ -224,4 +249,4 @@ def create_preauth_request(namespace_name: str, bucket_name: str, name: str, acc
     client = create_client(profile=profile, region=region)
     resp = client.create_preauthenticated_request(namespace_name=namespace_name, bucket_name=bucket_name, create_preauthenticated_request_details=model)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})

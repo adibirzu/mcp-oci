@@ -5,6 +5,7 @@ Expose basic subscription listing via `oci:osub:<action>`.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -52,5 +53,4 @@ def list_subscriptions(tenancy_id: str, limit: Optional[int] = None, page: Optio
         raise RuntimeError("list_subscriptions not available in this SDK version")
     resp = method(**kwargs)
     items = [i.__dict__ for i in getattr(resp, "data", [])]
-    return {"items": items}
-
+    return with_meta(resp, {"items": items})

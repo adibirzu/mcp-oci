@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 license = { text = "Proprietary" }
 dependencies = [
   "oci>=2",
+  "fastmcp>=2.10.0",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +61,8 @@ mcp-oci-serve-inventory = "mcp_oci_inventory.__main__:main"
 mcp-oci-serve-loganalytics = "mcp_oci_loganalytics.__main__:main"
 mcp-oci-serve-osub = "mcp_oci_osub.__main__:main"
 mcp-oci-serve-introspect = "mcp_oci_introspect.__main__:main"
+mcp-oci-serve-security = "mcp_oci_security.__main__:main"
+mcp-oci-serve-fast = "mcp_oci_fastmcp.__main__:main"
 
 [tool.black]
 line-length = 100

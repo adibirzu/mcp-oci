@@ -6,6 +6,7 @@ Focus on query execution and common catalog listings.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -17,6 +18,15 @@ def create_client(profile: Optional[str] = None, region: Optional[str] = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.log_analytics.LogAnalyticsClient, profile=profile, region=region)
+
+
+def _extract_items_from_response(resp) -> List[Any]:
+    """Extract items from OCI response, handling both direct data and data.items patterns"""
+    data = getattr(resp, "data", None)
+    if data and hasattr(data, "items"):
+        return [getattr(i, "__dict__", i) for i in data.items]
+    else:
+        return [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
 
 
 def register_tools() -> List[Dict[str, Any]]:
@@ -266,8 +276,8 @@ def run_query(namespace_name: str, query_string: str, time_start: str, time_end:
             if data is None:
                 return {"result": None}
             if hasattr(data, "items"):
-                return {"items": [getattr(i, "__dict__", i) for i in data.items]}
-            return {"result": getattr(data, "__dict__", data)}
+                return with_meta(resp, {"items": [getattr(i, "__dict__", i) for i in data.items]})
+            return with_meta(resp, {"result": getattr(data, "__dict__", data)})
         except Exception as e:
             last_err = e
             continue
@@ -290,9 +300,9 @@ def list_entities(namespace_name: str, compartment_id: str, limit: Optional[int]
         if method is None:
             continue
         resp = method(**kwargs)
-        items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+        items = _extract_items_from_response(resp)
         next_page = getattr(resp, "opc_next_page", None)
-        return {"items": items, "next_page": next_page}
+        return with_meta(resp, {"items": items}, next_page=next_page)
     raise RuntimeError("No list entities method available in SDK")
 
 
@@ -308,9 +318,9 @@ def list_parsers(namespace_name: str, limit: Optional[int] = None, page: Optiona
     if method is None:
         raise RuntimeError("list_parsers not available in this SDK version")
     resp = method(**kwargs)
-    items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+    items = _extract_items_from_response(resp)
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_log_groups(namespace_name: str, compartment_id: str, limit: Optional[int] = None,
@@ -329,7 +339,7 @@ def list_log_groups(namespace_name: str, compartment_id: str, limit: Optional[in
         if method is None:
             continue
         resp = method(**kwargs)
-        items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+        items = _extract_items_from_response(resp)
         next_page = getattr(resp, "opc_next_page", None)
         return {"items": items, "next_page": next_page}
     raise RuntimeError("Log group listing not available in this SDK version")
@@ -349,7 +359,7 @@ def list_saved_searches(namespace_name: str, limit: Optional[int] = None, page: 
         if method is None:
             continue
         resp = method(**kwargs)
-        items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+        items = _extract_items_from_response(resp)
         next_page = getattr(resp, "opc_next_page", None)
         return {"items": items, "next_page": next_page}
     raise RuntimeError("Saved searches listing not available in this SDK version")
@@ -370,7 +380,7 @@ def list_scheduled_tasks(namespace_name: str, compartment_id: str, limit: Option
         if method is None:
             continue
         resp = method(**kwargs)
-        items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+        items = _extract_items_from_response(resp)
         next_page = getattr(resp, "opc_next_page", None)
         return {"items": items, "next_page": next_page}
     raise RuntimeError("Scheduled tasks listing not available in this SDK version")
@@ -398,7 +408,7 @@ def upload_lookup(namespace_name: str, name: str, file_path: str, description: O
             with open(file_path, "rb") as f:
                 resp = method(namespace_name=namespace_name, name=name, upload_lookup_file_body=f, description=description)  # type: ignore
             data = getattr(resp, "data", None)
-            return {"result": getattr(data, "__dict__", data)}
+            return with_meta(resp, {"result": getattr(data, "__dict__", data)})
         except Exception as e:
             last_err = e
             continue
@@ -420,9 +430,9 @@ def list_work_requests(compartment_id: str, namespace_name: str, limit: Optional
         if method is None:
             continue
         resp = method(**kwargs)
-        items = [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
+        items = _extract_items_from_response(resp)
         next_page = getattr(resp, "opc_next_page", None)
-        return {"items": items, "next_page": next_page}
+        return with_meta(resp, {"items": items}, next_page=next_page)
     raise RuntimeError("Work requests listing not available in this SDK version")
 
 
@@ -433,7 +443,7 @@ def get_work_request(work_request_id: str, profile: Optional[str] = None, region
         raise RuntimeError("get_work_request not available in this SDK version")
     resp = method(work_request_id)
     data = getattr(resp, "data", None)
-    return {"item": getattr(data, "__dict__", data)}
+    return with_meta(resp, {"item": getattr(data, "__dict__", data)})
 
 
 def run_snippet(namespace_name: str, snippet: str, params: Optional[Dict[str, Any]] = None,

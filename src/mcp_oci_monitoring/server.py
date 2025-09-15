@@ -3,6 +3,7 @@
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -208,7 +209,7 @@ def list_metrics(compartment_id: str, namespace: Optional[str] = None, name: Opt
     resp = client.list_metrics(**kwargs)
     items = [m.__dict__ for m in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def summarize_metrics(compartment_id: str, namespace: str, query: str,
@@ -247,7 +248,7 @@ def summarize_metrics(compartment_id: str, namespace: str, query: str,
         raise last_err or RuntimeError("Unable to build SummarizeMetricsDataDetails")
     resp = client.summarize_metrics_data(namespace, details)
     items = [d.__dict__ for d in getattr(resp, "data", [])]
-    return {"items": items}
+    return with_meta(resp, {"items": items})
 
 
 def _alarms_client(profile: Optional[str], region: Optional[str]):
@@ -271,14 +272,14 @@ def list_alarms(compartment_id: str, lifecycle_state: Optional[str] = None, limi
     resp = client.list_alarms(**kwargs)
     items = [a.__dict__ for a in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def get_alarm(alarm_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = _alarms_client(profile, region)
     resp = client.get_alarm(alarm_id)
     data = getattr(resp, "data", None)
-    return {"item": getattr(data, "__dict__", data)}
+    return with_meta(resp, {"item": getattr(data, "__dict__", data)})
 
 
 def list_metric_namespaces(compartment_id: str, compartment_id_in_subtree: bool = False,
@@ -367,7 +368,7 @@ def list_alarm_statuses(compartment_id: str, limit: Optional[int] = None, page: 
     resp = method(**kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def get_alarm_history(alarm_id: str, alarm_historytype: Optional[str] = None,
@@ -387,7 +388,7 @@ def get_alarm_history(alarm_id: str, alarm_historytype: Optional[str] = None,
         raise RuntimeError("get_alarm_history not available in SDK version")
     resp = method(**kwargs)
     items = [h.__dict__ for h in getattr(resp, "data", [])]
-    return {"items": items}
+    return with_meta(resp, {"items": items})
 
 
 def _parse_window(window: str) -> int:

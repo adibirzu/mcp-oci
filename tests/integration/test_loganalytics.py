@@ -1,16 +1,12 @@
 import datetime as dt
-import os
 import pytest
-
 from mcp_oci_loganalytics.server import run_query
 
 
-@pytest.mark.skipif(
-    not os.environ.get("TEST_LOGANALYTICS_NAMESPACE"),
-    reason="Set TEST_LOGANALYTICS_NAMESPACE to enable Log Analytics integration test",
-)
-def test_loganalytics_run_query(oci_profile, oci_region):
-    namespace = os.environ["TEST_LOGANALYTICS_NAMESPACE"]
+def test_loganalytics_run_query(oci_profile, oci_region, log_analytics_namespace):
+    if not log_analytics_namespace:
+        pytest.skip("No Log Analytics namespace discovered; set TEST_LOGANALYTICS_NAMESPACE to force")
+    namespace = log_analytics_namespace
     # 1-hour window ending now
     end = dt.datetime.utcnow().replace(microsecond=0)
     start = end - dt.timedelta(hours=1)
@@ -25,4 +21,3 @@ def test_loganalytics_run_query(oci_profile, oci_region):
     )
     assert isinstance(out, dict)
     assert any(k in out for k in ("items", "result"))
-

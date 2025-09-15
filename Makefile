@@ -5,12 +5,10 @@ BLACK = .venv/bin/black
 MYPY = .venv/bin/mypy
 PYTEST = .venv/bin/pytest
 
-.PHONY: setup dev test lint fmt vendor-examples doctor test-integration integration-env
+.PHONY: setup dev test lint fmt vendor-examples doctor test-integration integration-env validate-tools
 
 setup:
-	python -m venv .venv
-	$(PIP) install -U pip
-	$(PIP) install -e .[dev]
+	bash scripts/bootstrap.sh
 
 dev:
 	@if [ -d dev/mcp-oci-x-server ]; then \
@@ -39,6 +37,15 @@ vendor-examples:
 doctor:
 	. .venv/bin/activate && mcp-oci doctor
 
+.PHONY: configure-claude
+configure-claude:
+	bash scripts/install_claude_config.sh
+
+.PHONY: doctor-profile
+doctor-profile:
+	@PROFILE=${PROFILE:-DEFAULT}; REGION=${REGION:-eu-frankfurt-1}; \
+	. .venv/bin/activate && mcp-oci doctor --profile $$PROFILE --region $$REGION
+
 integration-env:
 	@echo "Required env vars for direct OCI tests:"
 	@echo "  export OCI_INTEGRATION=1"
@@ -59,3 +66,6 @@ test-integration:
 	fi
 	@if [ ! -d .venv ]; then $(MAKE) setup; fi
 	OCI_INTEGRATION=1 . .venv/bin/activate && pytest -q tests/integration
+
+validate-tools:
+	. .venv/bin/activate && python scripts/validate_tools.py

@@ -1,6 +1,6 @@
-// Minimal Docusaurus config aligned with AWS MCP docs structure
+// Minimal Docusaurus config aligned with MCP best practices
 // This is a placeholder; extend as needed for publishing.
-// See: https://github.com/awslabs/mcp/tree/main/docusaurus
+// See: https://modelcontextprotocol.io/ and https://gofastmcp.com/
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {

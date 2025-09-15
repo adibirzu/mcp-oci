@@ -1,6 +1,6 @@
 # MCP OCI Documentation
 
-This documentation mirrors the AWS MCP Docusaurus structure. See design guidelines at https://github.com/awslabs/mcp/blob/main/DESIGN_GUIDELINES.md.
+This documentation follows MCP best practices and FastMCP framework guidelines. See MCP protocol at https://modelcontextprotocol.io/ and FastMCP at https://gofastmcp.com/.
 
 Workflow at a glance
 - Install and verify: `make setup && mcp-oci doctor --profile DEFAULT --region us-phoenix-1`
@@ -14,5 +14,6 @@ Sections
 - Development (build, test, lint, fmt, vendor examples)
 - Security and Configuration
 - How-To guides (e.g., cost analysis)
+- Troubleshooting (common errors and client-specific guides)
 
 See SERVERS.md in this folder for a full list of servers.

@@ -5,6 +5,7 @@ Exposes tools as `oci:networking:<action>`.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -124,6 +125,23 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": create_vcn,
             "mutating": True,
         },
+        {
+            "name": "oci:networking:list-network-security-groups",
+            "description": "List Network Security Groups (NSGs) in a compartment; optional VCN filter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "vcn_id": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": list_nsgs,
+        },
     ]
 
 
@@ -141,7 +159,23 @@ def list_subnets(compartment_id: str, vcn_id: Optional[str] = None,
     resp = client.list_subnets(compartment_id=compartment_id, **kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
+
+
+def list_nsgs(compartment_id: str, vcn_id: Optional[str] = None, limit: Optional[int] = None,
+              page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if vcn_id:
+        kwargs["vcn_id"] = vcn_id
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = client.list_network_security_groups(compartment_id=compartment_id, **kwargs)
+    items = [n.__dict__ for n in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_vcns(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -155,7 +189,7 @@ def list_vcns(compartment_id: str, limit: Optional[int] = None, page: Optional[s
     resp = client.list_vcns(compartment_id=compartment_id, **kwargs)
     items = [v.__dict__ for v in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_vcns_by_dns(compartment_id: str, dns_label: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -179,7 +213,7 @@ def list_route_tables(compartment_id: str, vcn_id: Optional[str] = None,
     resp = client.list_route_tables(compartment_id=compartment_id, **kwargs)
     items = [r.__dict__ for r in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_security_lists(compartment_id: str, vcn_id: Optional[str] = None,
@@ -196,7 +230,7 @@ def list_security_lists(compartment_id: str, vcn_id: Optional[str] = None,
     resp = client.list_security_lists(compartment_id=compartment_id, **kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def create_vcn(compartment_id: str, cidr_block: str, display_name: str, dns_label: Optional[str] = None,
@@ -217,4 +251,4 @@ def create_vcn(compartment_id: str, cidr_block: str, display_name: str, dns_labe
     client = create_client(profile=profile, region=region)
     resp = client.create_vcn(create_vcn_details=model)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})

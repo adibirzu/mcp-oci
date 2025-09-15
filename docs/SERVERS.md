@@ -1,6 +1,6 @@
 # MCP OCI Servers Index
 
-This repository hosts MCP servers for common OCI services. Each server follows AWS MCP best practices and exposes tools as `oci:<service>:<action>`.
+This repository hosts MCP servers for common OCI services. Each server follows MCP best practices and FastMCP framework guidelines, exposing tools as `oci:<service>:<action>`.
 
 - mcp_oci_iam — Identity and Access Management
 - mcp_oci_compute — Compute

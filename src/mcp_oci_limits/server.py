@@ -5,6 +5,7 @@ Exposes tools as `oci:limits:<action>` and `oci:quotas:<action>`.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -105,7 +106,7 @@ def list_services(compartment_id: str, limit: Optional[int] = None, page: Option
     resp = client.list_services(compartment_id=compartment_id, **kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_limit_values(compartment_id: str, service_name: str, scope_type: Optional[str] = None,
@@ -125,7 +126,7 @@ def list_limit_values(compartment_id: str, service_name: str, scope_type: Option
     resp = client.list_limit_values(compartment_id=compartment_id, **kwargs)
     items = [v.__dict__ for v in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_quotas(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -139,12 +140,11 @@ def list_quotas(compartment_id: str, limit: Optional[int] = None, page: Optional
     resp = client.list_quotas(compartment_id=compartment_id, **kwargs)
     items = [q.__dict__ for q in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def get_quota(quota_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client_quotas(profile=profile, region=region)
     resp = client.get_quota(quota_id)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
-
+    return with_meta(resp, {"item": data})

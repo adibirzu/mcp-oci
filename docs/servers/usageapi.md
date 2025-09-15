@@ -9,6 +9,7 @@ Exposes `oci:usageapi:*` tools for cost and usage analytics.
 - `oci:usageapi:usage-by-service` — Convenience wrapper: USAGE grouped by service for last N days.
 - `oci:usageapi:usage-by-compartment` — Convenience wrapper: USAGE grouped by compartmentId for last N days.
 - `oci:usageapi:list-rate-cards` — List rate cards (list price) for a subscription.
+- `oci:usageapi:showusage-run` — Run Oracle's showusage example (optional integration) and return stdout/parsed JSON.
 
 ## Usage
 Serve:
@@ -28,7 +29,8 @@ mcp-oci call usageapi oci:usageapi:request-summarized-usages --params '{"tenant_
 - cost-by-compartment: `tenant_id` (required), `days?` (default 7), `granularity?` (default DAILY).
 - usage-by-service: `tenant_id` (required), `days?` (default 7), `granularity?` (default DAILY).
 - usage-by-compartment: `tenant_id` (required), `days?` (default 7), `granularity?` (default DAILY).
- - list-rate-cards: `subscription_id` (required), `time_from?`, `time_to?`, `part_number?` (client-side filter).
+- list-rate-cards: `subscription_id` (required), `time_from?`, `time_to?`, `part_number?` (client-side filter).
+- showusage-run: `start` (required), `end` (required), `granularity?`, `groupby?`, `extra_args?`, `expect_json?`, `profile?`, `region?`, `path?`.
 
 ## Troubleshooting
 - Ensure the profile has permissions to call Usage API.
@@ -36,6 +38,9 @@ mcp-oci call usageapi oci:usageapi:request-summarized-usages --params '{"tenant_
 - If you hit "UTC date does not have the right precision" errors, ensure times are at midnight UTC. The wrappers handle this automatically.
 - Wrappers apply optional client-side filters when `service_name` or `compartment_id` are provided.
 - Dimensions filter support depends on SDK model availability (Filter); if unsupported by your SDK version, filters are ignored.
+
+## Responses
+- Responses include `opc_request_id` when available.
 
 ## Rate Cards (List Price)
 - See the how-to for a full walkthrough: `howto/rate-cards`.
