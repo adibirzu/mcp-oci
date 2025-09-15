@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""
+Optimized Log Analytics MCP Server
+Based on official OCI Python SDK patterns and shared architecture
+"""
+
+from __future__ import annotations
+
+try:
+    from fastmcp import FastMCP
+except Exception as e:  # pragma: no cover
+    FastMCP = None  # type: ignore
+    _import_error = e
+else:
+    _import_error = None
+
+from .shared_architecture import (
+    clients,
+    OCIResponse,
+    handle_oci_error,
+    format_for_llm,
+    validate_compartment_id,
+    get_log_analytics_namespace,
+    create_fastmcp_tool,
+    create_common_tools
+)
+
+def run_loganalytics(*, profile: str | None = None, region: str | None = None, server_name: str = "oci-loganalytics-optimized") -> None:
+    """Serve an optimized FastMCP app for Log Analytics operations."""
+    if FastMCP is None:
+        raise SystemExit(
+            f"fastmcp is not installed. Install with: pip install fastmcp\nOriginal import error: {_import_error}"
+        )
+
+    # Set environment variables if provided
+    if profile:
+        import os
+        os.environ["OCI_PROFILE"] = profile
+    if region:
+        import os
+        os.environ["OCI_REGION"] = region
+
+    app = FastMCP(server_name)
+
+    # Create common tools
+    create_common_tools(app, server_name)
+
+    # Log Analytics-specific tools
+    @app.tool()
+    async def list_sources(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        is_system: bool | None = None,
+        limit: int = 50
+    ) -> str:
+        """List Log Analytics sources using official OCI SDK patterns."""
+        try:
+            # Use root compartment if not specified
+            if compartment_id is None:
+                compartment_id = clients.root_compartment_id
+            else:
+                if not validate_compartment_id(compartment_id):
+                    raise ValueError("Invalid compartment ID format")
+            
+            # Auto-discover namespace
+            namespace = get_log_analytics_namespace()
+            
+            log_analytics_client = clients.log_analytics
+            
+            # Use official OCI SDK method pattern
+            response = log_analytics_client.list_sources(
+                namespace_name=namespace,
+                compartment_id=compartment_id,
+                display_name=display_name,
+                is_system=is_system,
+                limit=limit
+            )
+            
+            sources = []
+            for source in response.data.items:
+                sources.append({
+                    "id": source.id,
+                    "display_name": source.display_name,
+                    "description": source.description,
+                    "is_system": source.is_system,
+                    "source_type": source.source_type,
+                    "time_created": source.time_created.isoformat() if source.time_created else None,
+                    "time_updated": source.time_updated.isoformat() if source.time_updated else None,
+                    "status": source.status
+                })
+            
+            formatted_sources = format_for_llm(sources, limit)
+            
+            result = OCIResponse(
+                success=True,
+                message=f"Found {len(formatted_sources)} Log Analytics sources",
+                data=formatted_sources,
+                count=len(formatted_sources),
+                compartment_id=compartment_id,
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "list_sources", "log_analytics")
+            return result.to_dict()
+
+    @app.tool()
+    async def list_log_groups(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        limit: int = 50
+    ) -> str:
+        """List Log Analytics log groups using official OCI SDK patterns."""
+        try:
+            # Use root compartment if not specified
+            if compartment_id is None:
+                compartment_id = clients.root_compartment_id
+            else:
+                if not validate_compartment_id(compartment_id):
+                    raise ValueError("Invalid compartment ID format")
+            
+            # Auto-discover namespace
+            namespace = get_log_analytics_namespace()
+            
+            log_analytics_client = clients.log_analytics
+            
+            # Use official OCI SDK method pattern
+            response = log_analytics_client.list_log_groups(
+                namespace_name=namespace,
+                compartment_id=compartment_id,
+                display_name=display_name,
+                limit=limit
+            )
+            
+            groups = []
+            for group in response.data.items:
+                groups.append({
+                    "id": group.id,
+                    "display_name": group.display_name,
+                    "description": group.description,
+                    "compartment_id": group.compartment_id,
+                    "time_created": group.time_created.isoformat() if group.time_created else None,
+                    "time_updated": group.time_updated.isoformat() if group.time_updated else None,
+                    "lifecycle_state": group.lifecycle_state
+                })
+            
+            formatted_groups = format_for_llm(groups, limit)
+            
+            result = OCIResponse(
+                success=True,
+                message=f"Found {len(formatted_groups)} Log Analytics log groups",
+                data=formatted_groups,
+                count=len(formatted_groups),
+                compartment_id=compartment_id,
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "list_log_groups", "log_analytics")
+            return result.to_dict()
+
+    @app.tool()
+    async def list_entities(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        entity_type: str | None = None,
+        lifecycle_state: str | None = None,
+        limit: int = 50
+    ) -> str:
+        """List Log Analytics entities using official OCI SDK patterns."""
+        try:
+            # Use root compartment if not specified
+            if compartment_id is None:
+                compartment_id = clients.root_compartment_id
+            else:
+                if not validate_compartment_id(compartment_id):
+                    raise ValueError("Invalid compartment ID format")
+            
+            # Auto-discover namespace
+            namespace = get_log_analytics_namespace()
+            
+            log_analytics_client = clients.log_analytics
+            
+            # Use official OCI SDK method pattern
+            response = log_analytics_client.list_log_analytics_entities(
+                namespace_name=namespace,
+                compartment_id=compartment_id,
+                display_name=display_name,
+                entity_type=entity_type,
+                lifecycle_state=lifecycle_state,
+                limit=limit
+            )
+            
+            entities = []
+            for entity in response.data.items:
+                entities.append({
+                    "id": entity.id,
+                    "display_name": entity.display_name,
+                    "entity_type_name": entity.entity_type_name,
+                    "compartment_id": entity.compartment_id,
+                    "lifecycle_state": entity.lifecycle_state,
+                    "time_created": entity.time_created.isoformat() if entity.time_created else None,
+                    "time_updated": entity.time_updated.isoformat() if entity.time_updated else None,
+                    "hostname": entity.hostname
+                })
+            
+            formatted_entities = format_for_llm(entities, limit)
+            
+            result = OCIResponse(
+                success=True,
+                message=f"Found {len(formatted_entities)} Log Analytics entities",
+                data=formatted_entities,
+                count=len(formatted_entities),
+                compartment_id=compartment_id,
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "list_entities", "log_analytics")
+            return result.to_dict()
+
+    @app.tool()
+    async def run_query(
+        query_string: str,
+        time_start: str,
+        time_end: str,
+        compartment_id: str | None = None,
+        subsystem: str | None = None,
+        max_total_count: int | None = None,
+        limit: int = 50
+    ) -> str:
+        """Run a Log Analytics query using official OCI SDK patterns."""
+        try:
+            # Use root compartment if not specified
+            if compartment_id is None:
+                compartment_id = clients.root_compartment_id
+            else:
+                if not validate_compartment_id(compartment_id):
+                    raise ValueError("Invalid compartment ID format")
+            
+            # Auto-discover namespace
+            namespace = get_log_analytics_namespace()
+            
+            log_analytics_client = clients.log_analytics
+            
+            # Prepare query details
+            query_details = {
+                "query_string": query_string,
+                "time_start": time_start,
+                "time_end": time_end,
+                "compartment_id": compartment_id
+            }
+            
+            if subsystem:
+                query_details["subsystem"] = subsystem
+            if max_total_count is not None:
+                query_details["max_total_count"] = max_total_count
+            
+            # Use official OCI SDK method pattern
+            response = log_analytics_client.query(
+                namespace_name=namespace,
+                query_details=query_details,
+                limit=limit
+            )
+            
+            # Format query results
+            query_result = {
+                "query_job_id": getattr(response.data, 'query_job_id', None),
+                "query_status": getattr(response.data, 'query_status', None),
+                "results": getattr(response.data, 'results', []),
+                "columns": getattr(response.data, 'columns', []),
+                "next_page": getattr(response.data, 'opc_next_page', None)
+            }
+            
+            result = OCIResponse(
+                success=True,
+                message="Query executed successfully",
+                data=query_result,
+                compartment_id=compartment_id,
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "run_query", "log_analytics")
+            return result.to_dict()
+
+    @app.tool()
+    async def get_namespace() -> str:
+        """Get the Log Analytics namespace for the tenancy."""
+        try:
+            namespace = get_log_analytics_namespace()
+            
+            result = OCIResponse(
+                success=True,
+                message="Log Analytics namespace retrieved successfully",
+                data={"namespace": namespace},
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "get_namespace", "log_analytics")
+            return result.to_dict()
+
+    app.run()
