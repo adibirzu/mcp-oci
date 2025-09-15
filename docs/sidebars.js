@@ -2,10 +2,22 @@
 const sidebars = {
   docs: [
     'index',
+    'troubleshooting',
+    {
+      type: 'category',
+      label: 'Clients',
+      items: [
+        'clients/overview',
+        'clients/claude-desktop',
+        'clients/cursor',
+        'clients/cline',
+      ],
+    },
     {
       type: 'category',
       label: 'Servers',
       items: [
+        'servers/overview',
         'servers/iam',
         'servers/compute',
         'servers/objectstorage',
@@ -30,6 +42,8 @@ const sidebars = {
         'servers/budgets',
         'servers/limits',
         'servers/loganalytics',
+        'servers/introspect',
+        'servers/security',
         'servers/osub',
       ],
     },
@@ -45,7 +59,10 @@ const sidebars = {
       type: 'category',
       label: 'Development',
       items: [
+        'development/architecture',
+        'development/conventions',
         'integrations',
+        'development/fastmcp',
         'development/testing',
       ],
     },

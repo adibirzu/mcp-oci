@@ -1,5 +1,6 @@
 import os
 import pytest
+from typing import Optional
 
 
 def pytest_collection_modifyitems(config, items):
@@ -42,3 +43,48 @@ def tenancy_ocid(oci_profile: str) -> str:
     if not tid:
         raise pytest.skip("Could not determine tenancy OCID from OCI config; set TEST_OCI_TENANCY_OCID")
     return tid
+
+
+def _discover_log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> Optional[str]:
+    try:
+        import oci  # type: ignore
+    except Exception:
+        return None
+    try:
+        cfg = oci.config.from_file(profile_name=oci_profile)
+        if oci_region:
+            cfg["region"] = oci_region
+        client = oci.log_analytics.LogAnalyticsClient(cfg)
+    except Exception:
+        return None
+    # Try common method names and parameter shapes
+    candidates = ["list_namespaces", "list_log_analytics_namespaces", "list_namespaces_details"]
+    for name in candidates:
+        method = getattr(client, name, None)
+        if method is None:
+            continue
+        for kwargs in ({"compartment_id": tenancy_ocid}, {}):
+            try:
+                resp = method(**kwargs)
+                data = getattr(resp, "data", [])
+                if not data:
+                    continue
+                if isinstance(data[0], str):
+                    return str(data[0])
+                # Try attributes
+                for x in data:
+                    for attr in ("namespace", "name", "namespace_name"):
+                        val = getattr(x, attr, None)
+                        if val:
+                            return str(val)
+            except Exception:
+                continue
+    return None
+
+
+@pytest.fixture(scope="session")
+def log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> Optional[str]:
+    val = os.environ.get("TEST_LOGANALYTICS_NAMESPACE")
+    if val:
+        return val
+    return _discover_log_analytics_namespace(oci_profile, oci_region, tenancy_ocid)

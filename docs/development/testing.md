@@ -26,11 +26,10 @@ make test-integration
 
 ### Optional Tests
 - Log Analytics run-query:
-  - Set `TEST_LOGANALYTICS_NAMESPACE=<namespace_name>`
-  - Test executes a small stats query over the last hour
+  - The test will try to auto-discover a namespace using the SDK (e.g., `list_namespaces`); if it cannot, set `TEST_LOGANALYTICS_NAMESPACE=<namespace_name>`
+  - Executes a small stats query over the last hour
 - Object Storage list-objects:
-  - Set `TEST_OCI_OS_BUCKET=<bucket_name>`
-  - Optionally set `TEST_OCI_OS_NAMESPACE=<namespace_name>`; otherwise the test calls `get_namespace`
+  - The test auto-discovers namespace and the first bucket (limit=1) in the tenancy; if none found, set `TEST_OCI_OS_BUCKET=<bucket_name>`
 
 ### Notes
 - These tests perform read-only operations and should be safe for production tenancies.

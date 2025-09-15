@@ -6,6 +6,7 @@ Focus: read/list operations first; add write ops with explicit confirmation.
 
 from typing import Any, Dict, List, Optional
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -172,6 +173,36 @@ def register_tools() -> List[Dict[str, Any]]:
             },
             "handler": list_user_groups,
         },
+        {
+            "name": "oci:iam:list-dynamic-groups",
+            "description": "List dynamic groups in a compartment.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "page": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": list_dynamic_groups,
+        },
+        {
+            "name": "oci:iam:list-auth-tokens",
+            "description": "List auth tokens for a user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["user_id"],
+            },
+            "handler": list_auth_tokens,
+        },
     ]
     return tools
 
@@ -189,29 +220,72 @@ def list_users(compartment_id: str, name: Optional[str] = None, limit: Optional[
     resp = client.list_users(compartment_id=compartment_id, **kwargs)
     users = [u.data.__dict__ if hasattr(u, "data") else u.__dict__ for u in resp.data] if hasattr(resp, "data") else []
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": users, "next_page": next_page}
+    return with_meta(resp, {"items": users}, next_page=next_page)
 
 
 def get_user(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_user(user_id)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})
 
 
 def list_compartments(compartment_id: str, include_subtree: bool = True, access_level: str = "ANY",
                       limit: Optional[int] = None, page: Optional[str] = None,
                       profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"compartment_id_in_subtree": include_subtree, "access_level": access_level}
-    if limit:
-        kwargs["limit"] = limit
-    if page:
-        kwargs["page"] = page
-    resp = client.list_compartments(compartment_id=compartment_id, **kwargs)
-    items = [c.__dict__ for c in getattr(resp, "data", [])]
-    next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    """List compartments with enhanced error handling and helpful hints"""
+    try:
+        client = create_client(profile=profile, region=region)
+        kwargs: Dict[str, Any] = {"compartment_id_in_subtree": include_subtree, "access_level": access_level}
+        if limit:
+            kwargs["limit"] = limit
+        if page:
+            kwargs["page"] = page
+        
+        resp = client.list_compartments(compartment_id=compartment_id, **kwargs)
+        items = [c.__dict__ for c in getattr(resp, "data", [])]
+        next_page = getattr(resp, "opc_next_page", None)
+        
+        result = with_meta(resp, {"items": items}, next_page=next_page)
+        
+        # Add helpful hints for common issues
+        if not items:
+            result["hints"] = {
+                "message": "No compartments found. This might be due to insufficient permissions or incorrect compartment_id.",
+                "suggestions": [
+                    "Verify the compartment_id is correct",
+                    "Check if you have the required IAM permissions",
+                    "Try using the tenancy OCID as compartment_id",
+                    "Ensure the compartment exists and is accessible"
+                ],
+                "common_compartment_ids": {
+                    "tenancy_root": "Use your tenancy OCID (ocid1.tenancy.oc1..<your-tenancy-id>)",
+                    "example": "ocid1.tenancy.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq"
+                }
+            }
+        
+        return result
+        
+    except Exception as e:
+        error_msg = str(e)
+        return {
+            "items": [],
+            "error": f"Failed to list compartments: {error_msg}",
+            "hints": {
+                "message": "Compartment listing failed. This is usually due to:",
+                "suggestions": [
+                    "Insufficient IAM permissions (need 'manage' permission on the compartment)",
+                    "Invalid compartment_id (use tenancy OCID for root level)",
+                    "Network connectivity issues",
+                    "Incorrect OCI configuration"
+                ],
+                "troubleshooting": [
+                    "Check your OCI config file (~/.oci/config)",
+                    "Verify your API key has the required permissions",
+                    "Try using the tenancy OCID: ocid1.tenancy.oc1..<your-tenancy-id>"
+                ]
+            }
+        }
 
 
 def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -225,7 +299,7 @@ def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional
     resp = client.list_groups(compartment_id=compartment_id, **kwargs)
     items = [g.__dict__ for g in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return {"items": items, "next_page": next_page}
+    return with_meta(resp, {"items": items}, next_page=next_page)
 
 
 def list_policies(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
@@ -239,7 +313,28 @@ def list_policies(compartment_id: str, limit: Optional[int] = None, page: Option
     resp = client.list_policies(compartment_id=compartment_id, **kwargs)
     items = [p.__dict__ for p in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
+    return with_meta(resp, {"items": items}, next_page=next_page)
+
+
+def list_dynamic_groups(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
+                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    kwargs: Dict[str, Any] = {}
+    if limit:
+        kwargs["limit"] = limit
+    if page:
+        kwargs["page"] = page
+    resp = client.list_dynamic_groups(compartment_id=compartment_id, **kwargs)
+    items = [g.__dict__ for g in getattr(resp, "data", [])]
+    next_page = getattr(resp, "opc_next_page", None)
     return {"items": items, "next_page": next_page}
+
+
+def list_auth_tokens(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+    client = create_client(profile=profile, region=region)
+    resp = client.list_auth_tokens(user_id=user_id)
+    items = [t.__dict__ for t in getattr(resp, "data", [])]
+    return {"items": items}
 
 
 def list_user_groups(compartment_id: str, user_id: str, include_groups: bool = False,
@@ -254,7 +349,7 @@ def list_user_groups(compartment_id: str, user_id: str, include_groups: bool = F
     resp = client.list_user_group_memberships(compartment_id=compartment_id, **kwargs)
     memberships = [m.__dict__ for m in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    result: Dict[str, Any] = {"items": memberships, "next_page": next_page}
+    result: Dict[str, Any] = with_meta(resp, {"items": memberships}, next_page=next_page)
     if include_groups:
         groups: List[Dict[str, Any]] = []
         for m in getattr(resp, "data", []) or []:
@@ -284,7 +379,7 @@ def list_policy_statements(compartment_id: str, limit: Optional[int] = None, pag
         if stmts:
             statements.extend(list(stmts))
     next_page = getattr(resp, "opc_next_page", None)
-    return {"statements": statements, "next_page": next_page}
+    return with_meta(resp, {"statements": statements}, next_page=next_page)
 
 
 def add_user_to_group(user_id: str, group_id: str, dry_run: bool = False, confirm: bool = False,
@@ -298,11 +393,11 @@ def add_user_to_group(user_id: str, group_id: str, dry_run: bool = False, confir
     client = create_client(profile=profile, region=region)
     resp = client.add_user_to_group(add_user_to_group_details=model)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
-    return {"item": data}
+    return with_meta(resp, {"item": data})
 
 
 def list_api_keys(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.list_api_keys(user_id=user_id)
     items = [k.__dict__ for k in getattr(resp, "data", [])]
-    return {"items": items}
+    return with_meta(resp, {"items": items})

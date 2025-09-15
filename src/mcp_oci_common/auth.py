@@ -9,7 +9,9 @@ except Exception:  # pragma: no cover
 def get_config(profile: Optional[str] = None, region: Optional[str] = None) -> dict:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
-    cfg = oci.config.from_file(profile_name=profile)
+    # Default to the standard SDK profile when none is provided
+    profile_name = profile or "DEFAULT"
+    cfg = oci.config.from_file(profile_name=profile_name)
     if region:
         cfg["region"] = region
     return cfg

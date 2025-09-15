@@ -63,7 +63,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         import oci  # type: ignore
     except Exception as e:  # pragma: no cover
         raise SystemExit(f"OCI SDK not installed: {e}")
-    profile = args.profile
+    profile = args.profile or "DEFAULT"
     region = args.region
     try:
         cfg = oci.config.from_file(profile_name=profile)
