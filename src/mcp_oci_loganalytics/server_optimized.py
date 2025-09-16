@@ -3,9 +3,9 @@ Optimized MCP Server: OCI Log Analytics
 Auto-discovers namespace, provides clear responses for Claude
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
-from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -13,18 +13,19 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.log_analytics.LogAnalyticsClient, profile=profile, region=region)
 
 
-def get_namespace(profile: Optional[str] = None, region: Optional[str] = None) -> str:
+def get_namespace(profile: str | None = None, region: str | None = None) -> str:
     """Auto-discover Log Analytics namespace"""
     try:
         # Get the tenancy ID from the config
-        from mcp_oci_common import make_client
         import oci
+
+        from mcp_oci_common import make_client
         identity_client = make_client(oci.identity.IdentityClient, profile=profile, region=region)
         
         # Get the tenancy ID from the current user's compartment
@@ -43,8 +44,8 @@ def get_namespace(profile: Optional[str] = None, region: Optional[str] = None) -
 
 
 def run_query(query_string: str, time_start: str, time_end: str,
-              subsystem: Optional[str] = None, max_total_count: Optional[int] = None,
-              profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+              subsystem: str | None = None, max_total_count: int | None = None,
+              profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """Run a Log Analytics query - namespace auto-discovered"""
     try:
         # Auto-discover namespace
@@ -96,9 +97,9 @@ def run_query(query_string: str, time_start: str, time_end: str,
         }
 
 
-def list_entities(compartment_id: str, limit: Optional[int] = None,
-                  page: Optional[str] = None, profile: Optional[str] = None,
-                  region: Optional[str] = None) -> Dict[str, Any]:
+def list_entities(compartment_id: str, limit: int | None = None,
+                  page: str | None = None, profile: str | None = None,
+                  region: str | None = None) -> dict[str, Any]:
     """List Log Analytics entities - namespace auto-discovered"""
     try:
         # Auto-discover namespace
@@ -158,9 +159,9 @@ def list_entities(compartment_id: str, limit: Optional[int] = None,
         }
 
 
-def list_sources(compartment_id: str, limit: Optional[int] = None,
-                 page: Optional[str] = None, profile: Optional[str] = None,
-                 region: Optional[str] = None) -> Dict[str, Any]:
+def list_sources(compartment_id: str, limit: int | None = None,
+                 page: str | None = None, profile: str | None = None,
+                 region: str | None = None) -> dict[str, Any]:
     """List Log Analytics sources - namespace auto-discovered"""
     try:
         # Auto-discover namespace
@@ -220,7 +221,7 @@ def list_sources(compartment_id: str, limit: Optional[int] = None,
         }
 
 
-def get_namespace_info(profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_namespace_info(profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """Get Log Analytics namespace information"""
     try:
         namespace = get_namespace(profile=profile, region=region)

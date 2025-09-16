@@ -3,14 +3,15 @@ Optimized Database service using direct REST API calls
 Minimal token usage, based on Oracle Postman collection patterns
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from .client import create_client
-from .formatters import format_database, format_response, format_error, format_success
+from .formatters import format_database, format_error, format_response, format_success
 
 
-def list_databases(compartment_id: str, limit: Optional[int] = None,
-                   page: Optional[str] = None, profile: str = "DEFAULT", 
-                   region: str = None) -> Dict[str, Any]:
+def list_databases(compartment_id: str, limit: int | None = None,
+                   page: str | None = None, profile: str = "DEFAULT", 
+                   region: str = None) -> dict[str, Any]:
     """List databases using REST API - optimized for minimal tokens"""
     try:
         client = create_client(profile=profile, region=region)
@@ -43,7 +44,7 @@ def list_databases(compartment_id: str, limit: Optional[int] = None,
         return format_error(e)
 
 
-def get_database(database_id: str, profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def get_database(database_id: str, profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Get specific database using REST API"""
     try:
         client = create_client(profile=profile, region=region)
@@ -62,9 +63,9 @@ def get_database(database_id: str, profile: str = "DEFAULT", region: str = None)
         return format_error(e)
 
 
-def list_db_systems(compartment_id: str, limit: Optional[int] = None,
-                    page: Optional[str] = None, profile: str = "DEFAULT", 
-                    region: str = None) -> Dict[str, Any]:
+def list_db_systems(compartment_id: str, limit: int | None = None,
+                    page: str | None = None, profile: str = "DEFAULT", 
+                    region: str = None) -> dict[str, Any]:
     """List DB systems using REST API - optimized for minimal tokens"""
     try:
         client = create_client(profile=profile, region=region)
@@ -108,7 +109,7 @@ def list_db_systems(compartment_id: str, limit: Optional[int] = None,
         return format_error(e)
 
 
-def get_db_system(db_system_id: str, profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def get_db_system(db_system_id: str, profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Get specific DB system using REST API"""
     try:
         client = create_client(profile=profile, region=region)
@@ -137,9 +138,9 @@ def get_db_system(db_system_id: str, profile: str = "DEFAULT", region: str = Non
         return format_error(e)
 
 
-def list_autonomous_databases(compartment_id: str, limit: Optional[int] = None,
-                             page: Optional[str] = None, profile: str = "DEFAULT", 
-                             region: str = None) -> Dict[str, Any]:
+def list_autonomous_databases(compartment_id: str, limit: int | None = None,
+                             page: str | None = None, profile: str = "DEFAULT", 
+                             region: str = None) -> dict[str, Any]:
     """List Autonomous databases using REST API - optimized for minimal tokens"""
     try:
         client = create_client(profile=profile, region=region)
@@ -184,7 +185,7 @@ def list_autonomous_databases(compartment_id: str, limit: Optional[int] = None,
         return format_error(e)
 
 
-def get_autonomous_database(adb_id: str, profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def get_autonomous_database(adb_id: str, profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Get specific Autonomous database using REST API"""
     try:
         client = create_client(profile=profile, region=region)
@@ -214,7 +215,7 @@ def get_autonomous_database(adb_id: str, profile: str = "DEFAULT", region: str =
         return format_error(e)
 
 
-def get_server_info() -> Dict[str, Any]:
+def get_server_info() -> dict[str, Any]:
     """Get server information"""
     return {
         "name": "oci-database-rest",

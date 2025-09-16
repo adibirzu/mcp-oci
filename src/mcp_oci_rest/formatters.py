@@ -2,10 +2,10 @@
 Optimized response formatters for minimal token usage
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 
-def format_instance(instance: Dict[str, Any]) -> Dict[str, Any]:
+def format_instance(instance: dict[str, Any]) -> dict[str, Any]:
     """Format compute instance with only essential fields"""
     return {
         "id": instance.get("id"),
@@ -18,7 +18,7 @@ def format_instance(instance: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_volume(volume: Dict[str, Any]) -> Dict[str, Any]:
+def format_volume(volume: dict[str, Any]) -> dict[str, Any]:
     """Format block storage volume with only essential fields"""
     return {
         "id": volume.get("id"),
@@ -31,7 +31,7 @@ def format_volume(volume: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_vcn(vcn: Dict[str, Any]) -> Dict[str, Any]:
+def format_vcn(vcn: dict[str, Any]) -> dict[str, Any]:
     """Format VCN with only essential fields"""
     return {
         "id": vcn.get("id"),
@@ -44,7 +44,7 @@ def format_vcn(vcn: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_bucket(bucket: Dict[str, Any]) -> Dict[str, Any]:
+def format_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
     """Format object storage bucket with only essential fields"""
     return {
         "name": bucket.get("name"),
@@ -56,7 +56,7 @@ def format_bucket(bucket: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_database(db: Dict[str, Any]) -> Dict[str, Any]:
+def format_database(db: dict[str, Any]) -> dict[str, Any]:
     """Format database with only essential fields"""
     return {
         "id": db.get("id"),
@@ -70,7 +70,7 @@ def format_database(db: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_user(user: Dict[str, Any]) -> Dict[str, Any]:
+def format_user(user: dict[str, Any]) -> dict[str, Any]:
     """Format IAM user with only essential fields"""
     return {
         "id": user.get("id"),
@@ -82,7 +82,7 @@ def format_user(user: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_compartment(comp: Dict[str, Any]) -> Dict[str, Any]:
+def format_compartment(comp: dict[str, Any]) -> dict[str, Any]:
     """Format compartment with only essential fields"""
     return {
         "id": comp.get("id"),
@@ -94,7 +94,7 @@ def format_compartment(comp: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_log_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
+def format_log_entity(entity: dict[str, Any]) -> dict[str, Any]:
     """Format Log Analytics entity with only essential fields"""
     return {
         "id": entity.get("id"),
@@ -106,8 +106,8 @@ def format_log_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def format_response(data: List[Dict[str, Any]], formatter_func, 
-                   limit: Optional[int] = None, next_page: Optional[str] = None) -> Dict[str, Any]:
+def format_response(data: list[dict[str, Any]], formatter_func, 
+                   limit: int | None = None, next_page: str | None = None) -> dict[str, Any]:
     """Format API response with minimal token usage"""
     # Apply formatter to each item
     items = [formatter_func(item) for item in data]
@@ -128,7 +128,7 @@ def format_response(data: List[Dict[str, Any]], formatter_func,
     return response
 
 
-def format_error(error: Exception) -> Dict[str, Any]:
+def format_error(error: Exception) -> dict[str, Any]:
     """Format error with minimal token usage"""
     error_msg = str(error)
     # Take only first line to reduce tokens
@@ -140,7 +140,7 @@ def format_error(error: Exception) -> Dict[str, Any]:
     }
 
 
-def format_success(data: Any = None, message: str = "Success") -> Dict[str, Any]:
+def format_success(data: Any = None, message: str = "Success") -> dict[str, Any]:
     """Format success response with minimal token usage"""
     response = {
         "success": True,

@@ -14,7 +14,11 @@ sys.path.insert(0, str(SRC))
 def iter_servers():
     for pkg in pkgutil.iter_modules([str(SRC) + "/"]):
         name = pkg.name
-        if name.startswith("mcp_oci_") and name not in ("mcp_oci_runtime", "mcp_oci_common", "mcp_oci_cli"):
+        if name.startswith("mcp_oci_") and name not in (
+            "mcp_oci_runtime", "mcp_oci_common", "mcp_oci_cli", 
+            "mcp_oci_serve", "mcp_oci_fastmcp_optimized", 
+            "mcp_oci_fastmcp_rest", "mcp_oci_rest"
+        ):
             yield name
 
 

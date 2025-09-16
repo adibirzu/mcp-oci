@@ -3,7 +3,9 @@
 Exposes tools as `oci:usageapi:<action>`.
 """
 
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
+
 from mcp_oci_common import make_client
 
 try:
@@ -12,13 +14,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.usage_api.UsageapiClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:usageapi:request-summarized-usages",
@@ -151,10 +153,10 @@ def register_tools() -> List[Dict[str, Any]]:
 
 def request_summarized_usages(tenant_id: str, time_usage_started: str, time_usage_ended: str,
                                granularity: str = "DAILY", query_type: str = "COST",
-                               group_by: Optional[List[str]] = None,
-                               dimensions: Optional[Dict[str, str]] = None,
-                               tags: Optional[Dict[str, str]] = None,
-                               profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                               group_by: list[str] | None = None,
+                               dimensions: dict[str, str] | None = None,
+                               tags: dict[str, str] | None = None,
+                               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     client = create_client(profile=profile, region=region)
@@ -189,31 +191,31 @@ def request_summarized_usages(tenant_id: str, time_usage_started: str, time_usag
         )  # type: ignore
     resp = client.request_summarized_usages(request_summarized_usages_details=model)
     # Normalize response across SDK versions
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     if hasattr(resp, "data"):
-        data = getattr(resp, "data")
+        data = resp.data
         if isinstance(data, list):
             items = [getattr(i, "__dict__", i) for i in data]
         elif hasattr(data, "items"):
             try:
-                items = [getattr(i, "__dict__", i) for i in getattr(data, "items")]
+                items = [getattr(i, "__dict__", i) for i in data.items]
             except Exception:
                 items = [getattr(data, "__dict__", data)]
         else:
             items = [getattr(data, "__dict__", data)]
     elif hasattr(resp, "items"):
-        data_items = getattr(resp, "items")
+        data_items = resp.items
         items = [getattr(i, "__dict__", i) for i in (data_items or [])]
     from mcp_oci_common.response import with_meta
     return with_meta(resp, {"items": items})
 
 
 def cost_by_service(tenant_id: str, days: int = 7, granularity: str = "DAILY",
-                    service_name: Optional[str] = None,
-                    profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    from datetime import datetime, timezone, timedelta
-    today = datetime.now(timezone.utc).date()
-    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+                    service_name: str | None = None,
+                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    from datetime import datetime, timedelta
+    today = datetime.now(UTC).date()
+    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
     start_dt = end_dt - timedelta(days=days)
     result = request_summarized_usages(
         tenant_id=tenant_id,
@@ -232,11 +234,11 @@ def cost_by_service(tenant_id: str, days: int = 7, granularity: str = "DAILY",
 
 
 def cost_by_compartment(tenant_id: str, days: int = 7, granularity: str = "DAILY",
-                        compartment_id: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    from datetime import datetime, timezone, timedelta
-    today = datetime.now(timezone.utc).date()
-    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+                        compartment_id: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    from datetime import datetime, timedelta
+    today = datetime.now(UTC).date()
+    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
     start_dt = end_dt - timedelta(days=days)
     result = request_summarized_usages(
         tenant_id=tenant_id,
@@ -255,11 +257,11 @@ def cost_by_compartment(tenant_id: str, days: int = 7, granularity: str = "DAILY
 
 
 def usage_by_service(tenant_id: str, days: int = 7, granularity: str = "DAILY",
-                     service_name: Optional[str] = None,
-                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    from datetime import datetime, timezone, timedelta
-    today = datetime.now(timezone.utc).date()
-    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+                     service_name: str | None = None,
+                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    from datetime import datetime, timedelta
+    today = datetime.now(UTC).date()
+    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
     start_dt = end_dt - timedelta(days=days)
     result = request_summarized_usages(
         tenant_id=tenant_id,
@@ -278,11 +280,11 @@ def usage_by_service(tenant_id: str, days: int = 7, granularity: str = "DAILY",
 
 
 def usage_by_compartment(tenant_id: str, days: int = 7, granularity: str = "DAILY",
-                         compartment_id: Optional[str] = None,
-                         profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    from datetime import datetime, timezone, timedelta
-    today = datetime.now(timezone.utc).date()
-    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+                         compartment_id: str | None = None,
+                         profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    from datetime import datetime, timedelta
+    today = datetime.now(UTC).date()
+    end_dt = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
     start_dt = end_dt - timedelta(days=days)
     result = request_summarized_usages(
         tenant_id=tenant_id,
@@ -309,7 +311,7 @@ def _normalize_utc_midnight(ts: str) -> str:
     return ts
 
 
-def _build_filter(dimensions: Dict[str, str], tags: Dict[str, str]):
+def _build_filter(dimensions: dict[str, str], tags: dict[str, str]):
     """Attempt to construct a Usage API filter model with dimensions/tags.
     Returns None if SDK model is unavailable or incompatible.
     """
@@ -318,23 +320,23 @@ def _build_filter(dimensions: Dict[str, str], tags: Dict[str, str]):
         models = oci.usage_api.models
         # Some SDKs expect dicts for dimensions/tags; others expect complex structures.
         # We optimistically try Filter(operator="AND", dimensions=..., tags=...)
-        kwargs: Dict[str, Any] = {"operator": "AND"}
+        kwargs: dict[str, Any] = {"operator": "AND"}
         if dimensions:
             kwargs["dimensions"] = dimensions
         if tags:
             kwargs["tags"] = tags
-        return getattr(models, "Filter")(**kwargs)
+        return models.Filter(**kwargs)
     except Exception:
         return None
 
 
-def list_rate_cards(subscription_id: str, time_from: Optional[str] = None, time_to: Optional[str] = None,
-                    part_number: Optional[str] = None,
-                    profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_rate_cards(subscription_id: str, time_from: str | None = None, time_to: str | None = None,
+                    part_number: str | None = None,
+                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"subscription_id": subscription_id}
+    kwargs: dict[str, Any] = {"subscription_id": subscription_id}
     if time_from:
         kwargs["time_from"] = _normalize_utc_midnight(time_from)
     if time_to:
@@ -350,12 +352,12 @@ def list_rate_cards(subscription_id: str, time_from: Optional[str] = None, time_
     return with_meta(resp, {"items": items})
 
 
-def showusage_run(start: str, end: str, granularity: str = "DAILY", groupby: Optional[str] = None,
-                  extra_args: Optional[str] = None, expect_json: bool = False,
-                  profile: Optional[str] = None, region: Optional[str] = None, path: Optional[str] = None) -> Dict[str, Any]:
+def showusage_run(start: str, end: str, granularity: str = "DAILY", groupby: str | None = None,
+                  extra_args: str | None = None, expect_json: bool = False,
+                  profile: str | None = None, region: str | None = None, path: str | None = None) -> dict[str, Any]:
     import os
-    import json as _json
     import subprocess
+
     from mcp_oci_common.parsing import parse_json_loose, parse_kv_lines
     script = path or os.environ.get("SHOWUSAGE_PATH") or "third_party/oci-python-sdk/examples/showusage/showusage.py"
     if not os.path.exists(script):
@@ -370,10 +372,10 @@ def showusage_run(start: str, end: str, granularity: str = "DAILY", groupby: Opt
         cmd += ["-profile", profile]
     if region:
         cmd += ["-region", region]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"showusage failed: {proc.stderr.strip()}")
-    result: Dict[str, Any] = {"stdout": proc.stdout}
+    result: dict[str, Any] = {"stdout": proc.stdout}
     if expect_json:
         parsed = parse_json_loose(proc.stdout)
         if parsed is None:

@@ -1,4 +1,4 @@
-from typing import Optional, Type, Any
+from typing import Any
 
 try:
     import oci  # type: ignore
@@ -6,7 +6,7 @@ except Exception:  # pragma: no cover
     oci = None
 
 
-def get_config(profile: Optional[str] = None, region: Optional[str] = None) -> dict:
+def get_config(profile: str | None = None, region: str | None = None) -> dict:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     # Default to the standard SDK profile when none is provided
@@ -17,6 +17,6 @@ def get_config(profile: Optional[str] = None, region: Optional[str] = None) -> d
     return cfg
 
 
-def make_client(client_cls: Any, profile: Optional[str] = None, region: Optional[str] = None):
+def make_client(client_cls: Any, profile: str | None = None, region: str | None = None):
     cfg = get_config(profile=profile, region=region)
     return client_cls(cfg)

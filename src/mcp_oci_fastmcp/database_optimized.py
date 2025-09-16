@@ -24,7 +24,7 @@ from .shared_architecture import (
     create_common_tools
 )
 
-def run_database(*, profile: str | None = None, region: str | None = None, server_name: str = "oci-database-optimized") -> None:
+def run_database(*, profile: str | None = None, region: str | None = None, server_name: str = "mcp_oci_database") -> None:
     """Serve an optimized FastMCP app for database operations."""
     if FastMCP is None:
         raise SystemExit(

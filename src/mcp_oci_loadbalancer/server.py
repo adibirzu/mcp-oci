@@ -1,9 +1,10 @@
 """MCP Server: OCI Load Balancer
 """
 
-from typing import Any, Dict, List, Optional
-from mcp_oci_common.response import with_meta
+from typing import Any
+
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -11,13 +12,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.load_balancer.LoadBalancerClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:loadbalancer:list-load-balancers",
@@ -53,10 +54,10 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_load_balancers(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_load_balancers(compartment_id: str, limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -68,7 +69,7 @@ def list_load_balancers(compartment_id: str, limit: Optional[int] = None, page: 
 
 
 def get_backend_health(load_balancer_id: str, backend_set_name: str,
-                       profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                       profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_backend_set_health(load_balancer_id=load_balancer_id, backend_set_name=backend_set_name)
     data = getattr(resp, "data", None)

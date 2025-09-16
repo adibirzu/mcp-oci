@@ -1,0 +1,68 @@
+[
+  {
+    "name": "oci-mcp-compute",
+    "command": ["python", "-m", "mcp_servers.compute.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-db",
+    "command": ["python", "-m", "mcp_servers.db.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-network",
+    "command": ["python", "-m", "mcp_servers.network.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-security",
+    "command": ["python", "-m", "mcp_servers.security.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-observability",
+    "command": ["python", "-m", "mcp_servers.observability.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-cost",
+    "command": ["python", "-m", "mcp_servers.cost.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+    },
+    "transport": "stdio"
+  }
+]

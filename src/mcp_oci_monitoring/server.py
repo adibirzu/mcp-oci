@@ -1,7 +1,9 @@
 """MCP Server: OCI Monitoring
 """
 
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,13 +13,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.monitoring.MonitoringClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:monitoring:list-metrics",
@@ -188,12 +190,12 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_metrics(compartment_id: str, namespace: Optional[str] = None, name: Optional[str] = None,
-                 resource_group: Optional[str] = None, compartment_id_in_subtree: bool = False,
-                 limit: Optional[int] = None, page: Optional[str] = None,
-                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_metrics(compartment_id: str, namespace: str | None = None, name: str | None = None,
+                 resource_group: str | None = None, compartment_id_in_subtree: bool = False,
+                 limit: int | None = None, page: str | None = None,
+                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id}
     if namespace:
         kwargs["namespace"] = namespace
     if name:
@@ -213,15 +215,15 @@ def list_metrics(compartment_id: str, namespace: Optional[str] = None, name: Opt
 
 
 def summarize_metrics(compartment_id: str, namespace: str, query: str,
-                      start_time: str, end_time: str, resolution: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                      start_time: str, end_time: str, resolution: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     client = create_client(profile=profile, region=region)
     models = oci.monitoring.models
     # Build MetricDataQuery with fallbacks
     mdq = None
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for q_kwargs in (
         {"namespace": namespace, "query": query, "resolution": resolution},
         {"namespace": namespace, "query": query},
@@ -251,7 +253,7 @@ def summarize_metrics(compartment_id: str, namespace: str, query: str,
     return with_meta(resp, {"items": items})
 
 
-def _alarms_client(profile: Optional[str], region: Optional[str]):
+def _alarms_client(profile: str | None, region: str | None):
     # Try both names for safety
     cls = getattr(oci.monitoring, "AlarmClient", None) or getattr(oci.monitoring, "AlarmsClient", None)
     if cls is None:
@@ -259,10 +261,10 @@ def _alarms_client(profile: Optional[str], region: Optional[str]):
     return make_client(cls, profile=profile, region=region)
 
 
-def list_alarms(compartment_id: str, lifecycle_state: Optional[str] = None, limit: Optional[int] = None,
-                page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_alarms(compartment_id: str, lifecycle_state: str | None = None, limit: int | None = None,
+                page: str | None = None, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = _alarms_client(profile, region)
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id}
     if lifecycle_state:
         kwargs["lifecycle_state"] = lifecycle_state
     if limit:
@@ -275,7 +277,7 @@ def list_alarms(compartment_id: str, lifecycle_state: Optional[str] = None, limi
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_alarm(alarm_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_alarm(alarm_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = _alarms_client(profile, region)
     resp = client.get_alarm(alarm_id)
     data = getattr(resp, "data", None)
@@ -283,8 +285,8 @@ def get_alarm(alarm_id: str, profile: Optional[str] = None, region: Optional[str
 
 
 def list_metric_namespaces(compartment_id: str, compartment_id_in_subtree: bool = False,
-                           limit_pages: Optional[int] = None,
-                           profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                           limit_pages: int | None = None,
+                           profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     # Prefer direct API if available in newer SDKs
     direct_candidates = ["list_namespaces", "list_metric_namespaces", "list_metrics_namespaces"]
@@ -293,7 +295,7 @@ def list_metric_namespaces(compartment_id: str, compartment_id_in_subtree: bool 
         if method is None:
             continue
         try:
-            kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+            kwargs: dict[str, Any] = {"compartment_id": compartment_id}
             if compartment_id_in_subtree:
                 kwargs["compartment_id_in_subtree"] = True
             resp = method(**kwargs)
@@ -310,7 +312,7 @@ def list_metric_namespaces(compartment_id: str, compartment_id_in_subtree: bool 
     page = None
     pages = 0
     while True:
-        kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+        kwargs: dict[str, Any] = {"compartment_id": compartment_id}
         if compartment_id_in_subtree:
             kwargs["compartment_id_in_subtree"] = True
         if page:
@@ -327,15 +329,15 @@ def list_metric_namespaces(compartment_id: str, compartment_id_in_subtree: bool 
     return {"namespaces": sorted(seen)}
 
 
-def list_resource_groups(compartment_id: str, namespace: Optional[str] = None, compartment_id_in_subtree: bool = False,
-                         limit_pages: Optional[int] = None,
-                         profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_resource_groups(compartment_id: str, namespace: str | None = None, compartment_id_in_subtree: bool = False,
+                         limit_pages: int | None = None,
+                         profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     seen = set()
     page = None
     pages = 0
     while True:
-        kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+        kwargs: dict[str, Any] = {"compartment_id": compartment_id}
         if namespace:
             kwargs["namespace"] = namespace
         if compartment_id_in_subtree:
@@ -354,13 +356,13 @@ def list_resource_groups(compartment_id: str, namespace: Optional[str] = None, c
     return {"resource_groups": sorted(seen)}
 
 
-def list_alarm_statuses(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_alarm_statuses(compartment_id: str, limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = _alarms_client(profile, region)
     method = getattr(client, "list_alarm_statuses", None)
     if method is None:
         raise RuntimeError("list_alarm_statuses not available in SDK version")
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -371,12 +373,12 @@ def list_alarm_statuses(compartment_id: str, limit: Optional[int] = None, page: 
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_alarm_history(alarm_id: str, alarm_historytype: Optional[str] = None,
-                      timestamp_greater_than_or_equal_to: Optional[str] = None,
-                      timestamp_less_than: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_alarm_history(alarm_id: str, alarm_historytype: str | None = None,
+                      timestamp_greater_than_or_equal_to: str | None = None,
+                      timestamp_less_than: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = _alarms_client(profile, region)
-    kwargs: Dict[str, Any] = {"alarm_id": alarm_id}
+    kwargs: dict[str, Any] = {"alarm_id": alarm_id}
     if alarm_historytype:
         kwargs["alarm_historytype"] = alarm_historytype
     if timestamp_greater_than_or_equal_to:
@@ -412,11 +414,11 @@ def _auto_resolution(minutes: int) -> str:
 
 
 def summarize_metrics_window(compartment_id: str, namespace: str, query: str, window: str,
-                             resolution: Optional[str] = None,
-                             profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    from datetime import datetime, timezone, timedelta
+                             resolution: str | None = None,
+                             profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    from datetime import datetime, timedelta
     minutes = _parse_window(window)
-    end_dt = datetime.now(timezone.utc)
+    end_dt = datetime.now(UTC)
     # Round end to minute
     end_dt = end_dt.replace(second=0, microsecond=0)
     start_dt = end_dt - timedelta(minutes=minutes)
@@ -433,7 +435,7 @@ def summarize_metrics_window(compartment_id: str, namespace: str, query: str, wi
     )
 
 
-def list_sdk_methods(profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_sdk_methods(profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     alarms = None
     try:
@@ -455,7 +457,7 @@ def list_sdk_methods(profile: Optional[str] = None, region: Optional[str] = None
     }
 
 
-def common_compute_queries() -> Dict[str, Any]:
+def common_compute_queries() -> dict[str, Any]:
     return {
         "namespace": "oci_computeagent",
         "queries": [

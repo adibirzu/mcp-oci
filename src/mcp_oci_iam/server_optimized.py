@@ -3,9 +3,9 @@ Optimized MCP Server: OCI Identity and Access Management (IAM)
 Provides clear, Claude-friendly responses
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
-from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -13,19 +13,19 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.identity.IdentityClient, profile=profile, region=region)
 
 
-def list_users(compartment_id: str, name: Optional[str] = None, limit: Optional[int] = None, 
-               page: Optional[str] = None, profile: Optional[str] = None, 
-               region: Optional[str] = None) -> Dict[str, Any]:
+def list_users(compartment_id: str, name: str | None = None, limit: int | None = None, 
+               page: str | None = None, profile: str | None = None, 
+               region: str | None = None) -> dict[str, Any]:
     """List IAM users with clear, Claude-friendly response"""
     try:
         client = create_client(profile=profile, region=region)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if name:
             kwargs["name"] = name
         if limit:
@@ -73,8 +73,8 @@ def list_users(compartment_id: str, name: Optional[str] = None, limit: Optional[
 
 
 def list_compartments(compartment_id: str, include_subtree: bool = True, access_level: str = "ANY",
-                      limit: Optional[int] = None, page: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                      limit: int | None = None, page: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """List compartments with clear, Claude-friendly response"""
     try:
         client = create_client(profile=profile, region=region)
@@ -88,7 +88,7 @@ def list_compartments(compartment_id: str, include_subtree: bool = True, access_
         else:
             actual_compartment_id = compartment_id
             
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "compartment_id_in_subtree": include_subtree, 
             "access_level": access_level
         }
@@ -139,7 +139,7 @@ def list_compartments(compartment_id: str, include_subtree: bool = True, access_
         }
 
 
-def get_user(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_user(user_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """Get specific user with clear response"""
     try:
         client = create_client(profile=profile, region=region)
@@ -176,12 +176,12 @@ def get_user(user_id: str, profile: Optional[str] = None, region: Optional[str] 
         }
 
 
-def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_groups(compartment_id: str, limit: int | None = None, page: str | None = None,
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """List IAM groups with clear response"""
     try:
         client = create_client(profile=profile, region=region)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if limit:
             kwargs["limit"] = limit
         if page:
@@ -224,12 +224,12 @@ def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional
         }
 
 
-def list_policies(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                  profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_policies(compartment_id: str, limit: int | None = None, page: str | None = None,
+                  profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """List IAM policies with clear response"""
     try:
         client = create_client(profile=profile, region=region)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if limit:
             kwargs["limit"] = limit
         if page:

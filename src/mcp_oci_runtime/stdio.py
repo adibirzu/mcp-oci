@@ -11,16 +11,17 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict, List, Callable
+from collections.abc import Callable
+from typing import Any
 
-Json = Dict[str, Any]
+Json = dict[str, Any]
 
 
 class StdioServer:
-    def __init__(self, tools: List[Dict[str, Any]], *, defaults: Dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN"):
+    def __init__(self, tools: list[dict[str, Any]], *, defaults: dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN"):
         # Normalize tool entries
         self.tools = tools
-        self.tool_by_name: Dict[str, Dict[str, Any]] = {t["name"]: t for t in tools}
+        self.tool_by_name: dict[str, dict[str, Any]] = {t["name"]: t for t in tools}
         self.defaults = defaults or {}
         self.require_confirm = require_confirm
         self.log_level = (log_level or "WARN").upper()
@@ -169,5 +170,5 @@ class StdioServer:
                 self._write(err_obj)
 
 
-def run_with_tools(tools: List[Dict[str, Any]], *, defaults: Dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN") -> None:
+def run_with_tools(tools: list[dict[str, Any]], *, defaults: dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN") -> None:
     StdioServer(tools, defaults=defaults, require_confirm=require_confirm, log_level=log_level).serve_forever()

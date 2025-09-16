@@ -1,7 +1,8 @@
 """MCP Server: OCI Container Engine for Kubernetes (OKE)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,13 +12,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.container_engine.ContainerEngineClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:oke:list-clusters",
@@ -87,11 +88,11 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_clusters(compartment_id: str, name: Optional[str] = None, lifecycle_state: Optional[str] = None,
-                  limit: Optional[int] = None, page: Optional[str] = None,
-                  profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_clusters(compartment_id: str, name: str | None = None, lifecycle_state: str | None = None,
+                  limit: int | None = None, page: str | None = None,
+                  profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if name:
         kwargs["name"] = name
     if lifecycle_state:
@@ -106,25 +107,25 @@ def list_clusters(compartment_id: str, name: Optional[str] = None, lifecycle_sta
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_cluster(cluster_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_cluster(cluster_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_cluster(cluster_id)
     data = getattr(resp, "data", None)
     return with_meta(resp, {"item": getattr(data, "__dict__", data)})
 
 
-def get_node_pool(node_pool_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_node_pool(node_pool_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_node_pool(node_pool_id)
     data = getattr(resp, "data", None)
     return with_meta(resp, {"item": getattr(data, "__dict__", data)})
 
 
-def list_node_pools(compartment_id: str, cluster_id: str, name: Optional[str] = None,
-                    lifecycle_state: Optional[str] = None, limit: Optional[int] = None, page: Optional[str] = None,
-                    profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_node_pools(compartment_id: str, cluster_id: str, name: str | None = None,
+                    lifecycle_state: str | None = None, limit: int | None = None, page: str | None = None,
+                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"cluster_id": cluster_id}
+    kwargs: dict[str, Any] = {"cluster_id": cluster_id}
     if name:
         kwargs["name"] = name
     if lifecycle_state:

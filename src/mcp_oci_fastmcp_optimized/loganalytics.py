@@ -6,7 +6,6 @@ Auto-discovers namespace, provides clear responses for Claude
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, List, Optional
 
 try:
     from fastmcp import FastMCP
@@ -15,14 +14,14 @@ except ImportError:
     sys.exit(1)
 
 from mcp_oci_loganalytics.server_optimized import (
-    run_query,
+    get_namespace_info,
     list_entities,
     list_sources,
-    get_namespace_info,
+    run_query,
 )
 
 
-def run_loganalytics_optimized(profile: Optional[str] = None, region: Optional[str] = None, 
+def run_loganalytics_optimized(profile: str | None = None, region: str | None = None, 
                                server_name: str = "oci-loganalytics-optimized"):
     """Run the optimized Log Analytics FastMCP server."""
     app = FastMCP(server_name)

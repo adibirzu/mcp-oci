@@ -1,9 +1,10 @@
 """MCP Server: OCI DNS
 """
 
-from typing import Any, Dict, List, Optional
-from mcp_oci_common.response import with_meta
+from typing import Any
+
 from mcp_oci_common import make_client
+from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -11,13 +12,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.dns.DnsClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:dns:list-zones",
@@ -54,10 +55,10 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_zones(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-               profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_zones(compartment_id: str, limit: int | None = None, page: str | None = None,
+               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -68,8 +69,8 @@ def list_zones(compartment_id: str, limit: Optional[int] = None, page: Optional[
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_rrset(zone_name_or_id: str, domain: str, rtype: Optional[str] = None,
-               profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_rrset(zone_name_or_id: str, domain: str, rtype: str | None = None,
+               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     if rtype:
         resp = client.get_rr_set(zone_name_or_id=zone_name_or_id, domain=domain, rtype=rtype)

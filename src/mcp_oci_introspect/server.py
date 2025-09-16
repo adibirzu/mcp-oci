@@ -4,7 +4,7 @@ Provides generic tools to introspect SDK methods for arbitrary clients, and
 service-specific convenience tools following the pattern `oci:<service>:list-sdk-methods`.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import oci  # type: ignore
@@ -12,7 +12,7 @@ except Exception:
     oci = None
 
 
-SERVICE_CLIENTS: Dict[str, List[str]] = {
+SERVICE_CLIENTS: dict[str, list[str]] = {
     "identity": ["identity.IdentityClient"],
     "compute": ["core.ComputeClient"],
     "networking": ["core.VirtualNetworkClient"],
@@ -50,8 +50,8 @@ def _resolve_client_class(path: str) -> Any:
     return getattr(mod, cls_name)
 
 
-def _list_methods_of(obj: Any) -> List[str]:
-    names: List[str] = []
+def _list_methods_of(obj: Any) -> list[str]:
+    names: list[str] = []
     for name in dir(obj):
         if name.startswith("_"):
             continue
@@ -61,8 +61,8 @@ def _list_methods_of(obj: Any) -> List[str]:
     return sorted(names)
 
 
-def register_tools() -> List[Dict[str, Any]]:
-    tools: List[Dict[str, Any]] = [
+def register_tools() -> list[dict[str, Any]]:
+    tools: list[dict[str, Any]] = [
         {
             "name": "oci:sdk:list-methods",
             "description": "List SDK methods for a given client class (e.g., usage_api.UsageapiClient).",
@@ -78,9 +78,9 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
     # Add service-prefixed tools
     for service, candidates in SERVICE_CLIENTS.items():
-        def _make_handler(paths: List[str]):
-            def _handler() -> Dict[str, Any]:
-                out: Dict[str, List[str]] = {}
+        def _make_handler(paths: list[str]):
+            def _handler() -> dict[str, Any]:
+                out: dict[str, list[str]] = {}
                 for p in paths:
                     try:
                         cls = _resolve_client_class(p)
@@ -101,7 +101,7 @@ def register_tools() -> List[Dict[str, Any]]:
     return tools
 
 
-def sdk_list_methods(client_path: str) -> Dict[str, Any]:
+def sdk_list_methods(client_path: str) -> dict[str, Any]:
     cls = _resolve_client_class(client_path)
     return {"methods": _list_methods_of(cls)}
 

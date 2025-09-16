@@ -1,0 +1,60 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    line-height: 1.6;
+}
+
+h1, h2 {
+    color: #333;
+}
+
+nav {
+    margin-bottom: 20px;
+}
+
+details {
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+iframe {
+    border: none;
+    margin-top: 20px;
+}
+
+.server {
+    margin-bottom: 20px;
+    border: 1px solid #ccc;
+    padding: 15px;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.tool {
+    margin-left: 20px;
+    margin-top: 10px;
+    border-left: 2px solid #ddd;
+    padding-left: 10px;
+}
+
+pre {
+    background-color: #f0f0f0;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.mermaid {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}

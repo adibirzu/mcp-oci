@@ -3,8 +3,9 @@
 Exposes tools as `oci:compute:<action>`; read/list ops prioritized.
 """
 
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -14,19 +15,19 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.core.ComputeClient, profile=profile, region=region)
 
 
-def create_search_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_search_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.resource_search.ResourceSearchClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:compute:list-instances",
@@ -244,23 +245,23 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_instances(compartment_id: Optional[str] = None, compartment_name: Optional[str] = None,
-                   availability_domain: Optional[str] = None,
-                   lifecycle_state: Optional[str] = None,
+def list_instances(compartment_id: str | None = None, compartment_name: str | None = None,
+                   availability_domain: str | None = None,
+                   lifecycle_state: str | None = None,
                    include_subtree: bool = True,
-                   display_name: Optional[str] = None,
-                   display_name_contains: Optional[str] = None,
-                   shape: Optional[str] = None,
-                   time_created_after: Optional[str] = None,
-                   time_created_before: Optional[str] = None,
-                   freeform_tags: Optional[Dict[str, str]] = None,
-                   defined_tags: Optional[Dict[str, str]] = None,
-                   limit: Optional[int] = None, page: Optional[str] = None,
-                   max_items: Optional[int] = None,
-                   profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                   display_name: str | None = None,
+                   display_name_contains: str | None = None,
+                   shape: str | None = None,
+                   time_created_after: str | None = None,
+                   time_created_before: str | None = None,
+                   freeform_tags: dict[str, str] | None = None,
+                   defined_tags: dict[str, str] | None = None,
+                   limit: int | None = None, page: str | None = None,
+                   max_items: int | None = None,
+                   profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     # Resolve root compartment (tenancy) if not provided
-    root_compartment: Optional[str] = compartment_id
+    root_compartment: str | None = compartment_id
     if root_compartment is None:
         try:
             from mcp_oci_common import get_config  # type: ignore
@@ -278,16 +279,16 @@ def list_instances(compartment_id: Optional[str] = None, compartment_name: Optio
             root_compartment = resolved
 
     # Build list of compartments to search
-    compartments: List[str] = [root_compartment]
+    compartments: list[str] = [root_compartment]
     if include_subtree:
         try:
             if oci is None:
                 raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
             from mcp_oci_common import make_client as _make
             iam = _make(oci.identity.IdentityClient, profile=profile, region=region)
-            nextp: Optional[str] = None
+            nextp: str | None = None
             while True:
-                kwargs_comp: Dict[str, Any] = {
+                kwargs_comp: dict[str, Any] = {
                     "compartment_id": root_compartment,
                     "compartment_id_in_subtree": True,
                     "access_level": "ANY",
@@ -307,16 +308,16 @@ def list_instances(compartment_id: Optional[str] = None, compartment_name: Optio
             pass
 
     # Collect instances across compartments
-    all_items: List[Dict[str, Any]] = []
+    all_items: list[dict[str, Any]] = []
     total_cap = max_items or 500
     for comp_id in compartments:
-        kwargs_req: Dict[str, Any] = {}
+        kwargs_req: dict[str, Any] = {}
         if availability_domain:
             kwargs_req["availability_domain"] = availability_domain
         if lifecycle_state:
             # pass through; supported by SDK. If not, we will still filter client-side below.
             kwargs_req["lifecycle_state"] = lifecycle_state
-        next_token: Optional[str] = page
+        next_token: str | None = page
         while True:
             if next_token:
                 kwargs_req["page"] = next_token
@@ -342,7 +343,7 @@ def list_instances(compartment_id: Optional[str] = None, compartment_name: Optio
             if not next_token:
                 break
         # Do not propagate next_page when aggregating; return full aggregated list
-    result: Dict[str, Any] = {"items": all_items}
+    result: dict[str, Any] = {"items": all_items}
     if len(all_items) >= total_cap:
         result["truncated"] = True
         result["hints"] = {
@@ -368,9 +369,9 @@ def list_instances(compartment_id: Optional[str] = None, compartment_name: Optio
     return result
 
 
-def _build_search_query(lifecycle_state: Optional[str], display_name: Optional[str], compartment_id: Optional[str], include_subtree: bool) -> str:
+def _build_search_query(lifecycle_state: str | None, display_name: str | None, compartment_id: str | None, include_subtree: bool) -> str:
     """Build OCI Resource Search query with proper syntax"""
-    clauses: List[str] = []
+    clauses: list[str] = []
     
     # Resource type
     clauses.append("resourceType = 'Instance'")
@@ -400,13 +401,13 @@ def _build_search_query(lifecycle_state: Optional[str], display_name: Optional[s
     return f"query all resources where {' AND '.join(clauses)}"
 
 
-def search_instances(query: Optional[str] = None,
-                     lifecycle_state: Optional[str] = None,
-                     display_name: Optional[str] = None,
-                     compartment_id: Optional[str] = None,
+def search_instances(query: str | None = None,
+                     lifecycle_state: str | None = None,
+                     display_name: str | None = None,
+                     compartment_id: str | None = None,
                      include_subtree: bool = True,
-                     limit: Optional[int] = None, page: Optional[str] = None,
-                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                     limit: int | None = None, page: str | None = None,
+                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     
@@ -423,7 +424,7 @@ def search_instances(query: Optional[str] = None,
         query=query,
         matching_context_type="NONE",
     )
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -466,10 +467,10 @@ def _convert_lifecycle_query(query: str) -> str:
     return query
 
 
-def _fallback_to_list_instances(lifecycle_state: Optional[str], display_name: Optional[str], 
-                               compartment_id: Optional[str], include_subtree: bool,
-                               limit: Optional[int], page: Optional[str],
-                               profile: Optional[str], region: Optional[str], error_msg: str) -> Dict[str, Any]:
+def _fallback_to_list_instances(lifecycle_state: str | None, display_name: str | None, 
+                               compartment_id: str | None, include_subtree: bool,
+                               limit: int | None, page: str | None,
+                               profile: str | None, region: str | None, error_msg: str) -> dict[str, Any]:
     """Fallback to regular list_instances when search fails"""
     try:
         # Parse lifecycle_state for multiple states
@@ -529,18 +530,18 @@ def _fallback_to_list_instances(lifecycle_state: Optional[str], display_name: Op
         }
 
 
-def list_stopped_instances(compartment_id: Optional[str] = None, compartment_name: Optional[str] = None,
+def list_stopped_instances(compartment_id: str | None = None, compartment_name: str | None = None,
                            include_subtree: bool = True,
-                           display_name: Optional[str] = None,
-                           display_name_contains: Optional[str] = None,
-                           shape: Optional[str] = None,
-                           time_created_after: Optional[str] = None,
-                           time_created_before: Optional[str] = None,
-                           freeform_tags: Optional[Dict[str, str]] = None,
-                           defined_tags: Optional[Dict[str, str]] = None,
-                           limit: Optional[int] = None, page: Optional[str] = None,
-                           max_items: Optional[int] = None,
-                           profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                           display_name: str | None = None,
+                           display_name_contains: str | None = None,
+                           shape: str | None = None,
+                           time_created_after: str | None = None,
+                           time_created_before: str | None = None,
+                           freeform_tags: dict[str, str] | None = None,
+                           defined_tags: dict[str, str] | None = None,
+                           limit: int | None = None, page: str | None = None,
+                           max_items: int | None = None,
+                           profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     # Force lifecycle_state STOPPED and reuse list_instances
     result = list_instances(
         compartment_id=compartment_id,
@@ -574,15 +575,15 @@ def list_stopped_instances(compartment_id: Optional[str] = None, compartment_nam
 
 
 def _resolve_compartment_by_name(name: str, root_compartment: str, include_subtree: bool,
-                                 profile: Optional[str], region: Optional[str]) -> Optional[str]:
+                                 profile: str | None, region: str | None) -> str | None:
     try:
         if oci is None:
             return None
         from mcp_oci_common import make_client as _make
         iam = _make(oci.identity.IdentityClient, profile=profile, region=region)
-        nextp: Optional[str] = None
+        nextp: str | None = None
         while True:
-            kwargs_comp: Dict[str, Any] = {
+            kwargs_comp: dict[str, Any] = {
                 "compartment_id": root_compartment,
                 "compartment_id_in_subtree": include_subtree,
                 "access_level": "ANY",
@@ -604,7 +605,7 @@ def _resolve_compartment_by_name(name: str, root_compartment: str, include_subtr
     return None
 
 
-def _parse_iso8601(ts: Optional[str]) -> Optional[datetime]:
+def _parse_iso8601(ts: str | None) -> datetime | None:
     if not ts:
         return None
     # Basic parser for Z timestamps
@@ -616,12 +617,12 @@ def _parse_iso8601(ts: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _instance_matches_filters(item: Dict[str, Any], *, lifecycle_state: Optional[str], display_name: Optional[str],
-                              display_name_contains: Optional[str], shape: Optional[str],
-                              time_created_after: Optional[str], time_created_before: Optional[str],
-                              freeform_tags: Optional[Dict[str, str]], defined_tags: Optional[Dict[str, str]]) -> bool:
+def _instance_matches_filters(item: dict[str, Any], *, lifecycle_state: str | None, display_name: str | None,
+                              display_name_contains: str | None, shape: str | None,
+                              time_created_after: str | None, time_created_before: str | None,
+                              freeform_tags: dict[str, str] | None, defined_tags: dict[str, str] | None) -> bool:
     # Handle both underscore-prefixed and non-prefixed attribute names
-    def get_attr(item: Dict[str, Any], key: str) -> Any:
+    def get_attr(item: dict[str, Any], key: str) -> Any:
         return item.get(key) or item.get(f"_{key}")
     
     if lifecycle_state and str(get_attr(item, "lifecycle_state")) != lifecycle_state:
@@ -663,20 +664,19 @@ def _instance_matches_filters(item: Dict[str, Any], *, lifecycle_state: Optional
             # expect key as namespace.key
             if "." in kval:
                 ns, key = kval.split(".", 1)
-                if str(((dtags.get(ns) or {}).get(key))) != str(v):
+                if str((dtags.get(ns) or {}).get(key)) != str(v):
                     return False
-            else:
-                # fallback: top-level key lookup
-                if str(dtags.get(kval)) != str(v):
-                    return False
+            # fallback: top-level key lookup
+            elif str(dtags.get(kval)) != str(v):
+                return False
     return True
 
 
-def list_images(compartment_id: str, operating_system: Optional[str] = None, operating_system_version: Optional[str] = None,
-                limit: Optional[int] = None, page: Optional[str] = None,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_images(compartment_id: str, operating_system: str | None = None, operating_system_version: str | None = None,
+                limit: int | None = None, page: str | None = None,
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if operating_system:
         kwargs["operating_system"] = operating_system
     if operating_system_version:
@@ -692,10 +692,10 @@ def list_images(compartment_id: str, operating_system: Optional[str] = None, ope
 
 
 def list_vnics(compartment_id: str, instance_id: str,
-               limit: Optional[int] = None, page: Optional[str] = None,
-               profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+               limit: int | None = None, page: str | None = None,
+               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"instance_id": instance_id}
+    kwargs: dict[str, Any] = {"instance_id": instance_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -706,7 +706,7 @@ def list_vnics(compartment_id: str, instance_id: str,
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_instance(instance_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_instance(instance_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_instance(instance_id)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
@@ -714,7 +714,7 @@ def get_instance(instance_id: str, profile: Optional[str] = None, region: Option
 
 
 def instance_action(instance_id: str, action: str, dry_run: bool = False, confirm: bool = False,
-                    profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if dry_run:
         return {"dry_run": True, "request": {"instance_id": instance_id, "action": action}}
     client = create_client(profile=profile, region=region)
@@ -724,14 +724,14 @@ def instance_action(instance_id: str, action: str, dry_run: bool = False, confir
 
 
 def list_boot_volumes(compartment_id: str, availability_domain: str,
-                      limit: Optional[int] = None, page: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                      limit: int | None = None, page: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     from mcp_oci_common import make_client as _make
 
     blk = _make(oci.core.BlockstorageClient, profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -742,14 +742,14 @@ def list_boot_volumes(compartment_id: str, availability_domain: str,
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_instance_configurations(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_instance_configurations(compartment_id: str, limit: int | None = None, page: str | None = None,
+                                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     from mcp_oci_common import make_client as _make
 
     mgmt = _make(oci.core.ComputeManagementClient, profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -760,12 +760,12 @@ def list_instance_configurations(compartment_id: str, limit: Optional[int] = Non
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_boot_volume_attachments(compartment_id: Optional[str] = None, instance_id: Optional[str] = None,
-                                 availability_domain: Optional[str] = None,
-                                 limit: Optional[int] = None, page: Optional[str] = None,
-                                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_boot_volume_attachments(compartment_id: str | None = None, instance_id: str | None = None,
+                                 availability_domain: str | None = None,
+                                 limit: int | None = None, page: str | None = None,
+                                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if compartment_id:
         kwargs["compartment_id"] = compartment_id
     if instance_id:
@@ -782,11 +782,11 @@ def list_boot_volume_attachments(compartment_id: Optional[str] = None, instance_
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_shapes(compartment_id: str, availability_domain: Optional[str] = None, image_id: Optional[str] = None,
-                limit: Optional[int] = None, page: Optional[str] = None,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_shapes(compartment_id: str, availability_domain: str | None = None, image_id: str | None = None,
+                limit: int | None = None, page: str | None = None,
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if availability_domain:
         kwargs["availability_domain"] = availability_domain
     if image_id:

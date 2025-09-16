@@ -1,11 +1,12 @@
 import argparse
 import importlib
 import os
-from typing import Any, Dict
+from typing import Any
+
 
 def load_register_tools(service: str):
     mod = importlib.import_module(f"mcp_oci_{service}.server")
-    return getattr(mod, "register_tools")
+    return mod.register_tools
 
 
 def main() -> None:
@@ -20,17 +21,17 @@ def main() -> None:
     register_tools = load_register_tools(args.service)
     from mcp_oci_runtime.stdio import run_with_tools
 
-    defaults: Dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
     if args.profile:
         defaults["profile"] = args.profile
     if args.region:
         defaults["region"] = args.region
     tools = register_tools()
     # Add generic server info and ping tools to help hosts probe
-    def _server_info() -> Dict[str, Any]:  # type: ignore
+    def _server_info() -> dict[str, Any]:  # type: ignore
         return {"service": args.service, "defaults": defaults, "runtime": "stdio"}
 
-    def _ping() -> Dict[str, Any]:  # type: ignore
+    def _ping() -> dict[str, Any]:  # type: ignore
         return {"ok": True}
 
     tools.extend([

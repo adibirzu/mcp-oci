@@ -24,7 +24,7 @@ from .shared_architecture import (
     create_common_tools
 )
 
-def run_functions(*, profile: str | None = None, region: str | None = None, server_name: str = "oci-functions-optimized") -> None:
+def run_functions(*, profile: str | None = None, region: str | None = None, server_name: str = "mcp_oci_functions") -> None:
     """Serve an optimized FastMCP app for functions operations."""
     if FastMCP is None:
         raise SystemExit(
