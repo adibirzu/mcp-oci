@@ -1,16 +1,23 @@
-# Minimal Dockerfile for MCP OCI servers
+# Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
-ENV PIP_DISABLE_PIP_VERSION_CHECK=on PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-
+# Set the working directory in the container
 WORKDIR /app
 
-COPY pyproject.toml README.md /app/
-COPY src /app/src
+# Copy the current directory contents into the container at /app
+COPY . /app
 
-RUN pip install -U pip && pip install -e .[dev]
+# Install any needed packages specified in pyproject.toml or requirements.txt
+# Assuming pyproject.toml is used with poetry or similar; adjust if using requirements.txt
+RUN pip install poetry
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-dev
 
-# Expect OCI config mounted at /root/.oci for root user or set OCI config env vars
-# Default command serves IAM; override with other entrypoints as needed
-ENV MCP_OCI_LOG_LEVEL=INFO
-CMD ["mcp-oci-serve-iam", "--log-level", "INFO"]
+# Make port 8000 available to the world outside this container
+EXPOSE 8000
+
+# Define environment variable
+ENV NAME World
+
+# Run app.py when the container launches
+CMD ["uvicorn", "obs_app.app:app", "--host", "0.0.0.0", "--port", "8000"]

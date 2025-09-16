@@ -24,7 +24,7 @@ from .shared_architecture import (
     create_common_tools
 )
 
-def run_oke(*, profile: str | None = None, region: str | None = None, server_name: str = "oci-oke-optimized") -> None:
+def run_oke(*, profile: str | None = None, region: str | None = None, server_name: str = "mcp_oci_oke") -> None:
     """Serve an optimized FastMCP app for oke operations."""
     if FastMCP is None:
         raise SystemExit(

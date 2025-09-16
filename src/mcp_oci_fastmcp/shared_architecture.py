@@ -10,22 +10,19 @@ This module provides shared components that all MCP-OCI servers can use:
 - Error handling: Comprehensive error management
 """
 
-import os
-import sys
 import json
+import os
 import time
-import traceback
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
-from functools import wraps, lru_cache
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 # OCI SDK
 try:
     import oci
-    from oci.config import from_file as oci_from_file, DEFAULT_LOCATION as OCI_CFG_DEFAULT
-    from oci.exceptions import ServiceError, ConfigFileNotFound, InvalidConfig
+    from oci.config import DEFAULT_LOCATION as OCI_CFG_DEFAULT
+    from oci.config import from_file as oci_from_file
+    from oci.exceptions import ConfigFileNotFound, InvalidConfig, ServiceError
 except ImportError:
     raise SystemExit("OCI Python SDK not installed. Install with: pip install oci")
 
@@ -37,16 +34,16 @@ class OCIResponse:
     success: bool
     message: str
     data: Any
-    count: Optional[int] = None
-    compartment_id: Optional[str] = None
-    namespace: Optional[str] = None
+    count: int | None = None
+    compartment_id: str | None = None
+    namespace: str | None = None
     timestamp: str = None
     
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now().isoformat()
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "success": self.success,
@@ -307,7 +304,7 @@ def validate_compartment_id(compartment_id: str) -> bool:
     """Validate compartment ID format."""
     return compartment_id and (compartment_id.startswith("ocid1.compartment.") or compartment_id.startswith("ocid1.tenancy."))
 
-def get_available_compartments(limit: int = 50) -> List[Dict[str, Any]]:
+def get_available_compartments(limit: int = 50) -> list[dict[str, Any]]:
     """Get available compartments using official OCI SDK patterns."""
     try:
         identity_client = clients.identity
@@ -469,3 +466,75 @@ def create_common_tools(app, server_name: str):
         except Exception as e:
             result = handle_oci_error(e, "get_compartment_guidance", "identity")
             return json.dumps(result.to_dict())
+
+# ================================ UTILITY FUNCTIONS ================================
+
+def get_all_compartments_recursive(identity_client, root_compartment_id: str, visited=None):
+    """
+    Recursively discover ALL compartments including sub-compartments.
+    This ensures we find instances in nested compartments that may not be returned 
+    by standard list_compartments calls.
+    """
+    if visited is None:
+        visited = set()
+    
+    if root_compartment_id in visited:
+        return []  # Avoid infinite loops
+    
+    visited.add(root_compartment_id)
+    all_compartments = []
+    
+    try:
+        # Get direct sub-compartments
+        response = identity_client.list_compartments(
+            compartment_id=root_compartment_id,
+            access_level='ACCESSIBLE',
+            limit=100
+        )
+        
+        direct_compartments = response.data
+        all_compartments.extend(direct_compartments)
+        
+        # Recursively get sub-compartments of each compartment
+        for comp in direct_compartments:
+            try:
+                sub_compartments = get_all_compartments_recursive(
+                    identity_client, comp.id, visited
+                )
+                all_compartments.extend(sub_compartments)
+            except Exception:
+                # Skip compartments that cause errors (e.g., permission issues)
+                continue
+                
+    except Exception:
+        # If we can't list compartments, return empty list
+        pass
+    
+    return all_compartments
+
+def validate_compartment_id(compartment_id: str) -> bool:
+    """Validate that the compartment ID format is correct."""
+    if not compartment_id:
+        return False
+    return compartment_id.startswith("ocid1.compartment.") or compartment_id.startswith("ocid1.tenancy.")
+
+def get_available_compartments(limit: int = 50):
+    """Get available compartments using recursive discovery."""
+    try:
+        identity_client = clients.identity
+        compartments = get_all_compartments_recursive(identity_client, clients.root_compartment_id)
+        
+        # Convert to simple dictionaries for LLM consumption
+        compartment_list = []
+        for comp in compartments[:limit]:
+            compartment_list.append({
+                "id": comp.id,
+                "name": comp.name,
+                "description": comp.description,
+                "lifecycle_state": comp.lifecycle_state,
+                "time_created": comp.time_created.isoformat() if comp.time_created else None
+            })
+        
+        return compartment_list
+    except Exception as e:
+        raise handle_oci_error(e, "get_available_compartments", "identity")

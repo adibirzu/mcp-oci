@@ -1,6 +1,6 @@
 import os
+
 import pytest
-from typing import Optional
 
 
 def pytest_collection_modifyitems(config, items):
@@ -45,7 +45,7 @@ def tenancy_ocid(oci_profile: str) -> str:
     return tid
 
 
-def _discover_log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> Optional[str]:
+def _discover_log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> str | None:
     try:
         import oci  # type: ignore
     except Exception:
@@ -83,7 +83,7 @@ def _discover_log_analytics_namespace(oci_profile: str, oci_region: str, tenancy
 
 
 @pytest.fixture(scope="session")
-def log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> Optional[str]:
+def log_analytics_namespace(oci_profile: str, oci_region: str, tenancy_ocid: str) -> str | None:
     val = os.environ.get("TEST_LOGANALYTICS_NAMESPACE")
     if val:
         return val

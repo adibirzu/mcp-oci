@@ -3,7 +3,8 @@
 Expose basic subscription listing via `oci:osub:<action>`.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -13,13 +14,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.osub_subscription.SubscriptionClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:osub:list-subscriptions",
@@ -40,10 +41,10 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_subscriptions(tenancy_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                       profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_subscriptions(tenancy_id: str, limit: int | None = None, page: str | None = None,
+                       profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"tenancy_id": tenancy_id}
+    kwargs: dict[str, Any] = {"tenancy_id": tenancy_id}
     if limit:
         kwargs["limit"] = limit
     if page:

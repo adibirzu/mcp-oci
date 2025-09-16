@@ -4,7 +4,8 @@ Tools are exposed as `oci:loganalytics:<action>`.
 Focus on query execution and common catalog listings.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -14,13 +15,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.log_analytics.LogAnalyticsClient, profile=profile, region=region)
 
 
-def _extract_items_from_response(resp) -> List[Any]:
+def _extract_items_from_response(resp) -> list[Any]:
     """Extract items from OCI response, handling both direct data and data.items patterns"""
     data = getattr(resp, "data", None)
     if data and hasattr(data, "items"):
@@ -29,7 +30,7 @@ def _extract_items_from_response(resp) -> List[Any]:
         return [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:loganalytics:run-query",
@@ -213,8 +214,8 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def _coerce_model(module: Any, candidates: List[str], payload: Dict[str, Any]) -> Any:
-    last_err: Optional[Exception] = None
+def _coerce_model(module: Any, candidates: list[str], payload: dict[str, Any]) -> Any:
+    last_err: Exception | None = None
     for name in candidates:
         try:
             cls = getattr(module, name)
@@ -228,13 +229,13 @@ def _coerce_model(module: Any, candidates: List[str], payload: Dict[str, Any]) -
 
 
 def run_query(namespace_name: str, query_string: str, time_start: str, time_end: str,
-              subsystem: Optional[str] = None, max_total_count: Optional[int] = None,
-              profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+              subsystem: str | None = None, max_total_count: int | None = None,
+              profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     client = create_client(profile=profile, region=region)
     # Build details payload
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "query_string": query_string,
         "time_start": time_start,
         "time_end": time_end,
@@ -264,7 +265,7 @@ def run_query(namespace_name: str, query_string: str, time_start: str, time_end:
         ("search_logs", {"namespace_name": namespace_name, "search_logs_details": model}),
         ("run_query", {"namespace_name": namespace_name, "query_body": model}),
     ]
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for method_name, kwargs in candidates:
         method = getattr(client, method_name, None)
         if method is None:
@@ -284,11 +285,11 @@ def run_query(namespace_name: str, query_string: str, time_start: str, time_end:
     raise RuntimeError(f"Failed to run query; last error: {last_err}")
 
 
-def list_entities(namespace_name: str, compartment_id: str, limit: Optional[int] = None,
-                  page: Optional[str] = None, profile: Optional[str] = None,
-                  region: Optional[str] = None) -> Dict[str, Any]:
+def list_entities(namespace_name: str, compartment_id: str, limit: int | None = None,
+                  page: str | None = None, profile: str | None = None,
+                  region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -306,10 +307,10 @@ def list_entities(namespace_name: str, compartment_id: str, limit: Optional[int]
     raise RuntimeError("No list entities method available in SDK")
 
 
-def list_parsers(namespace_name: str, limit: Optional[int] = None, page: Optional[str] = None,
-                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_parsers(namespace_name: str, limit: int | None = None, page: str | None = None,
+                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"namespace_name": namespace_name}
+    kwargs: dict[str, Any] = {"namespace_name": namespace_name}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -323,11 +324,11 @@ def list_parsers(namespace_name: str, limit: Optional[int] = None, page: Optiona
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_log_groups(namespace_name: str, compartment_id: str, limit: Optional[int] = None,
-                    page: Optional[str] = None, profile: Optional[str] = None,
-                    region: Optional[str] = None) -> Dict[str, Any]:
+def list_log_groups(namespace_name: str, compartment_id: str, limit: int | None = None,
+                    page: str | None = None, profile: str | None = None,
+                    region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -345,10 +346,10 @@ def list_log_groups(namespace_name: str, compartment_id: str, limit: Optional[in
     raise RuntimeError("Log group listing not available in this SDK version")
 
 
-def list_saved_searches(namespace_name: str, limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_saved_searches(namespace_name: str, limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"namespace_name": namespace_name}
+    kwargs: dict[str, Any] = {"namespace_name": namespace_name}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -365,11 +366,11 @@ def list_saved_searches(namespace_name: str, limit: Optional[int] = None, page: 
     raise RuntimeError("Saved searches listing not available in this SDK version")
 
 
-def list_scheduled_tasks(namespace_name: str, compartment_id: str, limit: Optional[int] = None,
-                         page: Optional[str] = None, profile: Optional[str] = None,
-                         region: Optional[str] = None) -> Dict[str, Any]:
+def list_scheduled_tasks(namespace_name: str, compartment_id: str, limit: int | None = None,
+                         page: str | None = None, profile: str | None = None,
+                         region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"namespace_name": namespace_name, "compartment_id": compartment_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -386,9 +387,9 @@ def list_scheduled_tasks(namespace_name: str, compartment_id: str, limit: Option
     raise RuntimeError("Scheduled tasks listing not available in this SDK version")
 
 
-def upload_lookup(namespace_name: str, name: str, file_path: str, description: Optional[str] = None,
+def upload_lookup(namespace_name: str, name: str, file_path: str, description: str | None = None,
                   type: str = "CSV", confirm: bool = False, dry_run: bool = False,
-                  profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                  profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     import os
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
@@ -399,7 +400,7 @@ def upload_lookup(namespace_name: str, name: str, file_path: str, description: O
     client = create_client(profile=profile, region=region)
     # Possible method names
     candidates = ["upload_lookup", "upload_lookup_file", "put_lookup"]
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for method_name in candidates:
         method = getattr(client, method_name, None)
         if method is None:
@@ -415,11 +416,11 @@ def upload_lookup(namespace_name: str, name: str, file_path: str, description: O
     raise RuntimeError(f"Lookup upload not supported in this SDK version; last error: {last_err}")
 
 
-def list_work_requests(compartment_id: str, namespace_name: str, limit: Optional[int] = None,
-                       page: Optional[str] = None, profile: Optional[str] = None,
-                       region: Optional[str] = None) -> Dict[str, Any]:
+def list_work_requests(compartment_id: str, namespace_name: str, limit: int | None = None,
+                       page: str | None = None, profile: str | None = None,
+                       region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id, "namespace_name": namespace_name}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id, "namespace_name": namespace_name}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -436,7 +437,7 @@ def list_work_requests(compartment_id: str, namespace_name: str, limit: Optional
     raise RuntimeError("Work requests listing not available in this SDK version")
 
 
-def get_work_request(work_request_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_work_request(work_request_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     method = getattr(client, "get_work_request", None)
     if method is None:
@@ -446,9 +447,9 @@ def get_work_request(work_request_id: str, profile: Optional[str] = None, region
     return with_meta(resp, {"item": getattr(data, "__dict__", data)})
 
 
-def run_snippet(namespace_name: str, snippet: str, params: Optional[Dict[str, Any]] = None,
-                time_start: str = "", time_end: str = "", max_total_count: Optional[int] = None,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def run_snippet(namespace_name: str, snippet: str, params: dict[str, Any] | None = None,
+                time_start: str = "", time_end: str = "", max_total_count: int | None = None,
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     from .queries import render_snippet
     query_string = render_snippet(snippet, params or {})
     return run_query(namespace_name=namespace_name, query_string=query_string,
@@ -456,6 +457,6 @@ def run_snippet(namespace_name: str, snippet: str, params: Optional[Dict[str, An
                      profile=profile, region=region)
 
 
-def list_snippets() -> Dict[str, Any]:
+def list_snippets() -> dict[str, Any]:
     from .queries import SNIPPETS
     return {"snippets": sorted(SNIPPETS.keys())}

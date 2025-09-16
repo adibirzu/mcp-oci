@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any
 
-
-SNIPPETS: Dict[str, str] = {
+SNIPPETS: dict[str, str] = {
     # Count errors by source, descending, with optional limit
     "top_errors_by_source": "search \"error\" | stats count() by source | sort -count | limit {limit}",
     # Count messages by log group
@@ -51,7 +50,7 @@ SNIPPETS.update({
 })
 
 
-def render_snippet(name: str, params: Dict[str, Any]) -> str:
+def render_snippet(name: str, params: dict[str, Any]) -> str:
     if name not in SNIPPETS:
         raise ValueError(f"Unknown snippet: {name}")
     template = SNIPPETS[name]

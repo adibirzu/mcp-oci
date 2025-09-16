@@ -6,7 +6,6 @@ Provides clear, Claude-friendly responses
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, List, Optional
 
 try:
     from fastmcp import FastMCP
@@ -15,15 +14,15 @@ except ImportError:
     sys.exit(1)
 
 from mcp_oci_iam.server_optimized import (
-    list_users,
     get_user,
     list_compartments,
     list_groups,
     list_policies,
+    list_users,
 )
 
 
-def run_iam_optimized(profile: Optional[str] = None, region: Optional[str] = None, 
+def run_iam_optimized(profile: str | None = None, region: str | None = None, 
                       server_name: str = "oci-iam-optimized"):
     """Run the optimized IAM FastMCP server."""
     app = FastMCP(server_name)

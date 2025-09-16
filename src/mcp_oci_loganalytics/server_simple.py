@@ -3,9 +3,9 @@ Simple Log Analytics server that works without complex tenancy discovery
 Provides clear responses for Claude
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
-from mcp_oci_common.response import with_meta
 
 try:
     import oci  # type: ignore
@@ -13,13 +13,13 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.log_analytics.LogAnalyticsClient, profile=profile, region=region)
 
 
-def get_namespace_simple(profile: Optional[str] = None, region: Optional[str] = None) -> str:
+def get_namespace_simple(profile: str | None = None, region: str | None = None) -> str:
     """Simple namespace discovery - uses a default approach"""
     try:
         # For now, return a placeholder that indicates the user needs to provide it
@@ -30,8 +30,8 @@ def get_namespace_simple(profile: Optional[str] = None, region: Optional[str] = 
 
 
 def run_query_simple(query_string: str, time_start: str, time_end: str,
-                     subsystem: Optional[str] = None, max_total_count: Optional[int] = None,
-                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                     subsystem: str | None = None, max_total_count: int | None = None,
+                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """Run a Log Analytics query with clear error message if namespace not available"""
     try:
         # Try to get namespace, but provide helpful error if not available
@@ -92,9 +92,9 @@ def run_query_simple(query_string: str, time_start: str, time_end: str,
         }
 
 
-def list_entities_simple(compartment_id: str, limit: Optional[int] = None,
-                         page: Optional[str] = None, profile: Optional[str] = None,
-                         region: Optional[str] = None) -> Dict[str, Any]:
+def list_entities_simple(compartment_id: str, limit: int | None = None,
+                         page: str | None = None, profile: str | None = None,
+                         region: str | None = None) -> dict[str, Any]:
     """List Log Analytics entities with clear error message if namespace not available"""
     try:
         # Try to get namespace, but provide helpful error if not available
@@ -163,7 +163,7 @@ def list_entities_simple(compartment_id: str, limit: Optional[int] = None,
         }
 
 
-def get_namespace_info_simple(profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_namespace_info_simple(profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """Get Log Analytics namespace information with helpful guidance"""
     try:
         namespace = get_namespace_simple(profile=profile, region=region)

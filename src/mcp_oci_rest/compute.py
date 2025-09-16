@@ -3,15 +3,16 @@ Optimized Compute service using direct REST API calls
 Minimal token usage, based on Oracle Postman collection patterns
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from .client import create_client
-from .formatters import format_instance, format_response, format_error, format_success
+from .formatters import format_error, format_instance, format_response, format_success
 
 
-def list_instances(compartment_id: str, limit: Optional[int] = None, 
-                  page: Optional[str] = None, lifecycle_state: Optional[str] = None,
-                  display_name: Optional[str] = None, profile: str = "DEFAULT", 
-                  region: str = None) -> Dict[str, Any]:
+def list_instances(compartment_id: str, limit: int | None = None, 
+                  page: str | None = None, lifecycle_state: str | None = None,
+                  display_name: str | None = None, profile: str = "DEFAULT", 
+                  region: str = None) -> dict[str, Any]:
     """List compute instances using REST API - optimized for minimal tokens"""
     try:
         client = create_client(profile=profile, region=region)
@@ -54,7 +55,7 @@ def list_instances(compartment_id: str, limit: Optional[int] = None,
         return format_error(e)
 
 
-def get_instance(instance_id: str, profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def get_instance(instance_id: str, profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Get specific compute instance using REST API"""
     try:
         client = create_client(profile=profile, region=region)
@@ -73,8 +74,8 @@ def get_instance(instance_id: str, profile: str = "DEFAULT", region: str = None)
         return format_error(e)
 
 
-def list_stopped_instances(compartment_id: str, limit: Optional[int] = None,
-                          profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def list_stopped_instances(compartment_id: str, limit: int | None = None,
+                          profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """List stopped instances - optimized version"""
     return list_instances(
         compartment_id=compartment_id,
@@ -85,8 +86,8 @@ def list_stopped_instances(compartment_id: str, limit: Optional[int] = None,
     )
 
 
-def list_running_instances(compartment_id: str, limit: Optional[int] = None,
-                          profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def list_running_instances(compartment_id: str, limit: int | None = None,
+                          profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """List running instances - optimized version"""
     return list_instances(
         compartment_id=compartment_id,
@@ -97,8 +98,8 @@ def list_running_instances(compartment_id: str, limit: Optional[int] = None,
     )
 
 
-def search_instances(compartment_id: str, query: str, limit: Optional[int] = None,
-                    profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def search_instances(compartment_id: str, query: str, limit: int | None = None,
+                    profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Search instances using OCI Resource Search API"""
     try:
         client = create_client(profile=profile, region=region)
@@ -126,7 +127,7 @@ def search_instances(compartment_id: str, query: str, limit: Optional[int] = Non
         return format_error(e)
 
 
-def get_server_info() -> Dict[str, Any]:
+def get_server_info() -> dict[str, Any]:
     """Get server information"""
     return {
         "name": "oci-compute-rest",

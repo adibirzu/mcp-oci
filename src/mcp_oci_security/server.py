@@ -4,7 +4,8 @@ Aggregates security posture information across Cloud Guard, Security Zones,
 Vulnerability Scanning, KMS, and IAM to provide quick findings and summaries.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -21,7 +22,7 @@ def _client_or_none(factory):
         return None
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "oci:security:list-cloud-guard-problems",
@@ -122,13 +123,13 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def _cg_client(profile: Optional[str], region: Optional[str]):
+def _cg_client(profile: str | None, region: str | None):
     if oci is None:
         return None
     return make_client(oci.cloud_guard.CloudGuardClient, profile=profile, region=region)
 
 
-def _sz_client(profile: Optional[str], region: Optional[str]):
+def _sz_client(profile: str | None, region: str | None):
     if oci is None:
         return None
     # Security Zones client can be under security_zone module
@@ -138,7 +139,7 @@ def _sz_client(profile: Optional[str], region: Optional[str]):
         return None
 
 
-def _vss_client(profile: Optional[str], region: Optional[str]):
+def _vss_client(profile: str | None, region: str | None):
     if oci is None:
         return None
     try:
@@ -147,14 +148,14 @@ def _vss_client(profile: Optional[str], region: Optional[str]):
         return None
 
 
-def list_cloud_guard_problems(compartment_id: str, lifecycle_detail: Optional[str] = None,
-                              risk_level: Optional[str] = None, limit: Optional[int] = None,
-                              page: Optional[str] = None, profile: Optional[str] = None,
-                              region: Optional[str] = None) -> Dict[str, Any]:
+def list_cloud_guard_problems(compartment_id: str, lifecycle_detail: str | None = None,
+                              risk_level: str | None = None, limit: int | None = None,
+                              page: str | None = None, profile: str | None = None,
+                              region: str | None = None) -> dict[str, Any]:
     client = _cg_client(profile, region)
     if client is None:
         raise RuntimeError("Cloud Guard client not available; ensure SDK supports cloud_guard")
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id}
     if lifecycle_detail:
         kwargs["lifecycle_detail"] = lifecycle_detail
     if risk_level:
@@ -169,12 +170,12 @@ def list_cloud_guard_problems(compartment_id: str, lifecycle_detail: Optional[st
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_security_zones(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_security_zones(compartment_id: str, limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = _sz_client(profile, region)
     if client is None:
         raise RuntimeError("Security Zones client not available; ensure SDK supports security_zone")
-    kwargs: Dict[str, Any] = {"compartment_id": compartment_id}
+    kwargs: dict[str, Any] = {"compartment_id": compartment_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -191,13 +192,13 @@ def list_security_zones(compartment_id: str, limit: Optional[int] = None, page: 
     raise RuntimeError("Security Zones list method not available in SDK")
 
 
-def list_host_scan_results(compartment_id: Optional[str] = None, limit: Optional[int] = None,
-                           page: Optional[str] = None, profile: Optional[str] = None,
-                           region: Optional[str] = None) -> Dict[str, Any]:
+def list_host_scan_results(compartment_id: str | None = None, limit: int | None = None,
+                           page: str | None = None, profile: str | None = None,
+                           region: str | None = None) -> dict[str, Any]:
     client = _vss_client(profile, region)
     if client is None:
         raise RuntimeError("Vulnerability Scanning client not available")
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if compartment_id:
         kwargs["compartment_id"] = compartment_id
     if limit:
@@ -213,13 +214,13 @@ def list_host_scan_results(compartment_id: Optional[str] = None, limit: Optional
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_container_scan_results(compartment_id: Optional[str] = None, limit: Optional[int] = None,
-                                page: Optional[str] = None, profile: Optional[str] = None,
-                                region: Optional[str] = None) -> Dict[str, Any]:
+def list_container_scan_results(compartment_id: str | None = None, limit: int | None = None,
+                                page: str | None = None, profile: str | None = None,
+                                region: str | None = None) -> dict[str, Any]:
     client = _vss_client(profile, region)
     if client is None:
         raise RuntimeError("Vulnerability Scanning client not available")
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if compartment_id:
         kwargs["compartment_id"] = compartment_id
     if limit:
@@ -235,9 +236,9 @@ def list_container_scan_results(compartment_id: Optional[str] = None, limit: Opt
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_kms_keys(management_endpoint: str, compartment_id: Optional[str] = None, limit: Optional[int] = None,
-                  page: Optional[str] = None, profile: Optional[str] = None,
-                  region: Optional[str] = None) -> Dict[str, Any]:
+def list_kms_keys(management_endpoint: str, compartment_id: str | None = None, limit: int | None = None,
+                  page: str | None = None, profile: str | None = None,
+                  region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available")
     # KMS clients take kms_endpoint not region
@@ -245,7 +246,7 @@ def list_kms_keys(management_endpoint: str, compartment_id: Optional[str] = None
     if region:
         cfg["region"] = region
     kms = oci.key_management.KmsManagementClient(config=cfg, service_endpoint=management_endpoint)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if compartment_id:
         kwargs["compartment_id"] = compartment_id
     if limit:
@@ -258,9 +259,9 @@ def list_kms_keys(management_endpoint: str, compartment_id: Optional[str] = None
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def summary(compartment_id: str, management_endpoint: Optional[str] = None,
-            profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+def summary(compartment_id: str, management_endpoint: str | None = None,
+            profile: str | None = None, region: str | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     # Cloud Guard problems
     try:
         cg = list_cloud_guard_problems(compartment_id=compartment_id, profile=profile, region=region, limit=50)

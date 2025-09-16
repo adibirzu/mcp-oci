@@ -1,5 +1,5 @@
-from mcp_oci_usageapi.server import register_tools
 from mcp_oci_runtime.stdio import run_with_tools
+from mcp_oci_usageapi.server import register_tools
 
 
 def main() -> None:

@@ -1,7 +1,7 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 
-def with_meta(resp: Any, payload: Dict[str, Any], *, next_page: Optional[str] = None) -> Dict[str, Any]:
+def with_meta(resp: Any, payload: dict[str, Any], *, next_page: str | None = None) -> dict[str, Any]:
     """Attach opc_request_id and next_page to payload if available."""
     try:
         headers = getattr(resp, "headers", None)

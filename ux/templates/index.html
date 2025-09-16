@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Servers UX</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true});</script>
+</head>
+<body>
+    <h1>MCP Servers Overview</h1>
+    <nav>
+        <a href="/">Servers</a> | <a href="/dashboards">Dashboards</a>
+    </nav>
+    
+    <h2>Relations Diagram</h2>
+    <div class="mermaid">
+        {{ relations }}
+    </div>
+    
+    <h2>Servers</h2>
+    {% for server in servers %}
+    <details class="server">
+        <summary>{{ server.name }} ({{ server.command|join(' ') }})</summary>
+        <p>Environment: {{ server.env|tojson }}</p>
+        <h3>Tools</h3>
+        {% for tool in server.tools %}
+        <details class="tool">
+            <summary>{{ tool.name }}: {{ tool.description }}</summary>
+            <pre>{{ tool.input_schema | tojson(indent=2) }}</pre>
+        </details>
+        {% endfor %}
+    </details>
+    {% endfor %}
+</body>
+</html>
