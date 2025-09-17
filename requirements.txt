@@ -1,0 +1,21 @@
+# Runtime dependencies for ux.app (FastAPI UI) and observability
+fastapi
+uvicorn[standard]
+prometheus-client
+opentelemetry-sdk
+opentelemetry-api
+opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-instrumentation
+opentelemetry-instrumentation-fastapi
+requests
+oci
+pydantic
+tenacity
+streamlit
+jinja2
+numpy
+pandas
+scipy
+typer
+fastmcp

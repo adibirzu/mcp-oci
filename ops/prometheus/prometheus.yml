@@ -9,9 +9,13 @@ scrape_configs:
 
   - job_name: 'obs-app'
     static_configs:
-      - targets: ['obs-app:8000']
+      - targets: ['obs-app:8000', 'host.docker.internal:8000']
 
   # Add more jobs for MCP servers if they expose metrics
   # - job_name: 'mcp-compute'
   #   static_configs:
   #     - targets: ['localhost:8001']  # Assuming MCP servers run on different ports
+
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8889']

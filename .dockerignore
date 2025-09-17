@@ -1,0 +1,23 @@
+# Ignore local virtual environments and caches
+.venv
+**/__pycache__/
+*.py[cod]
+
+# VCS and metadata
+.git
+.gitignore
+.DS_Store
+
+# Logs and temp
+*.log
+logs/
+ops/logs/
+
+# Node/artifacts (if any)
+node_modules/
+dist/
+build/
+
+# Env files
+.env
+.env.*

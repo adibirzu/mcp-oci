@@ -2,17 +2,52 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prom
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     version: 1
     editable: true
+    jsonData:
+      httpMethod: POST
+      # Link exemplars in Prometheus panels to Tempo traces
+      exemplarTraceIdDestinations:
+        - name: Tempo
+          datasourceUid: tempo
 
   - name: Tempo
+    uid: tempo
     type: tempo
     access: proxy
     url: http://tempo:3200
-    uid: tempo
     version: 1
     editable: true
+    jsonData:
+      httpMethod: GET
+      # Show the service map using Prometheus metrics
+      serviceMap:
+        datasourceUid: prom
+      nodeGraph:
+        enabled: true
+      # Enable trace->metrics linking (uses span attributes to build a PromQL query)
+      tracesToMetrics:
+        datasourceUid: prom
+        # These tags map span attributes to Prometheus labels (adjust to your metrics if needed)
+        tags:
+          - key: service.name
+            value: $__span.serviceName
+          - key: service.namespace
+            value: $__span.serviceNamespace
+          - key: operation
+            value: $__span.name
+        spanStartTimeShift: "1h"
+        spanEndTimeShift: "1h"
+        # Example PromQL for span count/rate (adjust to your metric names as needed)
+        query: sum by (service_name) (rate(otel_span_duration_milliseconds_count[5m]))
+      # Enable metrics->trace linking from Prometheus panels back to Tempo
+      metricsToTraces:
+        datasourceUid: prom
+        tags:
+          - key: service.name
+            value: ""
