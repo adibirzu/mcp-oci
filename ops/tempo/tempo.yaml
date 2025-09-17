@@ -7,6 +7,50 @@ distributor:
       protocols:
         http:
           endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: memberlist
+      replication_factor: 1
+
+compactor:
+  ring:
+    kvstore:
+      store: memberlist
+  compaction:
+    compacted_block_retention: 1h
+
+metrics_generator:
+  processor:
+    service_graphs: {}
+    span_metrics:
+      dimensions:
+        - service
+        - name
+        - status_code
+        - span_kind
+  storage:
+    path: /tmp/tempo/generator/wal
+  ring:
+    kvstore:
+      store: memberlist
+
+memberlist:
+  join_members:
+    - tempo:7946
+
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9095
+
+query_frontend:
+  search:
+    concurrent_jobs: 1000
+    target_bytes_per_job: 100000000
 
 storage:
   trace:
@@ -15,23 +59,3 @@ storage:
       path: /tmp/tempo/blocks
     wal:
       path: /tmp/tempo/wal
-
-querier:
-  frontend_worker:
-    frontend_address: 127.0.0.1:9095
-
-ingester:
-  lifecycler:
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-
-compactor:
-  compaction:
-    compacted_block_retention: 1h
-
-query_frontend:
-  search:
-    concurrent_jobs: 1000
-    target_bytes_per_job: 100000000

@@ -18,6 +18,16 @@ export PYTHONPATH="$(pwd)/src:$(pwd):${PYTHONPATH}"
 launch_server() {
     local server=$1
     echo "Launching $server server..."
+    # OpenTelemetry defaults (can be overridden by environment)
+    export OTEL_TRACES_EXPORTER="${OTEL_TRACES_EXPORTER:-otlp}"
+    export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-otlp}"
+    export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-otlp}"
+    # Prefer gRPC on localhost:4317 for local stack; falls back cleanly if overridden
+    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}"
+    export OTEL_EXPORTER_OTLP_PROTOCOL="${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}"
+    # Service metadata for better filtering
+    export OTEL_SERVICE_NAME="mcp-oci-$server"
+    export OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=local,service.namespace=mcp-oci,service.version=dev}"
     poetry run python "mcp_servers/$server/server.py" &
     echo "$server server launched with PID $!"
 }

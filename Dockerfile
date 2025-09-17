@@ -1,23 +1,22 @@
-# Use an official Python runtime as a parent image
+# Lightweight Python base
 FROM python:3.11-slim
 
-# Set the working directory in the container
+# Avoid Python buffering and ensure predictable logs
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
+# Install Python deps first for better layer caching
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
+
+# Copy the rest of the app
 COPY . /app
 
-# Install any needed packages specified in pyproject.toml or requirements.txt
-# Assuming pyproject.toml is used with poetry or similar; adjust if using requirements.txt
-RUN pip install poetry
-RUN poetry config virtualenvs.create false
-RUN poetry install --no-dev
-
-# Make port 8000 available to the world outside this container
+# Expose app port
 EXPOSE 8000
 
-# Define environment variable
-ENV NAME World
-
-# Run app.py when the container launches
-CMD ["uvicorn", "obs_app.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start FastAPI app with Uvicorn
+CMD ["uvicorn", "ux.app:app", "--host", "0.0.0.0", "--port", "8000"]

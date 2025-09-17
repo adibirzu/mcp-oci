@@ -1,0 +1,23 @@
+Missing executable: 'tempo'. Attempting installation...
+Warning: No available formula with the name "tempo". Did you mean templ or emp?
+==> Searching for similarly named formulae and casks...
+==> Formulae
+temporal
+temporal_tables
+templ
+emp
+
+To install temporal, run:
+  brew install temporal
+
+==> Casks
+tempbox
+
+To install tempbox, run:
+  brew install --cask tempbox
+==> Tapping grafana/tap
+Cloning into '/opt/homebrew/Library/Taps/grafana/homebrew-tap'...
+remote: Repository not found.
+fatal: repository 'https://github.com/grafana/homebrew-tap/' not found
+Error: Failure while executing; `git clone https://github.com/grafana/homebrew-tap /opt/homebrew/Library/Taps/grafana/homebrew-tap --origin=origin --template= --config core.fsmonitor=false` exited with 128.
+ERROR: 'tempo' still not available after install. Place it in /Users/abirzu/dev/mcp-oci/ops/bin or ensure it's on PATH.
