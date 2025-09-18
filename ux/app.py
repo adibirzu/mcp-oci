@@ -8,8 +8,33 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+try:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+except Exception:
+    FastAPIInstrumentor = None
+try:
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+except Exception:
+    RequestsInstrumentor = None
+from mcp_oci_common.observability import init_tracing
 from time import perf_counter
+
+# Optional Pyroscope (continuous profiling)
+ENABLE_PYROSCOPE = os.getenv("ENABLE_PYROSCOPE", "true").lower() in ("1", "true", "yes", "on")
+try:
+    if ENABLE_PYROSCOPE:
+        import pyroscope  # provided by pyroscope-io
+        pyroscope.configure(
+            application_name=os.getenv("PYROSCOPE_APP_NAME", "mcp-ux"),
+            server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://pyroscope:4040"),
+            # reasonable defaults
+            sample_rate=int(os.getenv("PYROSCOPE_SAMPLE_RATE", "100")),  # Hz
+            detect_subprocesses=True,
+            enable_logging=True,
+        )
+except Exception as _e:
+    # Do not fail app startup due to profiler availability
+    pass
 
 app = FastAPI()
 
@@ -36,17 +61,29 @@ async def metrics_middleware(request, call_next):
     return response
 
 # OpenTelemetry tracing (send to OTel Collector -> Tempo)
-trace.set_tracer_provider(TracerProvider())
-otlp_exporter = OTLPSpanExporter(endpoint=os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'otel-collector:4317'), insecure=True)
-span_processor = BatchSpanProcessor(otlp_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
-FastAPIInstrumentor.instrument_app(app)
+init_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "mcp-ux"))
+if RequestsInstrumentor:
+    try:
+        RequestsInstrumentor().instrument()
+    except Exception:
+        pass
+if FastAPIInstrumentor:
+    try:
+        FastAPIInstrumentor.instrument_app(app)
+    except Exception:
+        try:
+            FastAPIInstrumentor().instrument()
+        except Exception:
+            pass
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="ux/static"), name="static")
 
-# Set up templates
-templates = Jinja2Templates(directory="ux/templates")
+# Set up templates (fallback to JSON if jinja2 not available)
+try:
+    templates = Jinja2Templates(directory="ux/templates")
+except Exception:
+    templates = None
 
 import importlib
 
@@ -60,7 +97,8 @@ def load_mcp_servers():
         'oci-mcp-network': 'mcp_servers.network.server',
         'oci-mcp-security': 'mcp_servers.security.server',
         'oci-mcp-observability': 'mcp_servers.observability.server',
-        'oci-mcp-cost': 'mcp_servers.cost.server'
+        'oci-mcp-cost': 'mcp_servers.cost.server',
+        'oci-mcp-inventory': 'mcp_servers.inventory.server'
     }
     
     enhanced = []
@@ -149,17 +187,23 @@ async def index(request: Request):
                 relations += f"\nsubgraph {s['name']}_tools\n" + "\n".join([f"{s['name']}_{t['name']}" for t in s['tools']]) + "\nend\n" + f"{s['name']}-- tools -->{s['name']}_tools\n"
             else:
                 relations += f"{s['name']}-- no tools --\n"
+    # Use OTLP gRPC default (4317) consistent with servers (OTLPSpanExporter/MetricExporter)
     obs = {
         "grafana_url": os.getenv("GRAFANA_URL", "http://localhost:3000"),
         "prometheus_url": os.getenv("PROMETHEUS_URL", "http://localhost:9090"),
         "tempo_url": os.getenv("TEMPO_URL", "http://localhost:3200"),
-        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
     }
-    return templates.TemplateResponse(request, "index.html", {
+    payload = {
         "servers": servers,
         "relations": relations,
         "observability": obs
-    })
+    }
+    if templates is None:
+        # Fallback JSON response when jinja2 is unavailable
+        from fastapi.responses import JSONResponse
+        return JSONResponse(payload)
+    return templates.TemplateResponse(request, "index.html", payload)
 
 @app.get("/dashboards")
 async def dashboards(request: Request):
@@ -168,9 +212,11 @@ async def dashboards(request: Request):
         {'name': 'Cost Analysis', 'url': 'http://localhost:3000/d/cost-analysis/cost-analysis'},
         # Add more as needed
     ]
-    return templates.TemplateResponse(request, "dashboard.html", {
-        "dashboards": dashboards
-    })
+    payload = {"dashboards": dashboards}
+    if templates is None:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(payload)
+    return templates.TemplateResponse(request, "dashboard.html", payload)
 
 @app.get("/health")
 async def health():

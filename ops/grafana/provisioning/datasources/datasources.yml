@@ -51,3 +51,11 @@ datasources:
         tags:
           - key: service.name
             value: ""
+
+  - name: Pyroscope
+    uid: pyro
+    type: pyroscope
+    access: proxy
+    url: http://pyroscope:4040
+    version: 1
+    editable: true

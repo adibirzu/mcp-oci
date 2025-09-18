@@ -1,0 +1,247 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Traffic & Health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Total Traces (rate)",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{} | rate()"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justificationMode": "auto"
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ status = error } | rate()" }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justificationMode": "auto"
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "Active MCP Services (distinct)",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "count by (service.name) ({ service.name != \"\" })" }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["count"], "fields": "/.*/", "values": true },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justificationMode": "auto"
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 }
+    },
+    {
+      "type": "stat",
+      "title": "MCP Tool Calls (rate)",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ mcp.tool.name != \"\" } | rate()" }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justificationMode": "auto"
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 }
+    },
+    {
+      "type": "row",
+      "title": "Breakdowns",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "barchart",
+      "title": "Requests by service.name",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ service.name != \"\" } | rate() by service.name" }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 }
+    },
+    {
+      "type": "barchart",
+      "title": "Requests by MCP Server",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ mcp.server.name != \"\" } | rate() by mcp.server.name" }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 }
+    },
+    {
+      "type": "barchart",
+      "title": "Requests by MCP Tool (Top 10)",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ mcp.tool.name != \"\" } | rate() by mcp.tool.name | topk(10)" }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 }
+    },
+    {
+      "type": "barchart",
+      "title": "Errors by MCP Server",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ status = error, mcp.server.name != \"\" } | rate() by mcp.server.name" }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 }
+    },
+    {
+      "type": "row",
+      "title": "Prometheus Metrics",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "UX HTTP Requests (rate)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (endpoint) (rate(http_requests_total[5m]))" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "UX Request Duration p95",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m])))" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "type": "row",
+      "title": "Recent Activity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Recent MCP Spans",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ mcp.tool.name != \"\" }" }
+      ],
+      "options": { "showHeader": true },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "transformations": [
+        { "id": "labelsToFields", "options": {} }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["mcp", "tempo", "observability", "monitoring"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "refresh": 1,
+        "hide": 0,
+        "query": "label_values(service.name)",
+        "multi": true,
+        "includeAll": true
+      },
+      {
+        "name": "server",
+        "type": "query",
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "refresh": 1,
+        "hide": 0,
+        "query": "label_values(mcp.server.name)",
+        "multi": true,
+        "includeAll": true
+      },
+      {
+        "name": "tool",
+        "type": "query",
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "refresh": 1,
+        "hide": 0,
+        "query": "label_values(mcp.tool.name)",
+        "multi": true,
+        "includeAll": true
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "MCP Monitoring (Tempo + Prometheus)",
+  "version": 1,
+  "weekStart": ""
+}
