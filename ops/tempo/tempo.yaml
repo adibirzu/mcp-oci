@@ -33,6 +33,10 @@ metrics_generator:
         - name
         - status_code
         - span_kind
+        - mcp.server.name
+        - mcp.tool.name
+        - oci.service
+        - oci.operation
   storage:
     path: /tmp/tempo/generator/wal
   ring:

@@ -12,6 +12,7 @@ services:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=grafana-pyroscope-datasource
     restart: unless-stopped
 
   prometheus:
@@ -32,6 +33,16 @@ services:
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo.yaml
     command: ["-config.file=/etc/tempo.yaml"]
+    restart: unless-stopped
+
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    ports:
+      - "4040:4040"  # Pyroscope UI
+    volumes:
+      - ./pyroscope:/var/lib/pyroscope
+    command: ["server"]
     restart: unless-stopped
 
   otel-collector:

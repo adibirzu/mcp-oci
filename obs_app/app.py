@@ -33,14 +33,19 @@ async def metrics_middleware(request, call_next):
         pass
     return response
 
-# OpenTelemetry setup
-trace.set_tracer_provider(TracerProvider())
-tracer = trace.get_tracer(__name__)
-otlp_exporter = OTLPSpanExporter(endpoint=os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'otel-collector:4317'), insecure=True)
-span_processor = BatchSpanProcessor(otlp_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
-
-FastAPIInstrumentor.instrument_app(app)
+# OpenTelemetry setup (consistent with MCP servers)
+os.environ.setdefault("OTEL_SERVICE_NAME", "mcp-obs-app")
+from mcp_oci_common.observability import init_tracing as _init_tracing, init_metrics as _init_metrics
+_init_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "mcp-obs-app"))
+_init_metrics()
+if FastAPIInstrumentor:
+    try:
+        FastAPIInstrumentor.instrument_app(app)
+    except Exception:
+        try:
+            FastAPIInstrumentor().instrument()
+        except Exception:
+            pass
 
 # Health endpoint
 @app.get("/health")

@@ -1,0 +1,96 @@
+macOS-15.6.1-arm64-arm-64bit-Mach-O
+System name: Darwin
+System release : 24.6.0
+System version: Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:29 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6000
+
+env OCI_PYTHON_SDK_NO_SERVICE_IMPORTS is set
+Not using Expect header...
+send: b'GET /20160918/dbSystems?compartmentId=ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq HTTP/1.1\r\nuser-agent: Oracle-PythonSDK/2.154.1 (python 3.13.7; arm64-Darwin) Oracle-PythonCLI/3.58.1\r\naccept-encoding: gzip, deflate\r\naccept: application/json\r\nconnection: keep-alive\r\ncontent-type: application/json\r\nopc-client-retries: true\r\nopc-client-info: Oracle-PythonSDK/2.154.1\r\nopc-request-id: 6F1BF0764835476F917CB153A16296FD\r\ndate: Thu, 18 Sep 2025 06:15:38 GMT\r\nhost: database.eu-frankfurt-1.oraclecloud.com\r\nauthorization: Signature algorithm="rsa-sha256",headers="date (request-target) host",keyId="ocid1.tenancy.oc1..aaaaaaaaxzpxbcag7zgamh2erlggqro3y63tvm2rbkkjz4z2zskvagupiz7a/ocid1.user.oc1..aaaaaaaawlmnpsv76fbqs6bjdt4bmx5hpwnve3j77u6bwfk36ltdoaspbgpq/b3:a2:cd:b4:54:17:9a:63:d2:2d:fc:b8:d9:af:d9:cb",signature="Myg1mXxqUkOipYLIeRRio/THNNsV8JYk91BFKvNhAo9EATokl3hQ7dMGze2Emu/S/qZKxsibFwdMFXf4UgFpJoza5NsIxRuIyw3hL6LbC32Zrej64CcIfmjiM+6wNlfyLT/sEj6QG+VrGV7FTXh34oc9qp/+5U0g3WIrOEfKG4MnFXIxuyOhIvUkxsAiasnz4f9wlMB5TtgMvkXIo0NI8mkId3FIns5LOnfoPgE4IHDcq6A2DV7P2Fw8nlyGI9d413nxEanejvA6TO/JRcL1R83zNXC5yTDViJkACKFOeek5y51P3LwxUYwnohXKuY+4jxGlfY6dCy/asO9+LFG/uw==",version="1"\r\n\r\n'
+reply: 'HTTP/1.1 200 OK\r\n'
+header: Date: Thu, 18 Sep 2025 06:15:38 GMT
+header: opc-request-id: 6F1BF0764835476F917CB153A16296FD/13A06D27985A60398AA3CB68465241B8/A6D41DE922928B56E4EC7F498412AD22
+header: Content-Type: application/json
+header: Content-Encoding: gzip
+header: Vary: Accept-Encoding
+header: X-Content-Type-Options: nosniff
+header: Strict-Transport-Security: max-age=31536000; includeSubDomains;
+header: Content-Length: 1293
+{
+  "data": [
+    {
+      "availability-domain": "NoEK:EU-FRANKFURT-1-AD-1",
+      "backup-network-nsg-ids": null,
+      "backup-subnet-id": null,
+      "cluster-name": null,
+      "compartment-id": "ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq",
+      "cpu-core-count": 4,
+      "data-collection-options": {
+        "is-diagnostics-events-enabled": true,
+        "is-health-monitoring-enabled": false,
+        "is-incident-logs-enabled": true
+      },
+      "data-storage-percentage": 80,
+      "data-storage-size-in-gbs": 256,
+      "database-edition": "ENTERPRISE_EDITION_EXTREME_PERFORMANCE",
+      "db-system-options": {
+        "storage-management": "ASM"
+      },
+      "defined-tags": {
+        "CCA_Basic_Tag": {
+          "email": "oracleidentitycloudservice/alexandru.birzu@oracle.com"
+        },
+        "Oracle-Standard": {
+          "CostCenter": "Specialists"
+        },
+        "Oracle_Tags": {
+          "CreatedBy": "oracleidentitycloudservice/alexandru.birzu@oracle.com",
+          "CreatedOn": "2024-11-06T08:34:18.878Z"
+        }
+      },
+      "disk-redundancy": "HIGH",
+      "display-name": "DBTest",
+      "domain": "privatesubnet.goadvcn.oraclevcn.com",
+      "fault-domains": [
+        "FAULT-DOMAIN-1"
+      ],
+      "freeform-tags": {},
+      "gi-software-image-id": null,
+      "hostname": "testdb",
+      "id": "ocid1.dbsystem.oc1.eu-frankfurt-1.antheljrttkvkkia62zukebfdpqhkxo3ylnrnligo4pwf4hroc766ygwfnna",
+      "kms-key-id": null,
+      "last-maintenance-run-id": null,
+      "last-patch-history-entry-id": null,
+      "license-model": "BRING_YOUR_OWN_LICENSE",
+      "lifecycle-details": null,
+      "lifecycle-state": "AVAILABLE",
+      "listener-port": 1521,
+      "maintenance-window": null,
+      "memory-size-in-gbs": null,
+      "next-maintenance-run-id": null,
+      "node-count": 1,
+      "nsg-ids": null,
+      "os-version": null,
+      "point-in-time-data-disk-clone-timestamp": null,
+      "reco-storage-size-in-gb": 256,
+      "scan-dns-name": "testdb-scan.privatesubnet.goadvcn.oraclevcn.com",
+      "scan-dns-record-id": "ocid1.vcndnsrecord.oc1.eu-frankfurt-1.abtheljrhvot5szedcv2l2r7l53oez4qr7z34al3gecn33q4xih543whk6lq",
+      "scan-ip-ids": null,
+      "scan-ipv6-ids": null,
+      "security-attributes": {},
+      "shape": "VM.Standard.E5.Flex",
+      "source-db-system-id": null,
+      "sparse-diskgroup": null,
+      "ssh-public-keys": [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGp+3HNvbM8cFiwgXmmxh0hlkkUeVo02ULWfPDkC0SVy aditest"
+      ],
+      "storage-volume-performance-mode": null,
+      "subnet-id": "ocid1.subnet.oc1.eu-frankfurt-1.aaaaaaaa6hr5pxhlzsgl3rtce63gk6fkls4jig5rmcloz2oavrytj5vd24va",
+      "time-created": "2024-11-06T08:34:19.371000+00:00",
+      "time-zone": "UTC",
+      "version": "19.24.0.0.0",
+      "vip-ids": null,
+      "vipv6-ids": null,
+      "zone-id": "ocid1.dns-zone.oc1.eu-frankfurt-1.aaaaaaaayfefbdhgw4n7tsyewvukiefmp3vjbfnvqxdsw5x6do47ijoz3joq"
+    }
+  ]
+}

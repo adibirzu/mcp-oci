@@ -22,7 +22,7 @@ export GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
 export PROMETHEUS_URL="${PROMETHEUS_URL:-http://localhost:9090}"
 export TEMPO_URL="${TEMPO_URL:-http://localhost:3200}"
 # OTLP endpoints used by local apps (obs-app, etc.)
-export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}"
+export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}"
 
 # Grafana provisioning and auth defaults (mirror docker-compose env)
 export GF_PATHS_PROVISIONING="${GF_PATHS_PROVISIONING:-${SCRIPT_DIR}/grafana/provisioning}"

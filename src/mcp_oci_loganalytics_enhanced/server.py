@@ -13,8 +13,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
-from mcp_oci_common import make_client
-from mcp_oci_common.response import with_meta
+from mcp_oci_common import get_oci_config
+from mcp_oci_common.responses import with_meta
 
 try:
     import oci  # type: ignore
@@ -180,7 +180,8 @@ class SecurityQueryMapper:
 def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
-    return make_client(oci.log_analytics.LogAnalyticsClient, profile=profile, region=region)
+    config = get_oci_config(profile=profile, region=region)
+    return oci.log_analytics.LogAnalyticsClient(config)
 
 
 def _extract_items_from_response(resp) -> list[Any]:

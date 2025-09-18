@@ -1,0 +1,749 @@
+macOS-15.6.1-arm64-arm-64bit-Mach-O
+System name: Darwin
+System release : 24.6.0
+System version: Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:29 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6000
+
+env OCI_PYTHON_SDK_NO_SERVICE_IMPORTS is set
+Not using Expect header...
+send: b'GET /20160918/autonomousDatabases?compartmentId=ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq HTTP/1.1\r\nuser-agent: Oracle-PythonSDK/2.154.1 (python 3.13.7; arm64-Darwin) Oracle-PythonCLI/3.58.1\r\naccept-encoding: gzip, deflate\r\naccept: application/json\r\nconnection: keep-alive\r\ncontent-type: application/json\r\nopc-request-id: 46E7E5699A32499285E4FFB486DD7E00\r\nopc-client-retries: true\r\nopc-client-info: Oracle-PythonSDK/2.154.1\r\ndate: Thu, 18 Sep 2025 06:15:39 GMT\r\nhost: database.eu-frankfurt-1.oraclecloud.com\r\nauthorization: Signature algorithm="rsa-sha256",headers="date (request-target) host",keyId="ocid1.tenancy.oc1..aaaaaaaaxzpxbcag7zgamh2erlggqro3y63tvm2rbkkjz4z2zskvagupiz7a/ocid1.user.oc1..aaaaaaaawlmnpsv76fbqs6bjdt4bmx5hpwnve3j77u6bwfk36ltdoaspbgpq/b3:a2:cd:b4:54:17:9a:63:d2:2d:fc:b8:d9:af:d9:cb",signature="Ryv8WpID+NGRL6gQMaTsBJhnhAZH1eZmekVUr6YR6/mQs+7OdhzRMgnqA8Ofn6kJ5eW3rJOL5+w0PsX9c5jVboIsYepc+LQvWS/CFUYIA2lanilPxeVYetfjJJHFl6QWrcaBY3tMIJd6hK4r6z8SwqqeqwBxN6G9zXFiy38HVeHLgo10L/pIgy1IvqjSKF6mXxfPVN8Bdhn2ou+55DDQxsHgf/Z+2tE13keIWPulleLJ7mD6vEv1dijwHhNfTwLVzxMdkVgFzWfIqP2PXTfzPB+5RO53Q4Ak3Iz3nR4UVPIi7rxm66XpjZDTtTTFMDcCbWSsEVL1SLreHwzPAsCtBg==",version="1"\r\n\r\n'
+reply: 'HTTP/1.1 200 OK\r\n'
+header: Date: Thu, 18 Sep 2025 06:15:39 GMT
+header: opc-request-id: 46E7E5699A32499285E4FFB486DD7E00/1BE97C1BFFB33C208BA3CB6846524121/2DDCA041B524FC6B813BC7BE803E3A00
+header: Content-Type: application/json
+header: Content-Encoding: gzip
+header: Vary: Accept-Encoding
+header: X-Content-Type-Options: nosniff
+header: Strict-Transport-Security: max-age=31536000; includeSubDomains;
+header: Content-Length: 3645
+{
+  "data": [
+    {
+      "actual-used-data-storage-size-in-tbs": 0.0,
+      "allocated-storage-size-in-tbs": 0.0283203125,
+      "apex-details": {
+        "apex-version": "24.2.8",
+        "ords-version": "25.2.3.224.1517"
+      },
+      "are-primary-whitelisted-ips-used": null,
+      "auto-refresh-frequency-in-seconds": null,
+      "auto-refresh-point-lag-in-seconds": null,
+      "autonomous-container-database-id": null,
+      "autonomous-maintenance-schedule-type": "REGULAR",
+      "availability-domain": "NoEK:EU-FRANKFURT-1-AD-1",
+      "available-upgrade-versions": [],
+      "backup-config": {
+        "manual-backup-bucket-name": null,
+        "manual-backup-type": "NONE"
+      },
+      "backup-retention-period-in-days": 60,
+      "byol-compute-count-limit": null,
+      "character-set": "AL32UTF8",
+      "clone-table-space-list": null,
+      "cluster-placement-group-id": null,
+      "compartment-id": "ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq",
+      "compute-count": 2.0,
+      "compute-model": "ECPU",
+      "connection-strings": {
+        "all-connection-strings": {
+          "HIGH": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_high.adb.oraclecloud.com",
+          "LOW": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_low.adb.oraclecloud.com",
+          "MEDIUM": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_medium.adb.oraclecloud.com"
+        },
+        "dedicated": null,
+        "high": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_high.adb.oraclecloud.com",
+        "low": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_low.adb.oraclecloud.com",
+        "medium": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_finopsmvpdb_medium.adb.oraclecloud.com",
+        "profiles": [
+          {
+            "consumer-group": "HIGH",
+            "display-name": "finopsmvpdb_high",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_finopsmvpdb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "LOW",
+            "display-name": "finopsmvpdb_low",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_finopsmvpdb_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "MEDIUM",
+            "display-name": "finopsmvpdb_medium",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_finopsmvpdb_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          }
+        ]
+      },
+      "connection-urls": {
+        "apex-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/ords/apex",
+        "database-transforms-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/odi/",
+        "graph-studio-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/graphstudio/",
+        "machine-learning-notebook-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/oml/",
+        "machine-learning-user-management-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/omlusers/",
+        "mongo-db-url": null,
+        "ords-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/ords/",
+        "sql-dev-web-url": "https://UMQGRO5JK76L1XZ-FINOPSMVPDB.adb.eu-frankfurt-1.oraclecloudapps.com/ords/sql-developer"
+      },
+      "cpu-core-count": 0,
+      "customer-contacts": null,
+      "data-safe-status": "REGISTERED",
+      "data-storage-size-in-gbs": 1024,
+      "data-storage-size-in-tbs": 1,
+      "database-edition": null,
+      "database-management-status": null,
+      "dataguard-region-type": null,
+      "db-name": "FinOpsMVPDB",
+      "db-tools-details": [
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "APEX"
+        },
+        {
+          "compute-count": 8.0,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": 30,
+          "name": "DATA_TRANSFORMS"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "DATABASE_ACTIONS"
+        },
+        {
+          "compute-count": 32.0,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": 10,
+          "name": "UNKNOWN_ENUM_VALUE"
+        },
+        {
+          "compute-count": 8.0,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": 60,
+          "name": "GRAPH_STUDIO"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": false,
+          "max-idle-time-in-minutes": null,
+          "name": "MONGODB_API"
+        },
+        {
+          "compute-count": 8.0,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": 60,
+          "name": "OML"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "ORDS"
+        }
+      ],
+      "db-version": "23ai",
+      "db-workload": "DW",
+      "defined-tags": {
+        "CCA_Basic_Tag": {
+          "email": "oracleidentitycloudservice/alexandru.birzu@oracle.com"
+        },
+        "Oracle-Standard": {
+          "CostCenter": "Specialists"
+        },
+        "Oracle_Tags": {
+          "CreatedBy": "oracleidentitycloudservice/alexandru.birzu@oracle.com",
+          "CreatedOn": "2025-06-16T07:16:56.534Z"
+        }
+      },
+      "disaster-recovery-region-type": null,
+      "display-name": "FinOpsMVPDB",
+      "encryption-key": {
+        "provider": "ORACLE_MANAGED"
+      },
+      "encryption-key-history-entry": [
+        {
+          "encryption-key": {
+            "provider": "ORACLE_MANAGED"
+          },
+          "time-activated": "2025-06-16T07:17:51.295000+00:00"
+        }
+      ],
+      "failed-data-recovery-in-seconds": null,
+      "freeform-tags": {},
+      "id": "ocid1.autonomousdatabase.oc1.eu-frankfurt-1.antheljtttkvkkiakrchw2r6uv3hnunbcf2x46dgvmdlupkgzr3zndlq3nxq",
+      "in-memory-area-in-gbs": null,
+      "in-memory-percentage": null,
+      "infrastructure-type": null,
+      "is-access-control-enabled": null,
+      "is-auto-scaling-enabled": true,
+      "is-auto-scaling-for-storage-enabled": false,
+      "is-backup-retention-locked": false,
+      "is-data-guard-enabled": false,
+      "is-dedicated": false,
+      "is-dev-tier": null,
+      "is-free-tier": false,
+      "is-local-data-guard-enabled": false,
+      "is-mtls-connection-required": true,
+      "is-preview": false,
+      "is-reconnect-clone-enabled": false,
+      "is-refreshable-clone": null,
+      "is-remote-data-guard-enabled": false,
+      "key-history-entry": [
+        {
+          "id": "ORACLE_MANAGED_KEY",
+          "kms-key-version-id": null,
+          "time-activated": "2025-06-16T07:17:51.295000+00:00",
+          "vault-id": null
+        }
+      ],
+      "key-store-id": null,
+      "key-store-wallet-name": null,
+      "kms-key-id": "ORACLE_MANAGED_KEY",
+      "kms-key-lifecycle-details": null,
+      "kms-key-version-id": null,
+      "license-model": "LICENSE_INCLUDED",
+      "lifecycle-details": null,
+      "lifecycle-state": "STOPPED",
+      "local-adg-auto-failover-max-data-loss-limit": null,
+      "local-disaster-recovery-type": "BACKUP_BASED",
+      "local-standby-db": {
+        "availability-domain": null,
+        "lag-time-in-seconds": null,
+        "lifecycle-details": null,
+        "lifecycle-state": "STANDBY",
+        "maintenance-target-component": null,
+        "time-data-guard-role-changed": null,
+        "time-disaster-recovery-role-changed": null,
+        "time-maintenance-begin": null,
+        "time-maintenance-end": null
+      },
+      "long-term-backup-schedule": null,
+      "maintenance-target-component": "Dictionary",
+      "memory-per-oracle-compute-unit-in-gbs": null,
+      "ncharacter-set": "AL16UTF16",
+      "net-services-architecture": null,
+      "next-long-term-backup-time-stamp": null,
+      "nsg-ids": null,
+      "ocpu-count": null,
+      "open-mode": "READ_WRITE",
+      "operations-insights-status": "NOT_ENABLED",
+      "peer-db-ids": null,
+      "permission-level": "UNRESTRICTED",
+      "private-endpoint": null,
+      "private-endpoint-ip": null,
+      "private-endpoint-label": null,
+      "provisionable-cpus": null,
+      "public-connection-urls": null,
+      "public-endpoint": null,
+      "refreshable-mode": null,
+      "refreshable-status": null,
+      "remote-disaster-recovery-configuration": null,
+      "resource-pool-leader-id": null,
+      "resource-pool-summary": {
+        "is-disabled": true,
+        "pool-size": null
+      },
+      "role": null,
+      "scheduled-operations": [
+        {
+          "day-of-week": {
+            "name": "MONDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "20:00"
+        },
+        {
+          "day-of-week": {
+            "name": "TUESDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "20:00"
+        },
+        {
+          "day-of-week": {
+            "name": "WEDNESDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "20:00"
+        },
+        {
+          "day-of-week": {
+            "name": "THURSDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "20:00"
+        },
+        {
+          "day-of-week": {
+            "name": "FRIDAY"
+          },
+          "scheduled-start-time": "07:00",
+          "scheduled-stop-time": "17:00"
+        }
+      ],
+      "security-attributes": {},
+      "service-console-url": null,
+      "source-id": null,
+      "standby-db": {
+        "availability-domain": null,
+        "lag-time-in-seconds": null,
+        "lifecycle-details": null,
+        "lifecycle-state": "STANDBY",
+        "maintenance-target-component": null,
+        "time-data-guard-role-changed": null,
+        "time-disaster-recovery-role-changed": null,
+        "time-maintenance-begin": null,
+        "time-maintenance-end": null
+      },
+      "standby-whitelisted-ips": null,
+      "subnet-id": null,
+      "subscription-id": null,
+      "supported-regions-to-clone-to": [
+        "AMS",
+        "ZRH",
+        "LHR",
+        "MTZ",
+        "JED",
+        "RUH",
+        "LIN",
+        "CDG",
+        "PHX",
+        "MAD",
+        "IAD",
+        "DXB",
+        "ARN",
+        "SIN",
+        "MRS",
+        "HYD",
+        "ORD",
+        "CWL",
+        "SJC",
+        "BOM",
+        "MEL",
+        "NRT",
+        "KIX",
+        "YUL",
+        "YYZ",
+        "SYD"
+      ],
+      "system-tags": {},
+      "time-created": "2025-06-16T07:16:56.567000+00:00",
+      "time-data-guard-role-changed": null,
+      "time-deletion-of-free-autonomous-database": null,
+      "time-disaster-recovery-role-changed": null,
+      "time-local-data-guard-enabled": "2025-06-16T07:17:13.127000+00:00",
+      "time-maintenance-begin": "2025-09-20T20:00:00+00:00",
+      "time-maintenance-end": "2025-09-20T22:00:00+00:00",
+      "time-of-auto-refresh-start": null,
+      "time-of-joining-resource-pool": null,
+      "time-of-last-failover": null,
+      "time-of-last-refresh": null,
+      "time-of-last-refresh-point": null,
+      "time-of-last-switchover": null,
+      "time-of-next-refresh": null,
+      "time-reclamation-of-free-autonomous-database": null,
+      "time-undeleted": null,
+      "time-until-reconnect-clone-enabled": null,
+      "total-backup-storage-size-in-gbs": 26.0,
+      "used-data-storage-size-in-gbs": null,
+      "used-data-storage-size-in-tbs": null,
+      "vault-id": null,
+      "whitelisted-ips": null
+    },
+    {
+      "actual-used-data-storage-size-in-tbs": 0.0,
+      "allocated-storage-size-in-tbs": 0.0224609375,
+      "apex-details": {
+        "apex-version": "24.2.8",
+        "ords-version": "25.2.3.224.1517"
+      },
+      "are-primary-whitelisted-ips-used": null,
+      "auto-refresh-frequency-in-seconds": null,
+      "auto-refresh-point-lag-in-seconds": null,
+      "autonomous-container-database-id": null,
+      "autonomous-maintenance-schedule-type": "REGULAR",
+      "availability-domain": "NoEK:EU-FRANKFURT-1-AD-1",
+      "available-upgrade-versions": [
+        "23ai"
+      ],
+      "backup-config": {
+        "manual-backup-bucket-name": null,
+        "manual-backup-type": "NONE"
+      },
+      "backup-retention-period-in-days": 60,
+      "byol-compute-count-limit": null,
+      "character-set": "AL32UTF8",
+      "clone-table-space-list": null,
+      "cluster-placement-group-id": null,
+      "compartment-id": "ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq",
+      "compute-count": 1.0,
+      "compute-model": "OCPU",
+      "connection-strings": {
+        "all-connection-strings": {
+          "HIGH": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_high.adb.oraclecloud.com",
+          "LOW": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_low.adb.oraclecloud.com",
+          "MEDIUM": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_medium.adb.oraclecloud.com",
+          "TP": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_tp.adb.oraclecloud.com",
+          "TPURGENT": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_tpurgent.adb.oraclecloud.com"
+        },
+        "dedicated": null,
+        "high": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_high.adb.oraclecloud.com",
+        "low": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_low.adb.oraclecloud.com",
+        "medium": "adb.eu-frankfurt-1.oraclecloud.com:1522/umqgro5jk76l1xz_tomcatatp_medium.adb.oraclecloud.com",
+        "profiles": [
+          {
+            "consumer-group": "HIGH",
+            "display-name": "tomcatatp_high",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_tomcatatp_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "LOW",
+            "display-name": "tomcatatp_low",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_tomcatatp_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "MEDIUM",
+            "display-name": "tomcatatp_medium",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_tomcatatp_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "TP",
+            "display-name": "tomcatatp_tp",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_tomcatatp_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          },
+          {
+            "consumer-group": "TPURGENT",
+            "display-name": "tomcatatp_tpurgent",
+            "host-format": "FQDN",
+            "is-regional": null,
+            "protocol": "TCPS",
+            "session-mode": "DIRECT",
+            "syntax-format": "LONG",
+            "tls-authentication": "MUTUAL",
+            "value": "(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.eu-frankfurt-1.oraclecloud.com))(connect_data=(service_name=umqgro5jk76l1xz_tomcatatp_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))"
+          }
+        ]
+      },
+      "connection-urls": {
+        "apex-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/ords/apex",
+        "database-transforms-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/odi/",
+        "graph-studio-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/graphstudio/",
+        "machine-learning-notebook-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/oml/",
+        "machine-learning-user-management-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/omlusers/",
+        "mongo-db-url": null,
+        "ords-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/ords/",
+        "sql-dev-web-url": "https://UMQGRO5JK76L1XZ-TOMCATATP.adb.eu-frankfurt-1.oraclecloudapps.com/ords/sql-developer"
+      },
+      "cpu-core-count": 1,
+      "customer-contacts": null,
+      "data-safe-status": "REGISTERED",
+      "data-storage-size-in-gbs": 1024,
+      "data-storage-size-in-tbs": 1,
+      "database-edition": "ENTERPRISE_EDITION",
+      "database-management-status": "ENABLED",
+      "dataguard-region-type": null,
+      "db-name": "TomcatATP",
+      "db-tools-details": [
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "APEX"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "DATA_TRANSFORMS"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "DATABASE_ACTIONS"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "UNKNOWN_ENUM_VALUE"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "GRAPH_STUDIO"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": false,
+          "max-idle-time-in-minutes": null,
+          "name": "MONGODB_API"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "OML"
+        },
+        {
+          "compute-count": null,
+          "is-enabled": true,
+          "max-idle-time-in-minutes": null,
+          "name": "ORDS"
+        }
+      ],
+      "db-version": "19c",
+      "db-workload": "OLTP",
+      "defined-tags": {
+        "ArchitectureCenter\\deploy-tomcat-adb-d593": {
+          "release": "1.5"
+        },
+        "CCA_Basic_Tag": {
+          "email": "oracleidentitycloudservice/alexandru.birzu@oracle.com"
+        },
+        "Oracle_Tags": {
+          "CreatedBy": "oracleidentitycloudservice/alexandru.birzu@oracle.com",
+          "CreatedOn": "2023-06-29T16:32:56.064Z"
+        }
+      },
+      "disaster-recovery-region-type": null,
+      "display-name": "ADB",
+      "encryption-key": {
+        "provider": "ORACLE_MANAGED"
+      },
+      "encryption-key-history-entry": [
+        {
+          "encryption-key": {
+            "provider": "ORACLE_MANAGED"
+          },
+          "time-activated": "2023-06-29T16:33:45.138000+00:00"
+        }
+      ],
+      "failed-data-recovery-in-seconds": null,
+      "freeform-tags": {
+        "Owner": "TomcatATP"
+      },
+      "id": "ocid1.autonomousdatabase.oc1.eu-frankfurt-1.antheljsttkvkkiat33ozpse4gs2shrdoajbv63prblvvindxig66vj6wiuq",
+      "in-memory-area-in-gbs": null,
+      "in-memory-percentage": null,
+      "infrastructure-type": null,
+      "is-access-control-enabled": null,
+      "is-auto-scaling-enabled": false,
+      "is-auto-scaling-for-storage-enabled": false,
+      "is-backup-retention-locked": false,
+      "is-data-guard-enabled": false,
+      "is-dedicated": false,
+      "is-dev-tier": null,
+      "is-free-tier": false,
+      "is-local-data-guard-enabled": false,
+      "is-mtls-connection-required": true,
+      "is-preview": false,
+      "is-reconnect-clone-enabled": false,
+      "is-refreshable-clone": null,
+      "is-remote-data-guard-enabled": false,
+      "key-history-entry": [
+        {
+          "id": "ORACLE_MANAGED_KEY",
+          "kms-key-version-id": null,
+          "time-activated": "2023-06-29T16:33:45.138000+00:00",
+          "vault-id": null
+        }
+      ],
+      "key-store-id": null,
+      "key-store-wallet-name": null,
+      "kms-key-id": "ORACLE_MANAGED_KEY",
+      "kms-key-lifecycle-details": null,
+      "kms-key-version-id": null,
+      "license-model": "BRING_YOUR_OWN_LICENSE",
+      "lifecycle-details": null,
+      "lifecycle-state": "STOPPED",
+      "local-adg-auto-failover-max-data-loss-limit": null,
+      "local-disaster-recovery-type": "BACKUP_BASED",
+      "local-standby-db": {
+        "availability-domain": null,
+        "lag-time-in-seconds": null,
+        "lifecycle-details": null,
+        "lifecycle-state": "STANDBY",
+        "maintenance-target-component": null,
+        "time-data-guard-role-changed": null,
+        "time-disaster-recovery-role-changed": null,
+        "time-maintenance-begin": null,
+        "time-maintenance-end": null
+      },
+      "long-term-backup-schedule": null,
+      "maintenance-target-component": "Dictionary",
+      "memory-per-oracle-compute-unit-in-gbs": null,
+      "ncharacter-set": "AL16UTF16",
+      "net-services-architecture": null,
+      "next-long-term-backup-time-stamp": null,
+      "nsg-ids": null,
+      "ocpu-count": null,
+      "open-mode": "READ_WRITE",
+      "operations-insights-status": "ENABLED",
+      "peer-db-ids": null,
+      "permission-level": "UNRESTRICTED",
+      "private-endpoint": null,
+      "private-endpoint-ip": null,
+      "private-endpoint-label": null,
+      "provisionable-cpus": null,
+      "public-connection-urls": null,
+      "public-endpoint": null,
+      "refreshable-mode": null,
+      "refreshable-status": null,
+      "remote-disaster-recovery-configuration": null,
+      "resource-pool-leader-id": null,
+      "resource-pool-summary": {
+        "is-disabled": true,
+        "pool-size": null
+      },
+      "role": null,
+      "scheduled-operations": [
+        {
+          "day-of-week": {
+            "name": "MONDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "18:00"
+        },
+        {
+          "day-of-week": {
+            "name": "TUESDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "18:00"
+        },
+        {
+          "day-of-week": {
+            "name": "WEDNESDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "18:00"
+        },
+        {
+          "day-of-week": {
+            "name": "THURSDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "18:00"
+        },
+        {
+          "day-of-week": {
+            "name": "FRIDAY"
+          },
+          "scheduled-start-time": "08:00",
+          "scheduled-stop-time": "18:00"
+        }
+      ],
+      "security-attributes": {},
+      "service-console-url": null,
+      "source-id": null,
+      "standby-db": {
+        "availability-domain": null,
+        "lag-time-in-seconds": null,
+        "lifecycle-details": null,
+        "lifecycle-state": "STANDBY",
+        "maintenance-target-component": null,
+        "time-data-guard-role-changed": null,
+        "time-disaster-recovery-role-changed": null,
+        "time-maintenance-begin": null,
+        "time-maintenance-end": null
+      },
+      "standby-whitelisted-ips": null,
+      "subnet-id": null,
+      "subscription-id": null,
+      "supported-regions-to-clone-to": [
+        "AMS",
+        "ZRH",
+        "LHR",
+        "MTZ",
+        "JED",
+        "RUH",
+        "LIN",
+        "CDG",
+        "PHX",
+        "MAD",
+        "IAD",
+        "DXB",
+        "ARN",
+        "SIN",
+        "MRS",
+        "HYD",
+        "ORD",
+        "CWL",
+        "SJC",
+        "BOM",
+        "MEL",
+        "NRT",
+        "KIX",
+        "YUL",
+        "YYZ",
+        "SYD"
+      ],
+      "system-tags": {},
+      "time-created": "2023-06-29T16:32:56.094000+00:00",
+      "time-data-guard-role-changed": null,
+      "time-deletion-of-free-autonomous-database": null,
+      "time-disaster-recovery-role-changed": null,
+      "time-local-data-guard-enabled": "2023-06-29T16:33:05.711000+00:00",
+      "time-maintenance-begin": "2025-09-21T02:00:00+00:00",
+      "time-maintenance-end": "2025-09-21T04:00:00+00:00",
+      "time-of-auto-refresh-start": null,
+      "time-of-joining-resource-pool": null,
+      "time-of-last-failover": null,
+      "time-of-last-refresh": null,
+      "time-of-last-refresh-point": null,
+      "time-of-last-switchover": null,
+      "time-of-next-refresh": null,
+      "time-reclamation-of-free-autonomous-database": null,
+      "time-undeleted": null,
+      "time-until-reconnect-clone-enabled": null,
+      "total-backup-storage-size-in-gbs": 0.0,
+      "used-data-storage-size-in-gbs": null,
+      "used-data-storage-size-in-tbs": null,
+      "vault-id": null,
+      "whitelisted-ips": null
+    }
+  ]
+}

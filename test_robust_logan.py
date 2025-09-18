@@ -7,6 +7,7 @@ Demonstrates fast connection and reliable query execution
 import sys
 import os
 import json
+import sys as _sys
 from datetime import datetime
 
 # Add src to path
@@ -95,4 +96,16 @@ def test_robust_logan():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_robust_logan()
+    # If this script is accidentally used as an MCP server launcher (as seen in external launch logs),
+    # proxy to the canonical cost server entrypoint so Cline/Claude can connect successfully.
+    # To run this diagnostic test instead, set RUN_LOGAN_TEST=1 in the environment.
+    import os as _os, sys as _sys, runpy as _runpy
+    if _os.getenv("RUN_LOGAN_TEST", "0").lower() in ("1", "true", "yes", "on"):
+        test_robust_logan()
+    else:
+        print("Proxying to oci-mcp-cost server (set RUN_LOGAN_TEST=1 to run this test).")
+        ROOT = _os.path.abspath(_os.path.dirname(__file__))
+        if ROOT not in _sys.path:
+            _sys.path.insert(0, ROOT)
+        _os.chdir(ROOT)
+        _runpy.run_module("mcp_servers.cost.server", run_name="__main__")
