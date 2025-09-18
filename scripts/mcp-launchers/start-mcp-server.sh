@@ -33,7 +33,7 @@ launch_server() {
 }
 
 # List of all servers
-SERVERS=("compute" "db" "network" "security" "observability" "cost")
+SERVERS=("compute" "db" "network" "security" "observability" "cost" "blockstorage" "loadbalancer")
 
 if [ "$1" = "all" ]; then
     for server in "${SERVERS[@]}"; do

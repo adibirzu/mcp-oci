@@ -6,7 +6,8 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   },
@@ -17,7 +18,8 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   },
@@ -28,7 +30,8 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   },
@@ -39,7 +42,8 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   },
@@ -50,7 +54,8 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   },
@@ -61,7 +66,44 @@
     "env": {
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
-      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}"
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-inventory",
+    "command": ["python", "-m", "mcp_servers.inventory.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-blockstorage",
+    "command": ["python", "-m", "mcp_servers.blockstorage.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-loadbalancer",
+    "command": ["python", "-m", "mcp_servers.loadbalancer.server"],
+    "args": [],
+    "env": {
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   }
