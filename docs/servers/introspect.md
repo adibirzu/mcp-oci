@@ -5,6 +5,8 @@ Exposes generic and service-specific tools to list available SDK methods, useful
 ## Tools
 - `oci:sdk:list-methods` — List methods for a specific client class. Param: `client_path` (e.g., `monitoring.MonitoringClient`).
 - `oci:<service>:list-sdk-methods` — Service-specific helpers for common clients; available for identity, compute, networking, blockstorage, objectstorage, monitoring, loganalytics, usageapi, budgets, limits, dns, loadbalancer, filestorage, apigateway, database, oke, functions, events, streaming, ons, vault, kms, resourcemanager, osub.
+- `mcp:registry:dump` — Dump in-process name→OCID registry (counts and sample keys) built from prior list calls.
+- `mcp:registry:resolve` — Resolve a resource by name without API calls (kinds: compartment, vcn, subnet, nsg, instance, user, cluster, application, stream).
 
 ## Usage
 Serve:

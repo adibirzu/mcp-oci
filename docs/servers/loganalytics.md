@@ -1,51 +1,49 @@
 # OCI Log Analytics Server
 
-Exposes `oci:loganalytics:*` tools (logan-api-spec 20200601).
+Exposes `oci:loganalytics:*` tools (logan-api-spec 20200601). Namespace is auto-discovered for the tenancy; you don’t need to pass it.
 
 ## Tools
-- `oci:loganalytics:run-query` — Run a Log Analytics query for a namespace and time range.
-- `oci:loganalytics:list-entities` — List entities in a namespace.
-- `oci:loganalytics:list-parsers` — List parsers.
-- `oci:loganalytics:list-log-groups` — List log groups (if supported).
-- `oci:loganalytics:list-saved-searches` — List saved searches.
-- `oci:loganalytics:list-scheduled-tasks` — List scheduled tasks.
-- `oci:loganalytics:upload-lookup` — Mutating. Upload a lookup (confirm/dry_run).
-- `oci:loganalytics:list-work-requests` — List work requests.
-- `oci:loganalytics:get-work-request` — Get a work request by OCID.
-- `oci:loganalytics:run-snippet` — Run a convenience query snippet by name.
- - `oci:loganalytics:list-snippets` — List available snippet names.
+- `oci:loganalytics:execute_query` — Run a Log Analytics query for a time range.
+- `oci:loganalytics:search_security_events` — Natural-language search for security events.
+- `oci:loganalytics:get_mitre_techniques` — Search for MITRE ATT&CK techniques.
+- `oci:loganalytics:analyze_ip_activity` — Analyze activity for an IP.
+- `oci:loganalytics:perform_statistical_analysis` — Run stats/timestats/eventstats.
+- `oci:loganalytics:perform_advanced_analytics` — Run specialized analytics.
+- `oci:loganalytics:list_sources` — List sources in a compartment.
+- `oci:loganalytics:list_entities` — List entities in a compartment.
+- `oci:loganalytics:get_log_sources_last_days` — Recent active sources.
 
 ## Usage
-Serve:
+Serve (recommended): use the consolidated Observability server which includes Log Analytics tools.
 ```
-mcp-oci-serve-loganalytics --profile DEFAULT --region us-phoenix-1
+"mcpServers": {
+  "oci-mcp-observability": {
+    "command": "python",
+    "args": ["mcp_servers/observability/server.py"]
+  }
+}
 ```
-Dev call:
+
+Tool call example:
 ```
-mcp-oci call loganalytics oci:loganalytics:run-query --params '{
-  "namespace_name":"mytenant",
-  "query_string":"search ""error"" | stats count()",
-  "time_start":"2025-01-01T00:00:00Z",
-  "time_end":"2025-01-02T00:00:00Z"
-}'
+tools/call name=oci:loganalytics:execute_query arguments={
+  "query": "* | head 5",
+  "time_range": "1h",
+  "compartment_id": "ocid1.compartment.oc1..xxxxx"
+}
 ```
 
 ## Parameters
-- run-query: `namespace_name` (required), `query_string` (required), `time_start` (required), `time_end` (required), `subsystem?`, `max_total_count?`.
-- list-entities: `namespace_name` (required), `compartment_id` (required), `limit?`, `page?`.
-- list-parsers: `namespace_name` (required), `limit?`, `page?`.
-- list-log-groups: `namespace_name` (required), `compartment_id` (required), `limit?`, `page?`.
-- list-saved-searches: `namespace_name` (required), `limit?`, `page?`.
-- list-scheduled-tasks: `namespace_name` (required), `compartment_id` (required), `limit?`, `page?`.
-- upload-lookup: `namespace_name` (required), `name` (required), `file_path` (required), `description?`, `type?`, `dry_run?`, `confirm?`.
-- list-work-requests: `compartment_id` (required), `namespace_name` (required), `limit?`, `page?`.
-- get-work-request: `work_request_id` (required).
-- run-snippet: `namespace_name` (required), `snippet` (required), `params?`, `time_start` (required), `time_end` (required), `max_total_count?`.
+- execute_query: `query` (required), `compartment_id` (required), `time_range` (default `24h`), `max_count?`.
+- list_sources: `compartment_id` (required), `limit?`.
+- list_entities: `compartment_id` (required), `limit?`.
+- Others list their fields in tools/list; namespace is auto-discovered.
 
 ## Troubleshooting
-- Some method names vary by SDK version; if you see an error indicating an unsupported method, update the OCI SDK.
 - Ensure your user/profile has permissions for Log Analytics.
- - For upload-lookup in Docker, mount the lookup file into the container and reference its path inside the container.
+- For query errors about payload shape: server now uses `QueryDetails` (SDK) or matching REST schema `{ subSystem, queryString, timeFilter: {timeStart, timeEnd}, maxTotalCount }`.
+- Connection stability: stdio server tolerates empty/malformed frames and keeps the session alive; use `mcp:server:ping` to verify.
+- If you use the aggregated FastMCP server, Log Analytics tools are disabled by default to avoid duplication. Set `MCP_OCI_ENABLE_FASTMCP_LOGAN=1` to enable them explicitly.
 
 ## Snippets
 - Use `oci:loganalytics:list-snippets` to discover available names, e.g.,

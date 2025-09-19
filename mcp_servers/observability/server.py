@@ -1,130 +1,331 @@
+# oci_mcp_observability_server.py
+
 import os
+import sys
+import json
 import logging
-from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
-# Tracing/metrics initialized below to ensure env (OTEL_SERVICE_NAME) is applied consistently
-import oci
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, List
+
+# ----- Observability bootstrap -----
+from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
+
+# ----- OCI SDK -----
+import oci
+from oci.exceptions import ServiceError
+
+# ----- MCP runtime -----
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-import json
-import sys
-from datetime import datetime
 
-# Try to import enhanced Logan capabilities; if not found, add 'src' to sys.path and retry
-try:
-    from mcp_oci_loganalytics_enhanced.server import (
-        execute_query as la_execute_query_impl,
-        search_security_events as la_search_security_events_impl,
-        get_mitre_techniques as la_get_mitre_techniques_impl,
-        analyze_ip_activity as la_analyze_ip_activity_impl,
-        perform_statistical_analysis as la_perform_statistical_analysis_impl,
-        perform_advanced_analytics as la_perform_advanced_analytics_impl,
-        validate_query as la_validate_query_impl,
-        get_documentation as la_get_documentation_impl,
-        check_connection as la_check_connection_impl,
-    )
-except Exception:
-    _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    _src_path = os.path.join(_repo_root, "src")
-    if _src_path not in sys.path:
-        sys.path.insert(0, _src_path)
-    # Ensure src/ versions of shared modules are used (avoid stale cache from root package)
-    import sys as _sys
-    _sys.modules.pop("mcp_oci_common", None)
-    _sys.modules.pop("mcp_oci_common.responses", None)
-    try:
-        from mcp_oci_loganalytics_enhanced.server import (
-            execute_query as la_execute_query_impl,
-            search_security_events as la_search_security_events_impl,
-            get_mitre_techniques as la_get_mitre_techniques_impl,
-            analyze_ip_activity as la_analyze_ip_activity_impl,
-            perform_statistical_analysis as la_perform_statistical_analysis_impl,
-            perform_advanced_analytics as la_perform_advanced_analytics_impl,
-            validate_query as la_validate_query_impl,
-            get_documentation as la_get_documentation_impl,
-            check_connection as la_check_connection_impl,
-        )
-    except Exception:
-        # Defer to fallback stubs below
-        pass
+# ----- OpenTelemetry -----
+from opentelemetry import trace
+
+"""Use the consolidated Log Analytics implementation from mcp_servers.loganalytics.server.
+This ensures there is a single source of truth for LA tools across servers.
+"""
+from mcp_servers.loganalytics.server import (
+    execute_query as la_execute_query_impl,
+    search_security_events as la_search_security_events_impl,
+    get_mitre_techniques as la_get_mitre_techniques_impl,
+    analyze_ip_activity as la_analyze_ip_activity_impl,
+    perform_statistical_analysis as la_perform_statistical_analysis_impl,
+    perform_advanced_analytics as la_perform_advanced_analytics_impl,
+    validate_query as la_validate_query_impl,
+    get_documentation as la_get_documentation_impl,
+    check_oci_connection as la_check_connection_impl,
+)
 
 from mcp_oci_common import get_oci_config, get_compartment_id
 
-# Fallback stubs if enhanced Logan module is unavailable
-if "la_execute_query_impl" not in globals():
-    def la_execute_query_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_search_security_events_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_get_mitre_techniques_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_analyze_ip_activity_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_perform_statistical_analysis_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_perform_advanced_analytics_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_validate_query_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_get_documentation_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
-    def la_check_connection_impl(**kwargs):
-        return {"success": False, "error": "Enhanced Log Analytics module not available"}
+# ----- Logging -----
+logging.basicConfig(level=logging.INFO if os.getenv("DEBUG") else logging.WARNING)
 
-# Set up logging
-logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
-
-# Set up tracing and metrics (consistent with other servers)
+# ----- Tracing & metrics -----
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-observability")
 init_tracing(service_name="oci-mcp-observability")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-observability")
 
+# Recent MCP calls buffer (for explainability and gap analysis)
+_RECENT_CALLS: list[dict] = []
+_RECENT_MAX = 100
+
+def _record_call(entry: dict) -> None:
+    try:
+        entry["ts"] = datetime.now(timezone.utc).isoformat()
+        _RECENT_CALLS.append(entry)
+        if len(_RECENT_CALLS) > _RECENT_MAX:
+            del _RECENT_CALLS[0:len(_RECENT_CALLS)-_RECENT_MAX]
+    except Exception:
+        pass
+
+# =========================================================
+# Helpers: compartments & namespace resolution
+# =========================================================
+
+def _effective_compartment(config, explicit: Optional[str]) -> str:
+    """
+    Resolve a compartment OCID to use for LA queries.
+    Priority: explicit argument -> COMPARTMENT_OCID env -> tenancy OCID from config.
+    """
+    cid = explicit or get_compartment_id() or config.get("tenancy")
+    if not cid:
+        raise RuntimeError("Unable to resolve compartment OCID. Set COMPARTMENT_OCID or ensure tenancy is configured.")
+    return cid
+
+# ------- Logging Analytics namespace resolution (auto-detect once per process)
+_la_namespace: Optional[str] = None
+_la_namespace_source: Optional[str] = None  # env | auto | manual
+_la_namespaces: List[Dict] = []
+_la_tenancy: Optional[str] = None
+
+def _list_la_namespaces(config) -> List[Dict]:
+    """
+    List OCI Logging Analytics namespaces for the current tenancy.
+    """
+    la_client = oci.log_analytics.LogAnalyticsClient(config)
+    tenancy_id = config.get("tenancy") or os.getenv("COMPARTMENT_OCID")
+    if not tenancy_id:
+        raise RuntimeError("Cannot resolve tenancy OCID for Logging Analytics namespace lookup")
+    resp = la_client.list_namespaces(compartment_id=tenancy_id)
+    results: List[Dict] = []
+    ns_items = getattr(getattr(resp, "data", None), "items", []) or []
+    for ns in ns_items:
+        results.append({
+            "name": getattr(ns, "namespace_name", None) or getattr(ns, "name", None),
+            "description": getattr(ns, "description", None),
+            "time_created": getattr(ns, "time_created", None),
+            "time_updated": getattr(ns, "time_updated", None),
+            "is_onboarded": getattr(ns, "is_onboarded", True),
+        })
+    return [n for n in results if n.get("name")]
+
+def _init_la_namespace_on_start():
+    """
+    Initialize namespace at server start. Honors LA_NAMESPACE env; otherwise auto-detect.
+    If multiple namespaces exist and no LA_NAMESPACE is set, do not guess—require explicit set.
+    """
+    global _la_namespace, _la_namespace_source, _la_namespaces, _la_tenancy
+    try:
+        cfg = get_oci_config()
+        _la_tenancy = cfg.get("tenancy") or os.getenv("COMPARTMENT_OCID")
+        # 1) From env (authoritative)
+        ns_env = os.getenv("LA_NAMESPACE")
+        if ns_env:
+            _la_namespace = ns_env
+            _la_namespace_source = "env"
+            _la_namespaces = _list_la_namespaces(cfg)
+            return
+        # 2) Auto-detect
+        _la_namespaces = _list_la_namespaces(cfg)
+        if len(_la_namespaces) == 1:
+            _la_namespace = _la_namespaces[0]["name"]
+            _la_namespace_source = "auto"
+        else:
+            # Leave unset; tools will ask user to choose
+            _la_namespace = None
+            _la_namespace_source = None
+    except Exception as e:
+        # Do not prevent server from starting; tools will surface error
+        logging.warning(f"Logging Analytics namespace init skipped: {e}")
+
+def _ensure_namespace(config) -> str:
+    """
+    Ensure we have a namespace selected; if multiple available and not selected, raise with guidance.
+    """
+    global _la_namespace, _la_namespaces
+    if _la_namespace:
+        return _la_namespace
+    # Recompute list in case environment changed
+    _la_namespaces = _list_la_namespaces(config)
+    if len(_la_namespaces) == 0:
+        raise RuntimeError("No Logging Analytics namespace found for tenancy (is LA enabled?)")
+    if len(_la_namespaces) == 1:
+        _la_namespace = _la_namespaces[0]["name"]
+        return _la_namespace
+    available = [n["name"] for n in _la_namespaces]
+    raise RuntimeError(f"Multiple Logging Analytics namespaces available: {available}. Call set_la_namespace to select one.")
+
+# Initialize namespace once at module import (server start)
+_init_la_namespace_on_start()
+
+# =========================================================
+# LA query helpers: async polling & result shaping
+# =========================================================
+
+def _shape_la_rows(response) -> List[Dict]:
+    """
+    Normalizes LA results to a list[dict] with column names.
+    Works for both sync (query) and async (get_query_result) responses.
+    """
+    data = getattr(response, "data", None)
+    if not data:
+        return []
+    columns = []
+    if getattr(data, "columns", None):
+        for i, c in enumerate(data.columns):
+            columns.append(
+                getattr(c, "column_name", None)
+                or getattr(c, "name", None)
+                or getattr(c, "display_name", None)
+                or f"col_{i}"
+            )
+    out = []
+    for row in (getattr(data, "rows", None) or []):
+        values = getattr(row, "values", None) or getattr(row, "data", None) or []
+        out.append(dict(zip(columns, values)) if columns and len(values) == len(columns) else {"values": values})
+    return out
+
+def _poll_la_work_request(la_client, namespace: str, work_request_id: str, include_columns=True, include_fields=True):
+    """
+    Polls an LA query work request until completion and returns the final result payload.
+    Mirrors Console behavior using get_query_result.
+    """
+    import time
+    while True:
+        resp = la_client.get_query_result(
+            namespace_name=namespace,
+            work_request_id=work_request_id,
+            should_include_columns=include_columns,
+            should_include_fields=include_fields,
+        )
+        lifecycle = getattr(resp.data, "lifecycle_state", None)
+        if lifecycle in ("SUCCEEDED", "FAILED", "CANCELED") or getattr(resp.data, "rows", None):
+            return resp
+        sleep_s = float(resp.headers.get("retry-after", 0.5)) if hasattr(resp, "headers") else 0.5
+        time.sleep(max(sleep_s, 0.2))
+
+# =========================================================
+# Public tools
+# =========================================================
+
+def list_la_namespaces() -> Dict:
+    """
+    Return available LA namespaces and current selection metadata.
+    """
+    try:
+        cfg = get_oci_config()
+        namespaces = _list_la_namespaces(cfg)
+        return {
+            "tenancy": _la_tenancy,
+            "namespaces": namespaces,
+            "selected": _la_namespace,
+            "selected_source": _la_namespace_source,
+        }
+    except Exception as e:
+        return {"error": str(e), "tenancy": _la_tenancy, "selected": _la_namespace}
+
+def set_la_namespace(namespace_name: str) -> Dict:
+    """
+    Manually set the LA namespace to use for all queries in this process.
+    """
+    global _la_namespace, _la_namespace_source, _la_namespaces
+    try:
+        cfg = get_oci_config()
+        if not _la_namespaces:
+            _la_namespaces = _list_la_namespaces(cfg)
+        names = {n["name"] for n in _la_namespaces}
+        if namespace_name not in names:
+            return {"error": f"Namespace '{namespace_name}' not found. Available: {sorted(list(names))}"}
+        _la_namespace = namespace_name
+        _la_namespace_source = "manual"
+        return {"selected": _la_namespace, "source": _la_namespace_source}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_la_namespace() -> Dict:
+    """
+    Return the currently selected namespace (or error if not set).
+    """
+    if _la_namespace:
+        return {"selected": _la_namespace, "source": _la_namespace_source, "tenancy": _la_tenancy}
+    return {"error": "No namespace selected. Use set_la_namespace or define LA_NAMESPACE env, or ensure only one namespace exists."}
+
 def run_log_analytics_query(
     query: str,
     compartment_id: Optional[str] = None,
     region: Optional[str] = None,
-    limit: int = 1000
+    limit: int = 1000,
+    time_range: Optional[str] = None,
+    should_run_async: bool = False,
+    work_request_id: Optional[str] = None,
 ) -> List[Dict]:
+    """
+    Execute a Logging Analytics query. Supports sync (simple) and async (submit+poll).
+    If work_request_id is provided, skip submit and just poll for results.
+
+    time_range: Optional relative window string ('60m', '24h', '30d').
+    """
     with tool_span(tracer, "run_log_analytics_query", mcp_server="oci-mcp-observability") as span:
         config = get_oci_config()
         if region:
-            config['region'] = region
-        log_analytics_client = oci.log_analytics.LogAnalyticsClient(config)
-        compartment = compartment_id or get_compartment_id()
-        
+            config["region"] = region
+        la_client = oci.log_analytics.LogAnalyticsClient(config)
+        ns = _ensure_namespace(config)
+        compartment = _effective_compartment(config, compartment_id)
+
+        from oci.log_analytics.models import QueryDetails, TimeRange  # lazy import
+
         try:
-            all_results = []
-            page = None
-            columns = None
-            while True:
-                response = log_analytics_client.query(
-                    namespace="default",
-                    query=query,
-                    compartment_id=compartment,
-                    limit=limit,
-                    page=page
-                )
-                if not columns and response.data.columns:
-                    columns = [col.column_name for col in response.data.columns]
-                if response.data.rows:
-                    for row in response.data.rows:
-                        if columns and len(columns) == len(row.values):
-                            row_dict = dict(zip(columns, row.values))
-                        else:
-                            row_dict = {"values": row.values}
-                        all_results.append(row_dict)
-                page = response.headers.get("opc-next-page")
-                if not page:
-                    break
-            return all_results
-        except oci.exceptions.ServiceError as e:
-            logging.error(f"Error running LA query: {e}")
-            return [{'error': str(e)}]
+            # Relative time window support
+            time_filter = None
+            if isinstance(time_range, str):
+                tr = time_range.strip().lower()
+                now = datetime.now(timezone.utc)
+                if tr.endswith("m"):
+                    time_filter = TimeRange(time_start=now - timedelta(minutes=int(tr[:-1])), time_end=now, time_zone=os.getenv("TIME_ZONE", "UTC"))
+                elif tr.endswith("h"):
+                    time_filter = TimeRange(time_start=now - timedelta(hours=int(tr[:-1])), time_end=now, time_zone=os.getenv("TIME_ZONE", "UTC"))
+                elif tr.endswith("d"):
+                    time_filter = TimeRange(time_start=now - timedelta(days=int(tr[:-1])), time_end=now, time_zone=os.getenv("TIME_ZONE", "UTC"))
+
+            # Poll-only mode if a work request id was supplied
+            if work_request_id:
+                polled = _poll_la_work_request(la_client, ns, work_request_id, include_columns=True, include_fields=True)
+                return _shape_la_rows(polled)
+
+            qd = QueryDetails(
+                query_string=query,
+                sub_system="LOG",                       # REQUIRED by LA API
+                max_total_count=limit,
+                should_include_total_count=True,
+                should_run_async=bool(should_run_async),
+                time_filter=time_filter,
+                compartment_id=compartment,            # body + query param (service accepts both)
+            )
+
+            # Submit query
+            submit = la_client.query(
+                namespace_name=ns,
+                query_details=qd,
+                limit=limit,
+                compartment_id=compartment,
+            )
+
+            if should_run_async:
+                # Async path → extract work request id and poll
+                wr_id = submit.headers.get("opc-work-request-id") or getattr(getattr(submit, "data", None), "work_request_id", None)
+                if not wr_id:
+                    # Fallback: if service returned data inline, shape it; else clear error
+                    data = getattr(submit, "data", None)
+                    if getattr(data, "rows", None):
+                        return _shape_la_rows(submit)
+                    return [{"error": "Async query submitted but no workRequestId was returned; enable DEBUG to inspect raw response."}]
+                polled = _poll_la_work_request(la_client, ns, wr_id, include_columns=True, include_fields=True)
+                return _shape_la_rows(polled)
+
+            # Sync path → results are in submit.data (if server finished in time)
+            return _shape_la_rows(submit)
+
+        except ServiceError as e:
+            msg = getattr(e, "message", str(e)) or str(e)
+            if "MissingParameter" in msg and "subsystem" in msg.lower():
+                return [{"error": "Log Analytics API requires subSystem=sub_system='LOG'. This tool sets it automatically; if you overrode it, revert to 'LOG'."}]
+            return [{"error": msg, "details": {"status": e.status, "code": e.code}}]
+        except Exception as e:
+            logging.error(f"Unexpected LA query error: {e}")
+            return [{"error": str(e)}]
 
 def run_saved_search(
     saved_search_id: str,
@@ -132,40 +333,65 @@ def run_saved_search(
     region: Optional[str] = None,
     limit: int = 1000
 ) -> Dict:
+    """
+    Execute a saved search via the query API using saved_search_id in QueryDetails.
+    """
     with tool_span(tracer, "run_saved_search", mcp_server="oci-mcp-observability") as span:
         config = get_oci_config()
         if region:
             config['region'] = region
-        log_analytics_client = oci.log_analytics.LogAnalyticsClient(config)
-        compartment = compartment_id or get_compartment_id()
-        
+        la_client = oci.log_analytics.LogAnalyticsClient(config)
+        ns = _ensure_namespace(config)
+        compartment = _effective_compartment(config, compartment_id)
+
+        from oci.log_analytics.models import QueryDetails  # lazy import models
+
         try:
-            all_results = []
-            page = None
-            columns = None
+            all_results: List[Dict] = []
+            page: Optional[str] = None
+            columns: Optional[List[str]] = None
+
             while True:
-                response = log_analytics_client.query(
-                    namespace="default",
+                qd = QueryDetails(
                     saved_search_id=saved_search_id,
                     compartment_id=compartment,
-                    limit=limit,
-                    page=page
+                    sub_system="LOG",
+                    max_total_count=limit
                 )
-                if not columns and response.data.columns:
-                    columns = [col.column_name for col in response.data.columns]
-                if response.data.rows:
-                    for row in response.data.rows:
-                        if columns and len(columns) == len(row.values):
-                            row_dict = dict(zip(columns, row.values))
+                response = la_client.query(
+                    namespace_name=ns,
+                    query_details=qd,
+                    limit=limit,
+                    page=page,
+                    compartment_id=compartment
+                )
+                data = getattr(response, "data", None)
+                if data:
+                    if columns is None and getattr(data, "columns", None):
+                        columns = [
+                            getattr(c, "column_name", None)
+                            or getattr(c, "name", None)
+                            or getattr(c, "display_name", None)
+                            or f"col_{i}"
+                            for i, c in enumerate(data.columns)
+                        ]
+                    for row in getattr(data, "rows", []) or []:
+                        values = getattr(row, "values", None) or getattr(row, "data", None) or []
+                        if columns and len(columns) == len(values):
+                            all_results.append(dict(zip(columns, values)))
                         else:
-                            row_dict = {"values": row.values}
-                        all_results.append(row_dict)
-                page = response.headers.get("opc-next-page")
+                            all_results.append({"values": values})
+
+                page = response.headers.get("opc-next-page") if hasattr(response, "headers") else None
                 if not page:
                     break
+
             return {'results': all_results}
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error running saved search: {e}")
+            return {'error': str(e)}
+        except Exception as e:
+            logging.error(f"Unexpected LA saved search error: {e}")
             return {'error': str(e)}
 
 def emit_test_log(
@@ -185,6 +411,8 @@ def emit_test_log(
             # Assuming a log group and log exist; this may need configuration
             log_group_id = os.getenv('LOG_GROUP_ID')  # Set in env
             log_id = os.getenv('LOG_ID')
+            if not log_id:
+                return {'error': 'LOG_ID env var not set (and a log must exist).'}
             
             details = oci.logging.models.PutLogsDetails(
                 specversion="1.0",
@@ -207,7 +435,7 @@ def emit_test_log(
                 log_id=log_id,
                 put_logs_details=details
             )
-            return {'status': 'success', 'response': response.data}
+            return {'status': 'success', 'response': getattr(response, "data", None)}
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error emitting test log: {e}")
             return {'error': str(e)}
@@ -244,7 +472,20 @@ def execute_logan_query(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "execute_logan_query",
+            "mcp_path": [
+                "mcp_servers.observability.server.execute_logan_query",
+                "mcp_servers.loganalytics.server.execute_query",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "query": query,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def search_security_events(
     search_term: str,
@@ -265,7 +506,20 @@ def search_security_events(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "search_security_events",
+            "mcp_path": [
+                "mcp_servers.observability.server.search_security_events",
+                "mcp_servers.loganalytics.server.search_security_events",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "search_term": search_term,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def get_mitre_techniques(
     technique_id: str = "all",
@@ -284,7 +538,20 @@ def get_mitre_techniques(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "get_mitre_techniques",
+            "mcp_path": [
+                "mcp_servers.observability.server.get_mitre_techniques",
+                "mcp_servers.loganalytics.server.get_mitre_techniques",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "technique_id": technique_id,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def analyze_ip_activity(
     ip_address: str,
@@ -303,7 +570,20 @@ def analyze_ip_activity(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "analyze_ip_activity",
+            "mcp_path": [
+                "mcp_servers.observability.server.analyze_ip_activity",
+                "mcp_servers.loganalytics.server.execute_query",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "ip_address": ip_address,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def execute_statistical_analysis(
     base_query: str,
@@ -328,7 +608,20 @@ def execute_statistical_analysis(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "execute_statistical_analysis",
+            "mcp_path": [
+                "mcp_servers.observability.server.execute_statistical_analysis",
+                "mcp_servers.loganalytics.server.execute_query",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "base_query": base_query,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def execute_advanced_analytics(
     base_query: str,
@@ -349,7 +642,20 @@ def execute_advanced_analytics(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "execute_advanced_analytics",
+            "mcp_path": [
+                "mcp_servers.observability.server.execute_advanced_analytics",
+                "mcp_servers.loganalytics.server.execute_query",
+                "oci.log_analytics.LogAnalyticsClient.query"
+            ],
+            "analytics_type": analytics_type,
+            "time_range": time_range,
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def validate_query(
     query: str,
@@ -357,7 +663,17 @@ def validate_query(
 ) -> Dict:
     with tool_span(tracer, "validate_query", mcp_server="oci-mcp-observability") as span:
         res = la_validate_query_impl(query=query, fix=fix)
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "validate_query",
+            "mcp_path": [
+                "mcp_servers.observability.server.validate_query",
+                "mcp_servers.loganalytics.server.validate_query"
+            ],
+            "query": query,
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def get_documentation(
     topic: str = "query_syntax",
@@ -365,7 +681,17 @@ def get_documentation(
 ) -> Dict:
     with tool_span(tracer, "get_documentation", mcp_server="oci-mcp-observability") as span:
         res = la_get_documentation_impl(topic=topic, search_term=search_term)
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "get_documentation",
+            "mcp_path": [
+                "mcp_servers.observability.server.get_documentation",
+                "mcp_servers.loganalytics.server.get_documentation"
+            ],
+            "topic": topic,
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
 
 def check_oci_connection(
     compartment_id: Optional[str] = None,
@@ -380,72 +706,56 @@ def check_oci_connection(
             profile=profile,
             region=region,
         )
-        return _parse_result(res)
+        out = _parse_result(res)
+        _record_call({
+            "tool": "check_oci_connection",
+            "mcp_path": [
+                "mcp_servers.observability.server.check_oci_connection",
+                "mcp_servers.loganalytics.server.check_oci_connection"
+            ],
+            "compartment_id": _ensure_compartment_id(compartment_id),
+            "success": bool(out.get("_meta",{}).get("success"))
+        })
+        return out
+
+# =========================================================
+# MCP wiring
+# =========================================================
 
 tools = [
-    # Legacy/basic observability tools
-    Tool.from_function(
-        fn=run_log_analytics_query,
-        name="run_log_analytics_query",
-        description="Run ad-hoc Log Analytics query"
-    ),
-    Tool.from_function(
-        fn=run_saved_search,
-        name="run_saved_search",
-        description="Run saved Log Analytics search"
-    ),
-    Tool.from_function(
-        fn=emit_test_log,
-        name="emit_test_log",
-        description="Emit synthetic test log"
-    ),
+    # Namespace management
+    Tool.from_function(fn=list_la_namespaces, name="list_la_namespaces", description="List available Logging Analytics namespaces and current selection"),
+    Tool.from_function(fn=set_la_namespace,  name="set_la_namespace",  description="Set the Logging Analytics namespace to use for all queries"),
+    Tool.from_function(fn=get_la_namespace,  name="get_la_namespace",  description="Get the currently selected Logging Analytics namespace"),
+
+    # Core LA tools
+    Tool.from_function(fn=run_log_analytics_query, name="run_log_analytics_query", description="Run ad-hoc Log Analytics query"),
+    Tool.from_function(fn=run_saved_search,       name="run_saved_search",       description="Run saved Log Analytics search"),
+    Tool.from_function(fn=emit_test_log,          name="emit_test_log",          description="Emit synthetic test log"),
 
     # Logan-enhanced capabilities
-    Tool.from_function(
-        fn=execute_logan_query,
-        name="execute_logan_query",
-        description="Execute enhanced OCI Logging Analytics query (Logan)"
-    ),
-    Tool.from_function(
-        fn=search_security_events,
-        name="search_security_events",
-        description="Search security events using Logan patterns or natural language"
-    ),
-    Tool.from_function(
-        fn=get_mitre_techniques,
-        name="get_mitre_techniques",
-        description="List or analyze MITRE ATT&CK techniques in logs"
-    ),
-    Tool.from_function(
-        fn=analyze_ip_activity,
-        name="analyze_ip_activity",
-        description="Analyze activity for an IP across authentication/network/threat intel"
-    ),
-    Tool.from_function(
-        fn=execute_statistical_analysis,
-        name="execute_statistical_analysis",
-        description="Run stats/timestats/eventstats/top/bottom/frequent/rare"
-    ),
-    Tool.from_function(
-        fn=execute_advanced_analytics,
-        name="execute_advanced_analytics",
-        description="Advanced analytics: cluster, link, nlp, classify, outlier, sequence, geostats, timecluster"
-    ),
-    Tool.from_function(
-        fn=validate_query,
-        name="validate_query",
-        description="Validate Log Analytics query; optionally auto-fix common issues"
-    ),
-    Tool.from_function(
-        fn=get_documentation,
-        name="get_documentation",
-        description="Get docs for Log Analytics query syntax, fields, functions, MITRE mapping, etc."
-    ),
-    Tool.from_function(
-        fn=check_oci_connection,
-        name="check_oci_connection",
-        description="Verify Logging Analytics connectivity and run optional test query"
-    ),
+    Tool.from_function(fn=execute_logan_query,          name="execute_logan_query",          description="Execute enhanced OCI Logging Analytics query (Logan)"),
+    Tool.from_function(fn=search_security_events,       name="search_security_events",       description="Search security events using Logan patterns or natural language"),
+    Tool.from_function(fn=get_mitre_techniques,         name="get_mitre_techniques",         description="List or analyze MITRE ATT&CK techniques in logs"),
+    Tool.from_function(fn=analyze_ip_activity,          name="analyze_ip_activity",          description="Analyze activity for an IP across authentication/network/threat intel"),
+    Tool.from_function(fn=execute_statistical_analysis, name="execute_statistical_analysis", description="Run stats/timestats/eventstats/top/bottom/frequent/rare"),
+    Tool.from_function(fn=execute_advanced_analytics,   name="execute_advanced_analytics",   description="Advanced analytics: cluster, link, nlp, classify, outlier, sequence, geostats, timecluster"),
+    Tool.from_function(fn=validate_query,               name="validate_query",               description="Validate Log Analytics query; optionally auto-fix common issues"),
+    Tool.from_function(fn=get_documentation,            name="get_documentation",            description="Get docs for Log Analytics query syntax, fields, functions, MITRE mapping, etc."),
+    Tool.from_function(fn=check_oci_connection,         name="check_oci_connection",         description="Verify Logging Analytics connectivity and run optional test query"),
+    # Observability helpers for planning and gap analysis
+    Tool.from_function(fn=lambda: list(_RECENT_CALLS[-50:]), name="oci:observability:get-recent-calls", description="Return recent MCP call path and query metadata (last 50)"),
+    Tool.from_function(fn=lambda: (_RECENT_CALLS.clear() or {"cleared": True}), name="oci:observability:clear-recent-calls", description="Clear the recent MCP call buffer"),
+    # Aliases following oci:<service>:<action> naming
+    Tool.from_function(fn=execute_logan_query,          name="oci:loganalytics:execute_query",           description="Execute enhanced OCI Logging Analytics query (alias)"),
+    Tool.from_function(fn=search_security_events,       name="oci:loganalytics:search_security_events",  description="Search security events (alias)"),
+    Tool.from_function(fn=get_mitre_techniques,         name="oci:loganalytics:get_mitre_techniques",    description="MITRE ATT&CK techniques (alias)"),
+    Tool.from_function(fn=analyze_ip_activity,          name="oci:loganalytics:analyze_ip_activity",     description="Analyze IP activity (alias)"),
+    Tool.from_function(fn=execute_statistical_analysis, name="oci:loganalytics:perform_statistical_analysis", description="Statistical analysis (alias)"),
+    Tool.from_function(fn=execute_advanced_analytics,   name="oci:loganalytics:perform_advanced_analytics", description="Advanced analytics (alias)"),
+    Tool.from_function(fn=validate_query,               name="oci:loganalytics:validate_query",          description="Validate query (alias)"),
+    Tool.from_function(fn=get_documentation,            name="oci:loganalytics:get_documentation",       description="Get documentation (alias)"),
+    Tool.from_function(fn=check_oci_connection,         name="oci:loganalytics:check_oci_connection",    description="Check LA connection (alias)"),
 ]
 
 if __name__ == "__main__":
@@ -465,7 +775,9 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8003")))
         except Exception:
             pass
+
     mcp = FastMCP(tools=tools, name="oci-mcp-observability")
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):
