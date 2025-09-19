@@ -8,6 +8,8 @@ from typing import Any
 
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -211,6 +213,8 @@ def register_tools() -> list[dict[str, Any]]:
 def list_users(compartment_id: str, name: str | None = None, limit: int | None = None, page: str | None = None,
                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
+    registry = get_registry()
     kwargs: dict[str, Any] = {}
     if name:
         kwargs["name"] = name
@@ -218,10 +222,22 @@ def list_users(compartment_id: str, name: str | None = None, limit: int | None =
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "name": name, "limit": limit, "page": page}
+    cached = cache.get("iam", "list_users", cache_params)
+    if cached:
+        return cached
     resp = client.list_users(compartment_id=compartment_id, **kwargs)
     users = [u.data.__dict__ if hasattr(u, "data") else u.__dict__ for u in resp.data] if hasattr(resp, "data") else []
+    if users:
+        try:
+            registry.update_users(users)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": users}, next_page=next_page)
+    out = with_meta(resp, {"items": users}, next_page=next_page)
+    # IAM data is stable; cache for 6h
+    cache.set("iam", "list_users", cache_params, out, ttl_seconds=21600)
+    return out
 
 
 def get_user(user_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
@@ -247,6 +263,12 @@ def list_compartments(compartment_id: str, include_subtree: bool = True, access_
         items = [c.__dict__ for c in getattr(resp, "data", [])]
         next_page = getattr(resp, "opc_next_page", None)
         
+        # Update registry for name→OCID
+        try:
+            from mcp_oci_common.name_registry import get_registry as _get_reg
+            _get_reg().update_compartments(items)
+        except Exception:
+            pass
         result = with_meta(resp, {"items": items}, next_page=next_page)
         
         # Add helpful hints for common issues

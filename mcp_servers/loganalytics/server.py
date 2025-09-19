@@ -1,5 +1,5 @@
-"""Enhanced MCP Server: OCI Log Analytics with Security Analysis
-Based on logan-server implementation with advanced security features.
+"""Enhanced MCP Server: OCI Log Analytics with Security Analysis and REST API
+Based on logan-server implementation with advanced security features and direct REST API calls for queries.
 
 Tools are exposed as `oci:loganalytics:<action>`.
 Includes security analysis, MITRE ATT&CK integration, and advanced analytics.
@@ -7,19 +7,16 @@ Includes security analysis, MITRE ATT&CK integration, and advanced analytics.
 
 import json
 import os
-import sys
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 from mcp_oci_common import get_oci_config
-from mcp_oci_common.responses import with_meta
+from mcp_oci_common.response import with_meta
 
-try:
-    import oci  # type: ignore
-except Exception:
-    oci = None
+import oci  # type: ignore
+import requests
+from oci.signer import Signer
 
 
 @dataclass
@@ -177,36 +174,8 @@ class SecurityQueryMapper:
         }
 
 
-def create_client(profile: str | None = None, region: str | None = None):
-    if oci is None:
-        raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
-    config = get_oci_config(profile=profile, region=region)
-    return oci.log_analytics.LogAnalyticsClient(config)
-
-
-def _extract_items_from_response(resp) -> list[Any]:
-    """Extract items from OCI response, handling both direct data and data.items patterns"""
-    data = getattr(resp, "data", None)
-    if data and hasattr(data, "items"):
-        return [getattr(i, "__dict__", i) for i in data.items]
-    else:
-        return [getattr(i, "__dict__", i) for i in getattr(resp, "data", [])]
-
-
-def _get_namespace(client, compartment_id: str) -> str:
-    """Get Log Analytics namespace for a compartment"""
-    try:
-        # Try to get namespace from object storage
-        object_storage_client = oci.object_storage.ObjectStorageClient(client._config)
-        namespace = object_storage_client.get_namespace().data
-        return namespace
-    except Exception:
-        # Fallback to compartment ID as namespace
-        return compartment_id
-
-
-def _format_time_range(time_range: str) -> tuple[str, str]:
-    """Convert time range string to start/end times"""
+def _format_time_range(time_range: str) -> tuple[datetime, datetime]:
+    """Convert time range string to start/end datetimes"""
     now = datetime.now(timezone.utc)
     
     time_mapping = {
@@ -224,186 +193,99 @@ def _format_time_range(time_range: str) -> tuple[str, str]:
     delta = time_mapping.get(time_range, timedelta(hours=24))
     start_time = now - delta
     
-    return start_time.isoformat(), now.isoformat()
+    return start_time, now
 
 
-def register_tools() -> list[dict[str, Any]]:
-    return [
-        # Core Query Tools
-        {
-            "name": "oci:loganalytics:execute_query",
-            "description": "Execute a Log Analytics query with enhanced security analysis capabilities",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "OCI Log Analytics query string"},
-                    "query_name": {"type": "string", "description": "Optional name for the query"},
-                    "time_range": {"type": "string", "description": "Time range (1h, 6h, 12h, 24h, 1d, 7d, 30d, 1w, 1m)", "default": "24h"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "max_count": {"type": "integer", "description": "Maximum number of results", "default": 1000},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["query", "compartment_id"],
+def run_query_legacy(
+    namespace_name: str,
+    query_string: str,
+    time_start: str,
+    time_end: str,
+    subsystem: str | None = None,
+    max_total_count: int | None = None,
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    """Legacy-compatible query tool: run a query for a namespace and explicit time window.
+
+    Uses direct REST call with SDK Signer, matching the QueryDetails schema.
+    """
+    if requests is None or Signer is None or oci is None:
+        return with_meta({"error": "Required libraries not available"}, success=False)
+
+    try:
+        cfg = get_oci_config(profile_name=profile)
+        if region:
+            cfg["region"] = region
+
+        signer = Signer(
+            tenancy=cfg["tenancy"],
+            user=cfg["user"],
+            fingerprint=cfg["fingerprint"],
+            private_key_file_location=cfg["key_file"],
+            pass_phrase=cfg.get("pass_phrase"),
+        )
+
+        api_region = cfg.get("region", "us-ashburn-1")
+        url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace_name}/search/actions/query"
+
+        body = {
+            "queryString": query_string,
+            "subSystem": subsystem or "LOG",
+            "maxTotalCount": max_total_count or 1000,
+            "timeFilter": {"timeStart": time_start, "timeEnd": time_end},
+            "shouldIncludeTotalCount": True,
+        }
+        params = {"limit": max_total_count or 1000}
+
+        resp = requests.post(url, json=body, auth=signer, params=params, timeout=60)
+        if not resp.ok:
+            raise Exception(f"HTTP {resp.status_code}: {resp.text}")
+        data = resp.json()
+        results = data.get("results") or data.get("items") or []
+        return with_meta(
+            {
+                "namespace": namespace_name,
+                "query": query_string,
+                "results": results,
+                "count": len(results),
+                "time_start": time_start,
+                "time_end": time_end,
             },
-            "handler": execute_query,
-        },
-        {
-            "name": "oci:loganalytics:search_security_events",
-            "description": "Search for security events using natural language or predefined patterns",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "search_term": {"type": "string", "description": "Natural language description or specific security event pattern"},
-                    "event_type": {"type": "string", "enum": ["login", "privilege_escalation", "network_anomaly", "data_exfiltration", "malware", "all"], "default": "all"},
-                    "time_range": {"type": "string", "description": "Time range for the search", "default": "24h"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "limit": {"type": "integer", "description": "Maximum number of results", "default": 100},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["search_term", "compartment_id"],
-            },
-            "handler": search_security_events,
-        },
-        {
-            "name": "oci:loganalytics:get_mitre_techniques",
-            "description": "Search for MITRE ATT&CK techniques in the logs",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "technique_id": {"type": "string", "description": "Specific MITRE technique ID (e.g., T1003, T1110) or 'all'"},
-                    "category": {"type": "string", "enum": ["initial_access", "execution", "persistence", "privilege_escalation", "defense_evasion", "credential_access", "discovery", "lateral_movement", "collection", "command_and_control", "exfiltration", "impact", "all"], "default": "all"},
-                    "time_range": {"type": "string", "description": "Time range for the analysis", "default": "30d"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["compartment_id"],
-            },
-            "handler": get_mitre_techniques,
-        },
-        {
-            "name": "oci:loganalytics:analyze_ip_activity",
-            "description": "Analyze activity for specific IP addresses",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ip_address": {"type": "string", "description": "IP address to analyze"},
-                    "analysis_type": {"type": "string", "enum": ["full", "authentication", "network", "threat_intel", "communication_patterns"], "default": "full"},
-                    "time_range": {"type": "string", "description": "Time range for the analysis", "default": "24h"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["ip_address", "compartment_id"],
-            },
-            "handler": analyze_ip_activity,
-        },
-        # Advanced Analytics Tools
-        {
-            "name": "oci:loganalytics:perform_statistical_analysis",
-            "description": "Execute statistical analysis using stats, timestats, and eventstats commands",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "base_query": {"type": "string", "description": "Base query to analyze statistically"},
-                    "statistics_type": {"type": "string", "enum": ["stats", "timestats", "eventstats", "top", "bottom", "frequent", "rare"], "default": "stats"},
-                    "aggregations": {"type": "array", "description": "Statistical functions to apply"},
-                    "group_by": {"type": "array", "description": "Fields to group by"},
-                    "time_interval": {"type": "string", "description": "Time interval for timestats (e.g., '5m', '1h', '1d')"},
-                    "time_range": {"type": "string", "description": "Time range for analysis", "default": "24h"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["base_query", "compartment_id"],
-            },
-            "handler": perform_statistical_analysis,
-        },
-        {
-            "name": "oci:loganalytics:perform_advanced_analytics",
-            "description": "Execute advanced analytics queries using OCI Log Analytics specialized commands",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "base_query": {"type": "string", "description": "Base query to analyze (without analytics command)"},
-                    "analytics_type": {"type": "string", "enum": ["cluster", "link", "nlp", "classify", "outlier", "sequence", "geostats", "timecluster"], "default": "cluster"},
-                    "parameters": {"type": "object", "description": "Parameters specific to the analytics type"},
-                    "time_range": {"type": "string", "description": "Time range for analysis", "default": "24h"},
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["base_query", "compartment_id"],
-            },
-            "handler": perform_advanced_analytics,
-        },
-        # Utility Tools
-        {
-            "name": "oci:loganalytics:validate_query",
-            "description": "Validate an OCI Logging Analytics query syntax",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Query to validate"},
-                    "fix": {"type": "boolean", "description": "Attempt to automatically fix common syntax errors", "default": False},
-                },
-                "required": ["query"],
-            },
-            "handler": validate_query,
-        },
-        {
-            "name": "oci:loganalytics:get_documentation",
-            "description": "Get documentation and help for OCI Logging Analytics and Logan queries",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "topic": {"type": "string", "enum": ["query_syntax", "field_names", "functions", "time_filters", "operators", "mitre_mapping", "examples", "troubleshooting"], "default": "query_syntax"},
-                    "search_term": {"type": "string", "description": "Specific term to search for in documentation"},
-                },
-            },
-            "handler": get_documentation,
-        },
-        {
-            "name": "oci:loganalytics:check_connection",
-            "description": "Check OCI Logging Analytics connection and authentication",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
-                    "test_query": {"type": "boolean", "description": "Run a test query to verify connectivity", "default": True},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["compartment_id"],
-            },
-            "handler": check_connection,
-        },
-        # Original tools for backward compatibility
-        {
-            "name": "oci:loganalytics:run-query",
-            "description": "Run a Log Analytics query for a namespace and time range (legacy)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "namespace_name": {"type": "string"},
-                    "query_string": {"type": "string"},
-                    "time_start": {"type": "string", "description": "ISO8601"},
-                    "time_end": {"type": "string", "description": "ISO8601"},
-                    "subsystem": {"type": "string", "description": "Optional subsystem filter"},
-                    "max_total_count": {"type": "integer", "description": "Optional cap on rows"},
-                    "profile": {"type": "string"},
-                    "region": {"type": "string"},
-                },
-                "required": ["namespace_name", "query_string", "time_start", "time_end"],
-            },
-            "handler": run_query_legacy,
-        },
-    ]
+            success=True,
+            message=f"Query executed successfully. Found {len(results)} results.",
+        )
+    except Exception as e:
+        return with_meta({"error": str(e)}, success=False, message=f"Legacy query failed: {e}")
 
 
-# Tool Handlers
+def _get_namespace(compartment_id: str, profile: str | None = None, region: str | None = None) -> str:
+    """Get Log Analytics namespace for the tenancy.
+
+    Tries official SDK list_namespaces; falls back to object storage namespace; last resort returns compartment_id.
+    """
+    # Load config using supported signature and apply region override
+    cfg = get_oci_config(profile_name=profile)
+    if region:
+        cfg["region"] = region
+
+    # Prefer proper Log Analytics namespace discovery
+    try:
+        la = oci.log_analytics.LogAnalyticsClient(cfg)
+        resp = la.list_namespaces(compartment_id=compartment_id)
+        items = getattr(resp.data, 'items', None) or []
+        if items:
+            return items[0].namespace_name
+    except Exception:
+        pass
+
+    # Fallback to Object Storage namespace if available
+    try:
+        os_client = oci.object_storage.ObjectStorageClient(cfg)
+        return os_client.get_namespace().data
+    except Exception:
+        return compartment_id
+
 
 def execute_query(
     query: str,
@@ -414,24 +296,61 @@ def execute_query(
     profile: str | None = None,
     region: str | None = None,
 ) -> str:
-    """Execute a Log Analytics query with enhanced capabilities"""
+    """Execute a Log Analytics query using direct REST API"""
+    if requests is None or Signer is None:
+        return with_meta({"error": "Required libraries not available"}, success=False)
+    
     try:
-        client = create_client(profile=profile, region=region)
-        namespace = _get_namespace(client, compartment_id)
+        # Load config and apply region override
+        config = get_oci_config(profile_name=profile)
+        if region:
+            config["region"] = region
+        namespace = _get_namespace(compartment_id, profile, region)
         
-        # Convert time range to start/end times
+        # Convert time range
         start_time, end_time = _format_time_range(time_range)
         
-        # Execute the query
-        response = client.query(
-            namespace_name=namespace,
-            query=query,
-            time_start=start_time,
-            time_end=end_time,
-            max_total_count=max_count
+        # Create signer
+        signer = Signer(
+            tenancy=config["tenancy"],
+            user=config["user"],
+            fingerprint=config["fingerprint"],
+            private_key_file_location=config["key_file"],
+            pass_phrase=config.get("pass_phrase")
         )
         
-        results = _extract_items_from_response(response)
+        # Build URL
+        api_region = region or config.get("region", "us-ashburn-1")
+        url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace}/search/actions/query"
+        
+        # Build query details
+        query_details = {
+            "subSystem": "LOG",
+            "queryString": query,
+            "shouldRunAsync": False,
+            "shouldIncludeTotalCount": True,
+            "compartmentId": compartment_id,
+            "compartmentIdInSubtree": True,
+            "timeFilter": {
+                "timeStart": start_time.isoformat().replace('+00:00', 'Z'),
+                "timeEnd": end_time.isoformat().replace('+00:00', 'Z'),
+                "timeZone": os.getenv("TIME_ZONE", "UTC")
+            },
+            "maxTotalCount": max_count
+        }
+        
+        params = {"limit": max_count}
+        
+        response = requests.post(url, json=query_details, auth=signer, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get("items", [])
+        elif response.status_code == 201:
+            data = response.json()
+            results = []
+        else:
+            raise Exception(f"HTTP Error {response.status_code}: {response.text}")
         
         return with_meta(
             {
@@ -441,8 +360,7 @@ def execute_query(
                 "namespace": namespace,
                 "compartment_id": compartment_id,
                 "results": results,
-                "count": len(results),
-                "execution_time": getattr(response, "execution_time_ms", 0)
+                "count": len(results)
             },
             success=True,
             message=f"Query executed successfully. Found {len(results)} results."
@@ -454,6 +372,9 @@ def execute_query(
             message=f"Query execution failed: {str(e)}"
         )
 
+# The rest of the functions remain the same as in enhanced, since they call execute_query
+
+# ... (copy the rest of the enhanced code here, from search_security_events to the end)
 
 def search_security_events(
     search_term: str,
@@ -464,7 +385,6 @@ def search_security_events(
     profile: str | None = None,
     region: str | None = None,
 ) -> str:
-    """Search for security events using natural language or predefined patterns"""
     try:
         mapper = SecurityQueryMapper()
         
@@ -529,7 +449,6 @@ def search_security_events(
             success=False,
             message=f"Security event search failed: {str(e)}"
         )
-
 
 def get_mitre_techniques(
     compartment_id: str,
@@ -935,7 +854,7 @@ def get_documentation(
         )
 
 
-def check_connection(
+def check_oci_connection(
     compartment_id: str,
     test_query: bool = True,
     profile: str | None = None,
@@ -943,8 +862,7 @@ def check_connection(
 ) -> str:
     """Check OCI Logging Analytics connection and authentication"""
     try:
-        client = create_client(profile=profile, region=region)
-        namespace = _get_namespace(client, compartment_id)
+        namespace = _get_namespace(compartment_id, profile, region)
         
         connection_info = {
             "compartment_id": compartment_id,
@@ -987,49 +905,177 @@ def check_connection(
         )
 
 
-def run_query_legacy(
-    namespace_name: str,
-    query_string: str,
-    time_start: str,
-    time_end: str,
-    subsystem: str | None = None,
-    max_total_count: int | None = None,
-    profile: str | None = None,
-    region: str | None = None,
-) -> str:
-    """Legacy run query function for backward compatibility"""
-    try:
-        client = create_client(profile=profile, region=region)
-        
-        # Execute the query
-        response = client.query(
-            namespace_name=namespace_name,
-            query=query_string,
-            time_start=time_start,
-            time_end=time_end,
-            subsystem=subsystem,
-            max_total_count=max_total_count
-        )
-        
-        results = _extract_items_from_response(response)
-        
-        return with_meta(
-            {
-                "namespace": namespace_name,
-                "query": query_string,
-                "time_start": time_start,
-                "time_end": time_end,
-                "subsystem": subsystem,
-                "results": results,
-                "count": len(results),
-                "execution_time": getattr(response, "execution_time_ms", 0)
+def register_tools() -> list[dict[str, Any]]:
+    return [
+        # Core Query Tools
+        {
+            "name": "oci:loganalytics:execute_query",
+            "description": "Execute a Log Analytics query with enhanced security analysis capabilities",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "OCI Log Analytics query string"},
+                    "query_name": {"type": "string", "description": "Optional name for the query"},
+                    "time_range": {"type": "string", "description": "Time range (1h, 6h, 12h, 24h, 1d, 7d, 30d, 1w, 1m)", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "max_count": {"type": "integer", "description": "Maximum number of results", "default": 1000},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["query", "compartment_id"],
             },
-            success=True,
-            message=f"Legacy query executed successfully. Found {len(results)} results."
-        )
-    except Exception as e:
-        return with_meta(
-            {"error": str(e)},
-            success=False,
-            message=f"Legacy query execution failed: {str(e)}"
-        )
+            "handler": execute_query,
+        },
+        {
+            "name": "oci:loganalytics:search_security_events",
+            "description": "Search for security events using natural language or predefined patterns",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_term": {"type": "string", "description": "Natural language description or specific security event pattern"},
+                    "event_type": {"type": "string", "enum": ["login", "privilege_escalation", "network_anomaly", "data_exfiltration", "malware", "all"], "default": "all"},
+                    "time_range": {"type": "string", "description": "Time range for the search", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "limit": {"type": "integer", "description": "Maximum number of results", "default": 100},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["search_term", "compartment_id"],
+            },
+            "handler": search_security_events,
+        },
+        {
+            "name": "oci:loganalytics:get_mitre_techniques",
+            "description": "Search for MITRE ATT&CK techniques in the logs",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "technique_id": {"type": "string", "description": "Specific MITRE technique ID (e.g., T1003, T1110) or 'all'"},
+                    "category": {"type": "string", "enum": ["initial_access", "execution", "persistence", "privilege_escalation", "defense_evasion", "credential_access", "discovery", "lateral_movement", "collection", "command_and_control", "exfiltration", "impact", "all"], "default": "all"},
+                    "time_range": {"type": "string", "description": "Time range for the analysis", "default": "30d"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": get_mitre_techniques,
+        },
+        {
+            "name": "oci:loganalytics:analyze_ip_activity",
+            "description": "Analyze activity for specific IP addresses",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ip_address": {"type": "string", "description": "IP address to analyze"},
+                    "analysis_type": {"type": "string", "enum": ["full", "authentication", "network", "threat_intel", "communication_patterns"], "default": "full"},
+                    "time_range": {"type": "string", "description": "Time range for the analysis", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["ip_address", "compartment_id"],
+            },
+            "handler": analyze_ip_activity,
+        },
+        # Advanced Analytics Tools
+        {
+            "name": "oci:loganalytics:perform_statistical_analysis",
+            "description": "Execute statistical analysis using stats, timestats, and eventstats commands",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "base_query": {"type": "string", "description": "Base query to analyze statistically"},
+                    "statistics_type": {"type": "string", "enum": ["stats", "timestats", "eventstats", "top", "bottom", "frequent", "rare"], "default": "stats"},
+                    "aggregations": {"type": "array", "description": "Statistical functions to apply"},
+                    "group_by": {"type": "array", "description": "Fields to group by"},
+                    "time_interval": {"type": "string", "description": "Time interval for timestats (e.g., '5m', '1h', '1d')"},
+                    "time_range": {"type": "string", "description": "Time range for analysis", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["base_query", "compartment_id"],
+            },
+            "handler": perform_statistical_analysis,
+        },
+        {
+            "name": "oci:loganalytics:perform_advanced_analytics",
+            "description": "Execute advanced analytics queries using OCI Log Analytics specialized commands",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "base_query": {"type": "string", "description": "Base query to analyze (without analytics command)"},
+                    "analytics_type": {"type": "string", "enum": ["cluster", "link", "nlp", "classify", "outlier", "sequence", "geostats", "timecluster"], "default": "cluster"},
+                    "parameters": {"type": "object", "description": "Parameters specific to the analytics type"},
+                    "time_range": {"type": "string", "description": "Time range for analysis", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["base_query", "compartment_id"],
+            },
+            "handler": perform_advanced_analytics,
+        },
+        # Utility Tools
+        {
+            "name": "oci:loganalytics:validate_query",
+            "description": "Validate an OCI Logging Analytics query syntax",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Query to validate"},
+                    "fix": {"type": "boolean", "description": "Attempt to automatically fix common syntax errors", "default": False},
+                },
+                "required": ["query"],
+            },
+            "handler": validate_query,
+        },
+        {
+            "name": "oci:loganalytics:get_documentation",
+            "description": "Get documentation and help for OCI Logging Analytics and Logan queries",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "enum": ["query_syntax", "field_names", "functions", "time_filters", "operators", "mitre_mapping", "examples", "troubleshooting"], "default": "query_syntax"},
+                    "search_term": {"type": "string", "description": "Specific term to search for in documentation"},
+                },
+            },
+            "handler": get_documentation,
+        },
+        {
+            "name": "oci:loganalytics:check_oci_connection",
+            "description": "Check OCI Logging Analytics connection and authentication",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "test_query": {"type": "boolean", "description": "Run a test query to verify connectivity", "default": True},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": check_oci_connection,
+        },
+        # Original tools for backward compatibility
+        {
+            "name": "oci:loganalytics:run-query",
+            "description": "Run a Log Analytics query for a namespace and time range (legacy)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace_name": {"type": "string"},
+                    "query_string": {"type": "string"},
+                    "time_start": {"type": "string", "description": "ISO8601"},
+                    "time_end": {"type": "string", "description": "ISO8601"},
+                    "subsystem": {"type": "string", "description": "Optional subsystem filter"},
+                    "max_total_count": {"type": "integer", "description": "Optional cap on rows"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["namespace_name", "query_string", "time_start", "time_end"],
+            },
+            "handler": run_query_legacy,
+        },
+    ]

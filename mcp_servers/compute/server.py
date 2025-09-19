@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+from mcp_oci_common.session import get_client
 
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations
+from mcp_oci_common.cache import get_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -20,67 +22,85 @@ init_tracing(service_name="oci-mcp-compute")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-compute")
 
+def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str] = None, lifecycle_state: Optional[str] = None):
+    """Internal function to fetch instances from OCI"""
+    config = get_oci_config()
+    if region:
+        config['region'] = region
+    compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
+    compartment = compartment_id or get_compartment_id()
+
+    # Normalize and validate lifecycle_state before calling OCI SDK
+    lifecycle_state_param = None
+    if lifecycle_state:
+        # Handle empty strings or whitespace
+        lifecycle_state = str(lifecycle_state).strip()
+        if lifecycle_state:
+            allowed_states = {"MOVING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING", "STOPPED", "CREATING_IMAGE", "TERMINATING", "TERMINATED"}
+            norm = lifecycle_state.upper()
+            if norm not in allowed_states:
+                raise ValueError(f"Invalid value for lifecycle_state. Allowed: {sorted(list(allowed_states))}")
+            lifecycle_state_param = norm
+
+    # Only pass lifecycle_state if it's not None
+    kwargs = {'compartment_id': compartment}
+    if lifecycle_state_param is not None:
+        kwargs['lifecycle_state'] = lifecycle_state_param
+    response = list_call_get_all_results(compute_client.list_instances, **kwargs)
+    instances = response.data
+    return [{
+        'id': inst.id,
+        'display_name': inst.display_name,
+        'lifecycle_state': inst.lifecycle_state,
+        'shape': inst.shape,
+        'availability_domain': getattr(inst, 'availability_domain', ''),
+        'compartment_id': getattr(inst, 'compartment_id', compartment),
+        'time_created': getattr(inst, 'time_created', '').isoformat() if hasattr(inst, 'time_created') and inst.time_created else ''
+    } for inst in instances]
+
 def list_instances(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None,
-    lifecycle_state: Optional[str] = None
+    lifecycle_state: Optional[str] = None,
+    force_refresh: bool = False
 ) -> List[Dict]:
     with tool_span(tracer, "list_instances", mcp_server="oci-mcp-compute") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        compute_client = oci.core.ComputeClient(config)
-        compartment = compartment_id or get_compartment_id()
-        # Enrich span with backend call metadata (known before call)
+        cache = get_cache()
+
+        # Create params dict for caching
+        params = {
+            'compartment_id': compartment_id,
+            'region': region,
+            'lifecycle_state': lifecycle_state
+        }
+
         try:
-            endpoint = getattr(compute_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Compute",
-            oci_operation="ListInstances",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        # Normalize and validate lifecycle_state before calling OCI SDK
-        lifecycle_state_param = None
-        if lifecycle_state:
-            # Handle empty strings or whitespace
-            lifecycle_state = str(lifecycle_state).strip()
+            # Get cached data or refresh
+            instances = cache.get_or_refresh(
+                server_name="oci-mcp-compute",
+                operation="list_instances",
+                params=params,
+                fetch_func=lambda: _fetch_instances(compartment_id, region, lifecycle_state),
+                force_refresh=force_refresh
+            )
+
+            span.set_attribute("instances.count", len(instances) if instances else 0)
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            if region:
+                span.set_attribute("region", region)
             if lifecycle_state:
-                allowed_states = {"MOVING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING", "STOPPED", "CREATING_IMAGE", "TERMINATING", "TERMINATED"}
-                norm = lifecycle_state.upper()
-                if norm not in allowed_states:
-                    return [{'error': f"Invalid value for lifecycle_state. Allowed: {sorted(list(allowed_states))}"}]
-                lifecycle_state_param = norm
-        try:
-            # Only pass lifecycle_state if it's not None
-            kwargs = {'compartment_id': compartment}
-            if lifecycle_state_param is not None:
-                kwargs['lifecycle_state'] = lifecycle_state_param
-            response = list_call_get_all_results(compute_client.list_instances, **kwargs)
-            req_id = None
-            try:
-                req_id = response.headers.get("opc-request-id")
-            except Exception:
-                pass
-            if req_id:
-                span.set_attribute("oci.request_id", req_id)
-            instances = response.data
-            return [{
-                'id': inst.id,
-                'display_name': inst.display_name,
-                'lifecycle_state': inst.lifecycle_state,
-                'shape': inst.shape,
-                'availability_domain': getattr(inst, 'availability_domain', ''),
-                'compartment_id': getattr(inst, 'compartment_id', compartment),
-                'time_created': getattr(inst, 'time_created', '').isoformat() if hasattr(inst, 'time_created') and inst.time_created else ''
-            } for inst in instances]
+                span.set_attribute("lifecycle_state", lifecycle_state)
+
+            return instances or []
+
+        except ValueError as e:
+            # Handle validation errors (like invalid lifecycle_state)
+            return [{'error': str(e)}]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing instances: {e}")
             span.record_exception(e)
-            return []
+            return [{'error': str(e)}]
 
 def start_instance(instance_id: str) -> Dict:
     with tool_span(tracer, "start_instance", mcp_server="oci-mcp-compute") as span:
@@ -88,7 +108,7 @@ def start_instance(instance_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        compute_client = oci.core.ComputeClient(config)
+        compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(compute_client.base_client, "endpoint", "")
@@ -121,7 +141,7 @@ def stop_instance(instance_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        compute_client = oci.core.ComputeClient(config)
+        compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(compute_client.base_client, "endpoint", "")
@@ -154,7 +174,7 @@ def restart_instance(instance_id: str, hard: bool = False) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        compute_client = oci.core.ComputeClient(config)
+        compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(compute_client.base_client, "endpoint", "")
@@ -198,7 +218,7 @@ def create_instance(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        compute_client = oci.core.ComputeClient(config)
+        compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
         try:
             endpoint = getattr(compute_client.base_client, "endpoint", "")
         except Exception:
@@ -262,7 +282,7 @@ def create_instance(
 def get_instance_metrics(instance_id: str, window: str = "1h") -> Dict:
     with tool_span(tracer, "get_instance_metrics", mcp_server="oci-mcp-compute") as span:
         config = get_oci_config()
-        monitoring_client = oci.monitoring.MonitoringClient(config)
+        monitoring_client = get_client(oci.monitoring.MonitoringClient, region=config.get("region"))
 
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(hours=1) if window == "1h" else end_time - timedelta(days=1)
@@ -311,7 +331,15 @@ def get_instance_metrics(instance_id: str, window: str = "1h") -> Dict:
             span.record_exception(e)
             return {'error': str(e)}
 
+def healthcheck() -> dict:
+    return {"status": "ok", "server": "oci-mcp-compute", "pid": os.getpid()}
+
 tools = [
+    Tool.from_function(
+        fn=healthcheck,
+        name="healthcheck",
+        description="Lightweight readiness/liveness check for the compute server"
+    ),
     Tool.from_function(
         fn=list_instances,
         name="list_instances",

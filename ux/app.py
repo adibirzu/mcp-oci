@@ -98,7 +98,9 @@ def load_mcp_servers():
         'oci-mcp-security': 'mcp_servers.security.server',
         'oci-mcp-observability': 'mcp_servers.observability.server',
         'oci-mcp-cost': 'mcp_servers.cost.server',
-        'oci-mcp-inventory': 'mcp_servers.inventory.server'
+        'oci-mcp-inventory': 'mcp_servers.inventory.server',
+        'oci-mcp-blockstorage': 'mcp_servers.blockstorage.server',
+        'oci-mcp-loadbalancer': 'mcp_servers.loadbalancer.server'
     }
     
     enhanced = []
@@ -179,6 +181,13 @@ def load_mcp_servers():
 @app.get("/")
 async def index(request: Request):
     servers = load_mcp_servers()
+    # Registry/discovery summary (best-effort)
+    registry = {"counts": {}, "suggestions": []}
+    try:
+        from mcp_oci_introspect.server import registry_report
+        registry = registry_report()
+    except Exception:
+        pass
     # Simple relations: assume all connect to OCI via SDK
     relations = "graph TD\nClaude-->MCP\nsubgraph MCP\n" + "\n".join([f"{s['name']}" for s in servers]) + "\nend\nMCP-->OCI\nsubgraph OCI\nSDK\nend"
     for s in servers:
@@ -197,7 +206,8 @@ async def index(request: Request):
     payload = {
         "servers": servers,
         "relations": relations,
-        "observability": obs
+        "observability": obs,
+        "registry": registry,
     }
     if templates is None:
         # Fallback JSON response when jinja2 is unavailable

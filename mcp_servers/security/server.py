@@ -8,6 +8,7 @@ from oci.identity import IdentityClient
 from oci.cloud_guard import CloudGuardClient
 from oci.data_safe import DataSafeClient
 from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes
+from mcp_oci_common.cache import get_cache
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
@@ -23,44 +24,72 @@ logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNIN
 logger = logging.getLogger(__name__)
 
 
-def list_compartments() -> List[Dict[str, Any]]:
-    with tool_span(tracer, "list_compartments", mcp_server="oci-mcp-security") as span:
-        config = get_oci_config()
-        identity_client = IdentityClient(config)
+def _fetch_compartments(parent_compartment_id: Optional[str] = None):
+    """Internal function to fetch compartments from OCI with full hierarchy support"""
+    config = get_oci_config()
+    identity_client = IdentityClient(config)
 
-        # Enrich span with backend call metadata
-        try:
-            endpoint = getattr(identity_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Identity",
-            oci_operation="ListCompartments",
-            region=config.get("region"),
-            endpoint=endpoint,
+    # Always query from tenancy root to get full hierarchy
+    # This ensures we get all compartments regardless of permissions
+    tenancy_id = config.get("tenancy")
+
+    # Use OCI API parameters for full compartment hierarchy
+    kwargs = {
+        'compartment_id': tenancy_id,
+        'lifecycle_state': 'ACTIVE',
+        'sort_by': 'NAME',
+        'sort_order': 'ASC',
+        'access_level': 'ANY',
+        'compartment_id_in_subtree': True
+    }
+
+    logger.info(f"Querying compartments from tenancy root with kwargs: {kwargs}")
+    logger.info(f"Tenancy ID: {tenancy_id}")
+
+    response = list_call_get_all_results(identity_client.list_compartments, **kwargs)
+    compartments = response.data
+    logger.info(f"Found {len(compartments)} compartments from API")
+
+    # Always include the root compartment since list_compartments doesn't include it
+    try:
+        root_compartment = identity_client.get_compartment(compartment_id=tenancy_id).data
+        compartments.append(root_compartment)
+        logger.info(f"Added root compartment: {root_compartment.name if hasattr(root_compartment, 'name') else 'N/A'}")
+    except Exception as e:
+        logger.warning(f"Could not fetch root compartment: {e}")
+
+    logger.info(f"Total compartments after adding root: {len(compartments)}")
+
+    return [{
+        'id': comp.id,
+        'name': comp.name,
+        'description': getattr(comp, 'description', ''),
+        'compartment_id': getattr(comp, 'compartment_id', ''),
+        'lifecycle_state': getattr(comp, 'lifecycle_state', ''),
+        'time_created': getattr(comp, 'time_created', '').isoformat() if hasattr(comp, 'time_created') and comp.time_created else ''
+    } for comp in compartments]
+
+def list_compartments(compartment_id: Optional[str] = None, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    with tool_span(tracer, "list_compartments", mcp_server="oci-mcp-security") as span:
+        cache = get_cache()
+
+        # Get cached data or refresh
+        params = {'parent_compartment_id': compartment_id}
+        all_compartments = cache.get_or_refresh(
+            server_name="oci-mcp-security",
+            operation="list_compartments",
+            params=params,
+            fetch_func=lambda: _fetch_compartments(compartment_id),
+            force_refresh=force_refresh
         )
-        try:
-            response = list_call_get_all_results(identity_client.list_compartments, compartment_id=config.get("tenancy"))
-            try:
-                req_id = response.headers.get("opc-request-id")
-                if req_id:
-                    span.set_attribute("oci.request_id", req_id)
-            except Exception:
-                pass
-            compartments = response.data
-            return [{
-                'id': comp.id,
-                'name': comp.name,
-                'description': getattr(comp, 'description', ''),
-                'compartment_id': getattr(comp, 'compartment_id', ''),
-                'lifecycle_state': getattr(comp, 'lifecycle_state', ''),
-                'time_created': getattr(comp, 'time_created', '').isoformat() if hasattr(comp, 'time_created') and comp.time_created else ''
-            } for comp in compartments]
-        except oci.exceptions.ServiceError as e:
-            logging.error(f"Error listing compartments: {e}")
-            span.record_exception(e)
+
+        if not all_compartments:
             return []
+
+        span.set_attribute("compartments.total", len(all_compartments))
+        if compartment_id:
+            span.set_attribute("parent_compartment", compartment_id)
+        return all_compartments
 
 def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_iam_users", mcp_server="oci-mcp-security") as span:

@@ -239,33 +239,38 @@ def run_loganalytics(*, profile: str | None = None, region: str | None = None, s
             
             log_analytics_client = clients.log_analytics
             
-            # Prepare query details
-            query_details = {
-                "query_string": query_string,
-                "time_start": time_start,
-                "time_end": time_end,
-                "compartment_id": compartment_id
-            }
-            
-            if subsystem:
-                query_details["subsystem"] = subsystem
-            if max_total_count is not None:
-                query_details["max_total_count"] = max_total_count
-            
+            # Prepare query details using correct SDK model
+            time_filter = oci.log_analytics.models.TimeRange(
+                time_start=datetime.fromisoformat(time_start),
+                time_end=datetime.fromisoformat(time_end),
+            )
+            query_details = oci.log_analytics.models.QueryDetails(
+                compartment_id=compartment_id,
+                query_string=query_string,
+                sub_system=(subsystem or oci.log_analytics.models.QueryDetails.SUB_SYSTEM_LOG),
+                max_total_count=max_total_count or limit,
+                time_filter=time_filter,
+                should_include_columns=True,
+                should_include_fields=False,
+                should_include_total_count=True,
+            )
+
             # Use official OCI SDK method pattern
             response = log_analytics_client.query(
                 namespace_name=namespace,
                 query_details=query_details,
-                limit=limit
+                limit=limit,
             )
             
             # Format query results
+            data = response.data
             query_result = {
-                "query_job_id": getattr(response.data, 'query_job_id', None),
-                "query_status": getattr(response.data, 'query_status', None),
-                "results": getattr(response.data, 'results', []),
-                "columns": getattr(response.data, 'columns', []),
-                "next_page": getattr(response.data, 'opc_next_page', None)
+                "query_job_id": getattr(data, 'query_job_id', None),
+                "query_status": getattr(data, 'query_status', None),
+                "results": getattr(data, 'results', []) or [],
+                "columns": getattr(data, 'columns', []) or [],
+                "total_count": getattr(data, 'total_count', None),
+                "next_page": getattr(response, 'opc_next_page', None)
             }
             
             result = OCIResponse(

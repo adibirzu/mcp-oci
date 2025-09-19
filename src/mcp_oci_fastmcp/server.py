@@ -45,6 +45,9 @@ MAX_STRING = 10000
 MAX_DEPTH = 10
 CACHE_TTL = 300  # 5 minutes
 
+# Feature flags
+ENABLE_LOGAN = os.getenv("MCP_OCI_ENABLE_FASTMCP_LOGAN", "0").lower() in ("1", "true", "yes", "on")
+
 # ================================ CORE CLASSES ================================
 
 @dataclass
@@ -288,14 +291,16 @@ def get_log_analytics_namespace() -> str:
 
 # ================================ ENHANCED LOG ANALYTICS TOOLS ================================
 
-@app.tool()
-async def execute_logan_query(
-    query: str,
-    compartment_id: str | None = None,
-    query_name: str | None = None,
-    time_range: str = "24h",
-    max_count: int = 1000
-) -> str:
+if ENABLE_LOGAN:
+
+    @app.tool()
+    async def execute_logan_query(
+        query: str,
+        compartment_id: str | None = None,
+        query_name: str | None = None,
+        time_range: str = "24h",
+        max_count: int = 1000
+    ) -> str:
     """Execute a Log Analytics query with enhanced security analysis capabilities."""
     try:
         # Use root compartment if not specified
@@ -316,17 +321,31 @@ async def execute_logan_query(
         
         log_analytics_client = clients.log_analytics
         
+        # Build proper QueryDetails payload (SDK requires model or camelCase dict)
+        time_filter = oci.log_analytics.models.TimeRange(
+            time_start=(datetime.now(timezone.utc) - timedelta(minutes=time_period_minutes)),
+            time_end=datetime.now(timezone.utc)
+        )
+        query_details = oci.log_analytics.models.QueryDetails(
+            compartment_id=compartment_id,
+            query_string=query,
+            sub_system=oci.log_analytics.models.QueryDetails.SUB_SYSTEM_LOG,
+            max_total_count=max_count,
+            time_filter=time_filter,
+            should_include_columns=True,
+            should_include_fields=False,
+            should_include_total_count=True,
+        )
+
         # Execute the query
         response = log_analytics_client.query(
             namespace_name=namespace,
-            query=query,
-            time_start=(datetime.now(timezone.utc) - timedelta(minutes=time_period_minutes)).isoformat(),
-            time_end=datetime.now(timezone.utc).isoformat(),
-            max_total_count=max_count
+            query_details=query_details,
+            limit=max_count,
         )
         
         results = []
-        for item in response.data.results:
+        for item in getattr(response.data, 'results', []) or []:
             results.append({
                 "timestamp": getattr(item, "Datetime", getattr(item, "Time", "")),
                 "log_source": getattr(item, "Log Source", ""),
@@ -350,14 +369,14 @@ async def execute_logan_query(
         result = handle_oci_error(e, "execute_logan_query", "log_analytics")
         return json.dumps(result.__dict__)
 
-@app.tool()
-async def search_security_events(
-    search_term: str,
-    compartment_id: str | None = None,
-    event_type: str = "all",
-    time_range: str = "24h",
-    limit: int = 100
-) -> str:
+    @app.tool()
+    async def search_security_events(
+        search_term: str,
+        compartment_id: str | None = None,
+        event_type: str = "all",
+        time_range: str = "24h",
+        limit: int = 100
+    ) -> str:
     """Search for security events using natural language or predefined patterns."""
     try:
         # Use root compartment if not specified
@@ -575,15 +594,15 @@ async def analyze_ip_activity(
         result = handle_oci_error(e, "analyze_ip_activity", "log_analytics")
         return json.dumps(result.__dict__)
 
-# ================================ ROBUST LOG ANALYTICS TOOLS ================================
+    # ================================ ROBUST LOG ANALYTICS TOOLS ================================
 
-@app.tool()
-async def execute_logan_query_robust(
-    query: str,
-    compartment_id: str | None = None,
-    time_range: str = "24h",
-    max_count: int = 1000
-) -> str:
+    @app.tool()
+    async def execute_logan_query_robust(
+        query: str,
+        compartment_id: str | None = None,
+        time_range: str = "24h",
+        max_count: int = 1000
+    ) -> str:
     """Execute Log Analytics queries with optimized performance and fast connection."""
     try:
         # Use root compartment if not specified
@@ -623,11 +642,11 @@ async def execute_logan_query_robust(
             "error": str(e)
         })
 
-@app.tool()
-async def list_log_sources_robust(
-    compartment_id: str | None = None,
-    limit: int = 100
-) -> str:
+    @app.tool()
+    async def list_log_sources_robust(
+        compartment_id: str | None = None,
+        limit: int = 100
+    ) -> str:
     """List Log Analytics sources with optimized performance."""
     try:
         # Use root compartment if not specified
@@ -665,11 +684,11 @@ async def list_log_sources_robust(
             "error": str(e)
         })
 
-@app.tool()
-async def get_log_sources_last_days(
-    compartment_id: str | None = None,
-    days: int = 5
-) -> str:
+    @app.tool()
+    async def get_log_sources_last_days(
+        compartment_id: str | None = None,
+        days: int = 5
+    ) -> str:
     """Get log sources with activity from the last N days."""
     try:
         # Use root compartment if not specified
@@ -708,10 +727,10 @@ async def get_log_sources_last_days(
             "error": str(e)
         })
 
-@app.tool()
-async def test_logan_connection_robust(
-    compartment_id: str | None = None
-) -> str:
+    @app.tool()
+    async def test_logan_connection_robust(
+        compartment_id: str | None = None
+    ) -> str:
     """Test Log Analytics connection with robust client."""
     try:
         # Use root compartment if not specified
@@ -754,13 +773,13 @@ async def test_logan_connection_robust(
 
 # ================================ FAST LOG ANALYTICS TOOLS ================================
 
-@app.tool()
-async def execute_logan_query_fast(
-    query: str,
-    compartment_id: str | None = None,
-    time_range: str = "24h",
-    max_count: int = 1000
-) -> str:
+    @app.tool()
+    async def execute_logan_query_fast(
+        query: str,
+        compartment_id: str | None = None,
+        time_range: str = "24h",
+        max_count: int = 1000
+    ) -> str:
     """Execute Log Analytics queries with optimized performance and fast connection."""
     try:
         # Use root compartment if not specified
@@ -797,11 +816,11 @@ async def execute_logan_query_fast(
             "error": str(e)
         })
 
-@app.tool()
-async def list_log_sources_fast(
-    compartment_id: str | None = None,
-    limit: int = 100
-) -> str:
+    @app.tool()
+    async def list_log_sources_fast(
+        compartment_id: str | None = None,
+        limit: int = 100
+    ) -> str:
     """List Log Analytics sources with optimized performance."""
     try:
         # Use root compartment if not specified
@@ -836,11 +855,11 @@ async def list_log_sources_fast(
             "error": str(e)
         })
 
-@app.tool()
-async def get_log_sources_last_days_fast(
-    compartment_id: str | None = None,
-    days: int = 5
-) -> str:
+    @app.tool()
+    async def get_log_sources_last_days_fast(
+        compartment_id: str | None = None,
+        days: int = 5
+    ) -> str:
     """Get log sources with activity from the last N days using fast client."""
     try:
         # Use root compartment if not specified
@@ -876,10 +895,10 @@ async def get_log_sources_last_days_fast(
             "error": str(e)
         })
 
-@app.tool()
-async def test_logan_connection_fast(
-    compartment_id: str | None = None
-) -> str:
+    @app.tool()
+    async def test_logan_connection_fast(
+        compartment_id: str | None = None
+    ) -> str:
     """Test Log Analytics connection with fast client."""
     try:
         # Use root compartment if not specified
@@ -1057,13 +1076,14 @@ async def list_compute_instances(
         result = handle_oci_error(e, "list_compute_instances", "compute")
         return json.dumps(result.__dict__)
 
-@app.tool()
-async def list_log_analytics_sources(
-    compartment_id: str | None = None,
-    display_name: str | None = None,
-    is_system: bool | None = None,
-    limit: int = 50
-) -> str:
+if ENABLE_LOGAN:
+    @app.tool()
+    async def list_log_analytics_sources(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        is_system: bool | None = None,
+        limit: int = 50
+    ) -> str:
     """List Log Analytics sources using official OCI SDK patterns."""
     try:
         # Use root compartment if not specified
@@ -1114,12 +1134,12 @@ async def list_log_analytics_sources(
         result = handle_oci_error(e, "list_log_analytics_sources", "log_analytics")
         return json.dumps(result.__dict__)
 
-@app.tool()
-async def list_log_analytics_groups(
-    compartment_id: str | None = None,
-    display_name: str | None = None,
-    limit: int = 50
-) -> str:
+    @app.tool()
+    async def list_log_analytics_groups(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        limit: int = 50
+    ) -> str:
     """List Log Analytics log groups using official OCI SDK patterns."""
     try:
         # Use root compartment if not specified
@@ -1168,14 +1188,14 @@ async def list_log_analytics_groups(
         result = handle_oci_error(e, "list_log_analytics_groups", "log_analytics")
         return json.dumps(result.__dict__)
 
-@app.tool()
-async def list_log_analytics_entities(
-    compartment_id: str | None = None,
-    display_name: str | None = None,
-    entity_type: str | None = None,
-    lifecycle_state: str | None = None,
-    limit: int = 50
-) -> str:
+    @app.tool()
+    async def list_log_analytics_entities(
+        compartment_id: str | None = None,
+        display_name: str | None = None,
+        entity_type: str | None = None,
+        lifecycle_state: str | None = None,
+        limit: int = 50
+    ) -> str:
     """List Log Analytics entities using official OCI SDK patterns."""
     try:
         # Use root compartment if not specified

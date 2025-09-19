@@ -28,29 +28,46 @@ class StdioServer:
 
     # ---------------- IO helpers -----------------
     def _read_message(self) -> Json | None:
-        # Try LSP-style framing first
-        header = ""
-        length = 0
+        # Robust reader supporting LSP framing and newline-delimited JSON
         while True:
+            # Try LSP-style framing first
+            header = ""
+            length = 0
+            while True:
+                line = sys.stdin.readline()
+                if not line:
+                    return None
+                if line.strip() == "":
+                    break
+                header += line
+                if line.lower().startswith("content-length:"):
+                    try:
+                        length = int(line.split(":", 1)[1].strip())
+                    except Exception:
+                        length = 0
+            if header:
+                body = sys.stdin.read(length) if length else ""
+                if not body:
+                    # Skip empty frames instead of disconnecting
+                    self._log("WARN", "Empty LSP frame received; skipping")
+                    continue
+                try:
+                    return json.loads(body)
+                except Exception:
+                    self._log("WARN", "Malformed JSON in LSP frame; skipping")
+                    continue
+            # Fallback: newline-delimited JSON
             line = sys.stdin.readline()
             if not line:
                 return None
-            if line.strip() == "":
-                break
-            header += line
-            if line.lower().startswith("content-length:"):
-                try:
-                    length = int(line.split(":", 1)[1].strip())
-                except Exception:
-                    length = 0
-        if header:
-            body = sys.stdin.read(length) if length else ""
-            return json.loads(body) if body else None
-        # Fallback: newline-delimited JSON
-        line = sys.stdin.readline()
-        if not line:
-            return None
-        return json.loads(line)
+            if not line.strip():
+                # skip empty lines
+                continue
+            try:
+                return json.loads(line)
+            except Exception:
+                self._log("WARN", "Malformed JSON line; skipping")
+                continue
 
     def _write(self, obj: Json) -> None:
         data = json.dumps(obj, separators=(",", ":"))

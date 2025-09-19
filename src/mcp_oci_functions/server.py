@@ -5,6 +5,8 @@ from typing import Any
 
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -103,6 +105,8 @@ def list_applications(compartment_id: str, display_name: str | None = None, limi
                       page: str | None = None, profile: str | None = None,
                       region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
+    registry = get_registry()
     kwargs: dict[str, Any] = {}
     if display_name:
         kwargs["display_name"] = display_name
@@ -110,10 +114,23 @@ def list_applications(compartment_id: str, display_name: str | None = None, limi
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "display_name": display_name, "limit": limit, "page": page}
+    cached = cache.get("functions", "list_applications", cache_params)
+    if cached:
+        return cached
     resp = client.list_applications(compartment_id=compartment_id, **kwargs)
     items = [a.__dict__ for a in getattr(resp, "data", [])]
+    if items:
+        try:
+            registry.update_applications(compartment_id, items)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_FUNCTIONS", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("functions", "list_applications", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
 def list_functions(application_id: str, display_name: str | None = None, limit: int | None = None,

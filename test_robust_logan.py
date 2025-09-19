@@ -103,7 +103,8 @@ if __name__ == "__main__":
     if _os.getenv("RUN_LOGAN_TEST", "0").lower() in ("1", "true", "yes", "on"):
         test_robust_logan()
     else:
-        print("Proxying to oci-mcp-cost server (set RUN_LOGAN_TEST=1 to run this test).")
+        # When used as MCP server, don't print anything that could interfere with JSON protocol
+        # Just proxy to the cost server silently
         ROOT = _os.path.abspath(_os.path.dirname(__file__))
         if ROOT not in _sys.path:
             _sys.path.insert(0, ROOT)

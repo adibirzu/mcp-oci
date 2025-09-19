@@ -8,6 +8,8 @@ from typing import Any
 
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -260,21 +262,28 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
                    max_items: int | None = None,
                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
+    registry = get_registry()
     # Resolve root compartment (tenancy) if not provided
     root_compartment: str | None = compartment_id
     if root_compartment is None:
         try:
-            from mcp_oci_common import get_config  # type: ignore
-            cfg = get_config(profile=profile, region=region)
+            from mcp_oci_common import get_oci_config  # type: ignore
+            cfg = get_oci_config(profile_name=profile)
+            if region:
+                cfg["region"] = region
             root_compartment = cfg.get("tenancy")
         except Exception:
             root_compartment = None
     if not root_compartment:
         raise ValueError("compartment_id is required (no default tenancy found)")
 
-    # Optional: resolve compartment by name
+    # Optional: resolve compartment by name using registry first; fall back to IAM only once
     if compartment_name and not compartment_id:
-        resolved = _resolve_compartment_by_name(compartment_name, root_compartment, include_subtree, profile, region)
+        resolved = registry.resolve_compartment(compartment_name)
+        if not resolved:
+            _build_compartment_registry(root_compartment, include_subtree, profile, region)
+            resolved = registry.resolve_compartment(compartment_name)
         if resolved:
             root_compartment = resolved
 
@@ -307,6 +316,27 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
             # Fallback silently to just root compartment
             pass
 
+    # Check aggregated cache for this query to avoid backend calls
+    _cache_params = {
+        "root_compartment": root_compartment,
+        "include_subtree": include_subtree,
+        "availability_domain": availability_domain,
+        "lifecycle_state": lifecycle_state,
+        "display_name": display_name,
+        "display_name_contains": display_name_contains,
+        "shape": shape,
+        "time_created_after": time_created_after,
+        "time_created_before": time_created_before,
+        "freeform_tags": freeform_tags or {},
+        "defined_tags": defined_tags or {},
+        "limit": limit,
+        "page": page,
+        "max_items": max_items,
+    }
+    _cached = cache.get("compute", "list_instances_v2", _cache_params)
+    if _cached:
+        return _cached
+
     # Collect instances across compartments
     all_items: list[dict[str, Any]] = []
     total_cap = max_items or 500
@@ -335,6 +365,12 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
                     freeform_tags=freeform_tags,
                     defined_tags=defined_tags,
                 )]
+            # Index instances for fast name->ocid resolution
+            if items:
+                try:
+                    registry.update_instances(comp_id, items)
+                except Exception:
+                    pass
             all_items.extend(items)
             if len(all_items) >= total_cap:
                 all_items = all_items[:total_cap]
@@ -366,6 +402,13 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
                 "lifecycle_state",
             ],
         }
+    # Save aggregated result to cache (TTL uses global default)
+    try:
+        import os
+        ttl = int(os.getenv("MCP_CACHE_TTL_COMPUTE", os.getenv("MCP_CACHE_TTL", "3600")))
+        cache.set("compute", "list_instances_v2", _cache_params, result, ttl_seconds=ttl)
+    except Exception:
+        pass
     return result
 
 
@@ -603,6 +646,44 @@ def _resolve_compartment_by_name(name: str, root_compartment: str, include_subtr
     except Exception:
         return None
     return None
+
+
+def _build_compartment_registry(root_compartment: str, include_subtree: bool,
+                                profile: str | None, region: str | None) -> None:
+    """Populate global compartment name->OCID mapping. Safe no-op if already populated."""
+    from mcp_oci_common.name_registry import get_registry as _get_reg
+    reg = _get_reg()
+    if reg.compartments_by_name:
+        return
+    try:
+        if oci is None:
+            return
+        from mcp_oci_common import make_client as _make
+        iam = _make(oci.identity.IdentityClient, profile=profile, region=region)
+        nextp: str | None = None
+        items: list[dict] = []
+        while True:
+            kwargs_comp: dict[str, Any] = {
+                "compartment_id": root_compartment,
+                "compartment_id_in_subtree": include_subtree,
+                "access_level": "ANY",
+            }
+            if nextp:
+                kwargs_comp["page"] = nextp
+            respc = iam.list_compartments(**kwargs_comp)
+            for c in getattr(respc, "data", []) or []:
+                items.append({
+                    "id": getattr(c, "id", None),
+                    "name": getattr(c, "name", None),
+                })
+            nextp = getattr(respc, "opc_next_page", None)
+            if not nextp:
+                break
+        # Include root
+        items.append({"id": root_compartment, "name": "tenancy"})
+        reg.update_compartments(items)
+    except Exception:
+        return
 
 
 def _parse_iso8601(ts: str | None) -> datetime | None:

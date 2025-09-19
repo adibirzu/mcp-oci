@@ -7,6 +7,8 @@ from typing import Any
 
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -148,15 +150,32 @@ def list_buckets(namespace_name: str, compartment_id: str, limit: int | None = N
                  page: str | None = None, profile: str | None = None,
                  region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
+    registry = get_registry()
     kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"namespace_name": namespace_name, "compartment_id": compartment_id, "limit": limit, "page": page}
+    cached = cache.get("objectstorage", "list_buckets", cache_params)
+    if cached:
+        return cached
     resp = client.list_buckets(namespace_name=namespace_name, compartment_id=compartment_id, **kwargs)
     items = [b.__dict__ for b in getattr(resp, "data", [])]
+    # Optional: record bucket names under applications_by_name map keyed by compartment
+    if items:
+        try:
+            # Reuse applications_by_name as a generic name store for bucket names
+            registry.update_applications(compartment_id, [{"id": f"bucket://{namespace_name}/{b.get('name')}", "display_name": b.get('name')} for b in items])
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_OBJECTSTORAGE", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("objectstorage", "list_buckets", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
 def get_namespace(compartment_id: str | None = None, profile: str | None = None,

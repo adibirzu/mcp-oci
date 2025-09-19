@@ -1,7 +1,7 @@
 # OCI MCP Servers - Architecture & Operations Guide
 
-Last Updated: September 17, 2025  
-Version: 2.1  
+Last Updated: September 18, 2025
+Version: 2.2
 Status: Production Ready
 
 ## System Overview
@@ -175,6 +175,8 @@ mcp.json (clients):
   { "name": "oci-mcp-db", ... },
   { "name": "oci-mcp-network", ... },
   { "name": "oci-mcp-security", ... },
+  { "name": "oci-mcp-blockstorage", ... },
+  { "name": "oci-mcp-loadbalancer", ... },
   { "name": "oci-mcp-observability", ... },
   { "name": "oci-mcp-cost", ... },
   { "name": "oci-mcp-inventory", ... }
@@ -257,6 +259,17 @@ ORACLE_SDK_PATH=oci-python-sdk ./scripts/vendor_oracle_examples.sh
 - Use pytest for local runs, mock OCI where necessary
 
 ## Change Log (Highlights)
+
+2.2 (2025-09-18)
+- Added infrastructure creation capabilities with ALLOW_MUTATIONS safety controls
+- Added oci-mcp-blockstorage server with list_volumes and create_volume tools
+- Added oci-mcp-loadbalancer server with list_load_balancers and create_load_balancer tools
+- Enhanced oci-mcp-network with create_vcn and create_subnet tools
+- Enhanced oci-mcp-compute with create_instance tool (SSH key injection support)
+- Updated Claude Desktop configuration script with all new servers
+- Fixed UX relations diagram to dynamically update with new servers and tools
+- Enhanced server descriptions and documentation with creation capabilities
+- All creation tools include comprehensive error handling and OCI tracing
 
 2.1 (2025-09-17)
 - Added oci-mcp-inventory server (ShowOCI), diff-first responses, env defaults

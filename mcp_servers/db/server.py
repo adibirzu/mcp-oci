@@ -8,6 +8,7 @@ from fastmcp.tools import Tool
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+from mcp_oci_common.session import get_client
 
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations
 
@@ -28,7 +29,7 @@ def list_autonomous_databases(
         config = get_oci_config()
         if region:
             config['region'] = region
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
@@ -71,7 +72,7 @@ def list_db_systems(
         config = get_oci_config()
         if region:
             config['region'] = region
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
@@ -112,7 +113,7 @@ def start_db_system(db_system_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -144,7 +145,7 @@ def stop_db_system(db_system_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -176,7 +177,7 @@ def restart_db_system(db_system_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -208,7 +209,7 @@ def start_autonomous_database(db_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -240,7 +241,7 @@ def stop_autonomous_database(db_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -272,7 +273,7 @@ def restart_autonomous_database(db_id: str) -> Dict:
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
         
         config = get_oci_config()
-        database_client = oci.database.DatabaseClient(config)
+        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
             endpoint = getattr(database_client.base_client, "endpoint", "")
         except Exception:
@@ -301,7 +302,7 @@ def restart_autonomous_database(db_id: str) -> Dict:
 def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
     with tool_span(tracer, "get_db_cpu_snapshot", mcp_server="oci-mcp-db") as span:
         config = get_oci_config()
-        monitoring_client = oci.monitoring.MonitoringClient(config)
+        monitoring_client = get_client(oci.monitoring.MonitoringClient, region=config.get("region"))
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(monitoring_client.base_client, "endpoint", "")
@@ -349,7 +350,15 @@ def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
             logging.error(f"Error getting DB metrics: {e}")
             return {'error': str(e)}
 
+def healthcheck() -> dict:
+    return {"status": "ok", "server": "oci-mcp-db", "pid": os.getpid()}
+
 tools = [
+    Tool.from_function(
+        fn=healthcheck,
+        name="healthcheck",
+        description="Lightweight readiness/liveness check for the database server"
+    ),
     Tool.from_function(
         fn=list_autonomous_databases,
         name="list_autonomous_databases",
