@@ -5,6 +5,8 @@ from typing import Any
 
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -92,6 +94,8 @@ def list_clusters(compartment_id: str, name: str | None = None, lifecycle_state:
                   limit: int | None = None, page: str | None = None,
                   profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
+    registry = get_registry()
     kwargs: dict[str, Any] = {}
     if name:
         kwargs["name"] = name
@@ -101,10 +105,23 @@ def list_clusters(compartment_id: str, name: str | None = None, lifecycle_state:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "name": name, "lifecycle_state": lifecycle_state, "limit": limit, "page": page}
+    cached = cache.get("oke", "list_clusters", cache_params)
+    if cached:
+        return cached
     resp = client.list_clusters(compartment_id=compartment_id, **kwargs)
     items = [c.__dict__ for c in getattr(resp, "data", [])]
+    if items:
+        try:
+            registry.update_clusters(compartment_id, items)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_OKE", os.getenv("MCP_CACHE_TTL", "1200")))
+    cache.set("oke", "list_clusters", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
 def get_cluster(cluster_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
@@ -125,6 +142,7 @@ def list_node_pools(compartment_id: str, cluster_id: str, name: str | None = Non
                     lifecycle_state: str | None = None, limit: int | None = None, page: str | None = None,
                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
+    cache = get_cache()
     kwargs: dict[str, Any] = {"cluster_id": cluster_id}
     if name:
         kwargs["name"] = name
@@ -134,7 +152,15 @@ def list_node_pools(compartment_id: str, cluster_id: str, name: str | None = Non
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "cluster_id": cluster_id, "name": name, "lifecycle_state": lifecycle_state, "limit": limit, "page": page}
+    cached = cache.get("oke", "list_node_pools", cache_params)
+    if cached:
+        return cached
     resp = client.list_node_pools(compartment_id=compartment_id, **kwargs)
     items = [np.__dict__ for np in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_OKE", os.getenv("MCP_CACHE_TTL", "1200")))
+    cache.set("oke", "list_node_pools", cache_params, out, ttl_seconds=ttl)
+    return out

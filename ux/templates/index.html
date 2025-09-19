@@ -44,5 +44,24 @@
         {% endfor %}
     </details>
     {% endfor %}
+
+    <section class="discovery">
+        <h2>Discovery & Registry</h2>
+        <p>The registry stores name→OCID mappings for compartments, VCNs, subnets, instances, users, and more. It is populated by list operations and reduces API calls for subsequent name-based requests.</p>
+        <h3>Coverage</h3>
+        <pre>{{ registry.counts | tojson(indent=2) }}</pre>
+        {% if registry.suggestions %}
+        <h3>Suggestions</h3>
+        <ul>
+            {% for s in registry.suggestions %}<li>{{ s }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        <h3>Shortcuts</h3>
+        <ul>
+            <li>Inventory: list_all_discovery — aggregated VCNs, subnets, NSGs, instances, load balancers, Functions apps, Streams</li>
+            <li>Inventory: list_streams_inventory, list_functions_applications_inventory, list_security_lists_inventory, list_load_balancers_inventory</li>
+            <li>Introspect: mcp:warm:services, mcp:warm:compartment, mcp:registry:dump, mcp:registry:resolve</li>
+        </ul>
+    </section>
 </body>
 </html>
