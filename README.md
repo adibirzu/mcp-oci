@@ -11,7 +11,18 @@ Key features:
 - Tunable cache TTLs per service; secrets are never committed (see .gitignore).
 
 ## Installation
-Option A (one-shot):
+From GitHub:
+```
+git clone https://github.com/<org>/<repo>.git
+cd <repo>
+```
+
+Copy environment template and edit:
+```
+cp .env.sample .env   # then edit to set COMPARTMENT_OCID, etc.
+```
+
+Option A (one‑shot):
 ```
 scripts/deploy.sh
 ```
@@ -25,6 +36,12 @@ pip install -e .[dev]
 make lint
 make test
 ```
+
+Prerequisites:
+- Python 3.10+ with venv
+- git
+- OCI config at `~/.oci/config` with a working profile (DEFAULT by default)
+- On Linux, ensure `build-essential` (or equivalent) for any native deps
 
 ## Configuration
 Set OCI credentials in `~/.oci/config`. Optionally set defaults:
@@ -66,6 +83,87 @@ Alternatively, use the launcher script for all:
 ```
 scripts/mcp-launchers/start-mcp-server.sh all
 ```
+
+### One‑Shot AIOps Deploy (Web3 UX + DB)
+
+End‑to‑end setup that provisions Autonomous JSON DB (optional), creates tables, populates data from MCP, warms caches/registry, and starts both the consolidated Observability MCP server and the Web3 UX on port 8080:
+
+```
+scripts/deploy_full_aiops.sh
+```
+
+Environment variables (examples) for DB wallet and optional Agents proxy:
+
+- ORACLE_DB_USER=ADMIN
+- ORACLE_DB_PASSWORD=ChangeMe123!
+- ORACLE_DB_SERVICE=<adb_service_name>  # e.g., abcd1234_high
+- ORACLE_DB_WALLET_ZIP=/path/to/Wallet_MyADB.zip
+- ORACLE_DB_WALLET_PASSWORD=ChangeMe123!
+- COMPARTMENT_OCID=ocid1.tenancy.oc1..xxxx  # used to scope provisioning/discovery
+- GAI_AGENT_ENDPOINT=http://localhost:8088/agents/chat  # optional, Java service proxy
+- GAI_AGENT_API_KEY=...  # optional
+
+After it completes:
+
+- Observability MCP server logs: `logs/observability.log`
+- Web3 UX: http://localhost:8080 (Redwood‑styled SPA with Discovery, Relations, Costs, FinOps AI, DB Sync)
+  - If 8080 is busy, set `WEB3_UX_PORT=8081 scripts/deploy_full_aiops.sh` and open http://localhost:8081
+
+Notes:
+- Works on macOS and Linux. No hard‑coded paths; Python executables are detected dynamically.
+- DB features are optional. If DB envs are not set, the app still starts; DB endpoints will return guidance.
+- For provisioning AJD from the script, set both `COMPARTMENT_OCID` and `ADMIN_PASSWORD`.
+
+### Linux Prerequisites
+- Python 3.10+ and venv available (`python3 -m venv`)
+- Ability to create processes (for background servers)
+- Network access to install pip dependencies (first run)
+
+### Stopping services
+```
+kill $(cat logs/observability.pid) || true
+kill $(cat logs/web3_ux.pid) || true
+```
+
+### Web3 UX Integrations
+- Discovery/Capacity require a compartment OCID. Either:
+  - set `COMPARTMENT_OCID` in your environment (recommended), or
+  - enter a compartment OCID in the UI inputs, or
+  - pass `?compartment_id=...` to the API endpoints.
+- Costs/ShowUsage/ShowOCI read your `~/.oci/config` profile; set `OCI_PROFILE` and `OCI_REGION` if needed.
+- If DB envs are not configured, DB endpoints will return a helpful error. Configure wallet/DSN to enable DB features.
+
+### Troubleshooting
+- Import errors in Web3 UX endpoints: ensure you launched from the repo root or via the deploy script (the app auto-adds repo `src` to `PYTHONPATH`).
+- Missing compartmentId errors: set `COMPARTMENT_OCID` or supply `compartment_id` to endpoints/UI.
+- Port already in use: set `WEB3_UX_PORT` when running the deploy script or starting `web3_ux/server.py`.
+
+### First‑Run Experience (from GitHub)
+- If `.env` is missing, the deploy script offers to create it interactively. Defaults include:
+  - `OCI_PROFILE=DEFAULT`
+  - `OCI_REGION=eu-frankfurt-1`
+  - `COMPARTMENT_OCID=ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq` (you can change it)
+  - `ALLOW_MUTATIONS=false`
+- If the OCI CLI is not installed, the script offers to install it (`brew install oci-cli` or Oracle’s install.sh via curl).
+- If `~/.oci/config` is missing, you’ll be prompted to run `oci setup config` interactively to generate it.
+
+### Generative AI Agents (OCI mode)
+- MCP server `oci-mcp-agents` uses OCI SDK for Generative AI Agents with your profile/region/compartment:
+  - Set `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID` in `.env`.
+  - Default `GAI_MODE=oci` (no proxy required). Tools: `list_agents`, `create_agent`, `get_agent`, `update_agent`, `delete_agent`.
+- Optional legacy proxy mode: set `GAI_MODE=proxy` and configure `GAI_ADMIN_ENDPOINT`/`GAI_AGENT_ENDPOINT` (used for admin/chat REST if you already have a Java service).
+- Web3 UX → Agents tab integrates with the MCP server to create/list/update/delete agents; “Test” uses proxy mode if configured.
+
+#### Endpoints & Knowledge Bases & Data Sources
+- Endpoints (OCI): `create_agent_endpoint`, `list_agent_endpoints`, `get_agent_endpoint`, `update_agent_endpoint`, `delete_agent_endpoint`.
+- Knowledge Bases (OCI): `create_knowledge_base`, `list_knowledge_bases`, `get_knowledge_base`, `update_knowledge_base`, `delete_knowledge_base`.
+- Data Sources (OCI): `create_data_source` (Object Storage prefixes), `list_data_sources`, `get_data_source`, `update_data_source`, `delete_data_source`.
+- Web3 UX panels added for KBs, Data Sources, and Endpoints under the corresponding tabs.
+
+### Metrics, Traces, Pyroscope
+- All MCP servers initialize OpenTelemetry tracing and metrics. Many start a Prometheus metrics endpoint via `prometheus_client` with `METRICS_PORT`.
+- Web3 UX also exposes Prometheus metrics (set `METRICS_PORT`, default 8012) and instruments FastAPI with OpenTelemetry.
+- Optional Pyroscope profiling across servers: set `ENABLE_PYROSCOPE=true`, and configure `PYROSCOPE_SERVER_ADDRESS`, `PYROSCOPE_APP_NAME`, `PYROSCOPE_SAMPLE_RATE`.
 
 ### Adding to Claude Desktop / Cline
 

@@ -64,7 +64,7 @@
     "args": [],
     "cwd": "${PWD}",
     "env": {
-      "PYTHONPATH": "/Users/abirzu/dev/mcp-oci/src:/Users/abirzu/dev/mcp-oci",
+      "PYTHONPATH": "${PWD}/src:${PWD}",
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
@@ -76,7 +76,7 @@
     "name": "oci-mcp-cost",
     "command": ["python", "mcp_servers/cost/server.py"],
     "args": [],
-    "cwd": "/Users/abirzu/dev/mcp-oci",
+    "cwd": "${PWD}",
     "env": {
       "PYTHONPATH": "${PWD}/src:${PWD}",
       "OCI_PROFILE": "${OCI_PROFILE}",
@@ -121,14 +121,28 @@
     "name": "oci-mcp-loadbalancer",
     "command": ["python", "mcp_servers/loadbalancer/server.py"],
     "args": [],
-    "cwd": "/Users/abirzu/dev/mcp-oci",
+    "cwd": "${PWD}",
     "env": {
-      "PYTHONPATH": "/Users/abirzu/dev/mcp-oci/src:/Users/abirzu/dev/mcp-oci",
+      "PYTHONPATH": "${PWD}/src:${PWD}",
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
       "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
       "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-agents",
+    "command": ["python", "mcp_servers/agents/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "GAI_ADMIN_ENDPOINT": "${GAI_ADMIN_ENDPOINT}",
+      "GAI_AGENT_ENDPOINT": "${GAI_AGENT_ENDPOINT}",
+      "GAI_AGENT_API_KEY": "${GAI_AGENT_API_KEY}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
     },
     "transport": "stdio"
   }

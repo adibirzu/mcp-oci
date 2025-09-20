@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import subprocess
 import json
@@ -50,7 +51,13 @@ def run_showoci(
         cfg_profile = profile or os.getenv("OCI_PROFILE")
         cfg_regions = regions or ([os.getenv("OCI_REGION")] if os.getenv("OCI_REGION") else None)
         cfg_compartments = compartments or ([os.getenv("COMPARTMENT_OCID")] if os.getenv("COMPARTMENT_OCID") else None)
-        cmd_base = ["python", "third_party/oci-python-sdk/examples/showoci/showoci.py"]
+        # Resolve showoci script path robustly relative to repo root
+        here = os.path.abspath(__file__)
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+        showoci_py = os.path.join(repo_root, "third_party", "oci-python-sdk", "examples", "showoci", "showoci.py")
+        if not os.path.exists(showoci_py):
+            showoci_py = os.path.join(os.getcwd(), "third_party", "oci-python-sdk", "examples", "showoci", "showoci.py")
+        cmd_base = [sys.executable or "python", showoci_py]
         config_path = os.path.expanduser("~/.oci/config")
         # Enrich span attributes for observability
         try:
@@ -75,7 +82,8 @@ def run_showoci(
 
         def fetch_func():
             # Build command dynamically at fetch time
-            cmd = list(cmd_base)
+            py = sys.executable or os.getenv("PY") or "python"
+            cmd = [py] + cmd_base[1:]
             if cfg_profile:
                 cmd.extend(["--config-file", config_path, "--profile", cfg_profile])
             if cfg_regions:
@@ -231,8 +239,8 @@ def generate_compute_capacity_report(
             tenancy_client = oci.identity.IdentityClient(config)
             network_client = oci.core.VirtualNetworkClient(config)
 
-            # Get compartment details
-            target_compartment = compartment_id or os.getenv('COMPARTMENT_OCID')
+            # Get compartment details (fall back to tenancy OCID)
+            target_compartment = compartment_id or os.getenv('COMPARTMENT_OCID') or config.get('tenancy')
 
             # Fetch compute instances
             instances = []
