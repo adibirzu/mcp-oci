@@ -78,7 +78,13 @@ class MCPCache:
                 'ttl_seconds': entry.ttl_seconds
             }
             with open(cache_file, 'w') as f:
-                json.dump(data, f)
+                try:
+                    json.dump(data, f, default=str)
+                except TypeError:
+                    # Fallback: stringify non-serializable payloads
+                    safe = dict(data)
+                    safe['data'] = str(entry.data)
+                    json.dump(safe, f)
         except Exception as e:
             logger.warning(f"Failed to save cache to disk: {e}")
 

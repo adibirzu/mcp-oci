@@ -718,6 +718,71 @@ def check_oci_connection(
         })
         return out
 
+def quick_checks(
+    compartment_id: Optional[str] = None,
+    time_range: str = "24h",
+    sample_size: int = 5,
+    profile: Optional[str] = None,
+    region: Optional[str] = None,
+) -> Dict:
+    """Run basic Log Analytics health checks: head, fields, and stats by source.
+
+    - head:   "* | head N"
+    - fields: "* | fields Time, 'Log Source' | head N"
+    - stats:  "* | fields 'Log Source' | head 100 | stats count() by 'Log Source' | sort -count | head N"
+    """
+    with tool_span(tracer, "quick_checks", mcp_server="oci-mcp-observability") as span:
+        cid = _ensure_compartment_id(compartment_id)
+        # Capture region and namespace for UX deep-links
+        try:
+            cfg = get_oci_config()
+            if region:
+                cfg["region"] = region
+        except Exception:
+            cfg = {"region": region}
+        try:
+            ns = _ensure_namespace(cfg)
+        except Exception:
+            ns = None
+        reg = (cfg or {}).get("region")
+        checks: list[Dict] = []
+
+        def _run(name: str, query: str) -> Dict:
+            res = execute_logan_query(
+                query=query,
+                compartment_id=cid,
+                time_range=time_range,
+                max_count=sample_size,
+                profile=profile,
+                region=region,
+            )
+            success = bool((res or {}).get("_meta", {}).get("success"))
+            count = (res or {}).get("count")
+            rows = (res or {}).get("results") or []
+            return {"name": name, "query": query, "success": success, "count": count, "sample": rows[:1]}
+
+        head_q = f"* | head {max(1, int(sample_size))}"
+        fields_q = f"* | fields Time, 'Log Source' | head {max(1, int(sample_size))}"
+        stats_q = f"* | fields 'Log Source' | head 100 | stats count() by 'Log Source' | sort -count | head {max(1, int(sample_size))}"
+
+        checks.append(_run("head", head_q))
+        checks.append(_run("fields", fields_q))
+        checks.append(_run("stats_by_source", stats_q))
+
+        overall = any(c.get("success") for c in checks)
+        return {
+            "compartment_id": cid,
+            "time_range": time_range,
+            "namespace": ns,
+            "region": reg,
+            "checks": checks,
+            "summary": {
+                "ok": overall,
+                "passed": sum(1 for c in checks if c.get("success")),
+                "total": len(checks),
+            },
+        }
+
 # =========================================================
 # MCP wiring
 # =========================================================
@@ -743,6 +808,7 @@ tools = [
     Tool.from_function(fn=validate_query,               name="validate_query",               description="Validate Log Analytics query; optionally auto-fix common issues"),
     Tool.from_function(fn=get_documentation,            name="get_documentation",            description="Get docs for Log Analytics query syntax, fields, functions, MITRE mapping, etc."),
     Tool.from_function(fn=check_oci_connection,         name="check_oci_connection",         description="Verify Logging Analytics connectivity and run optional test query"),
+    Tool.from_function(fn=quick_checks,                 name="quick_checks",                 description="Basic LA checks: head, fields, stats by source"),
     # Observability helpers for planning and gap analysis
     Tool.from_function(fn=lambda: list(_RECENT_CALLS[-50:]), name="oci:observability:get-recent-calls", description="Return recent MCP call path and query metadata (last 50)"),
     Tool.from_function(fn=lambda: (_RECENT_CALLS.clear() or {"cleared": True}), name="oci:observability:clear-recent-calls", description="Clear the recent MCP call buffer"),
@@ -756,6 +822,7 @@ tools = [
     Tool.from_function(fn=validate_query,               name="oci:loganalytics:validate_query",          description="Validate query (alias)"),
     Tool.from_function(fn=get_documentation,            name="oci:loganalytics:get_documentation",       description="Get documentation (alias)"),
     Tool.from_function(fn=check_oci_connection,         name="oci:loganalytics:check_oci_connection",    description="Check LA connection (alias)"),
+    Tool.from_function(fn=quick_checks,                 name="oci:loganalytics:quick_checks",            description="Run basic LA checks (head, fields, stats)"),
 ]
 
 if __name__ == "__main__":

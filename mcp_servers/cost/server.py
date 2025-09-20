@@ -186,6 +186,58 @@ def detect_cost_anomaly(
         
         return {'anomalies': anomalies, 'method': method, 'threshold': threshold}
 
+def get_cost_timeseries(
+    time_window: str = "30d",
+    compartment_id: Optional[str] = None,
+    region: Optional[str] = None
+) -> Dict:
+    """Return daily cost time series for the given window using Usage API."""
+    with tool_span(tracer, "get_cost_timeseries", mcp_server="oci-mcp-cost") as span:
+        config = get_oci_config()
+        if region:
+            config['region'] = region
+        usage_client = oci.usage_api.UsageapiClient(config)
+        compartment = compartment_id or get_compartment_id()
+
+        end_time = datetime.utcnow()
+        days = 30
+        if time_window.endswith('d'):
+            try:
+                days = int(time_window[:-1])
+            except Exception:
+                days = 30
+        start_time = end_time - timedelta(days=days)
+
+        try:
+            details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                tenant_id=config.get("tenancy"),
+                time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                granularity="DAILY",
+                query_type="COST"
+            )
+            response = usage_client.request_summarized_usages(
+                request_summarized_usages_details=details
+            )
+            items = getattr(getattr(response, "data", None), "items", None) or []
+            series = []
+            for item in items:
+                ts = getattr(item, 'time_usage_started', None) or getattr(item, 'time_usage_ended', None)
+                amt = getattr(item, 'computed_amount', 0) or 0
+                if ts:
+                    # normalize to iso date
+                    try:
+                        iso = ts.strftime('%Y-%m-%d')
+                    except Exception:
+                        iso = str(ts)
+                    series.append({"date": iso, "amount": amt})
+            series.sort(key=lambda x: x['date'])
+            return {"series": series, "window": time_window}
+        except oci.exceptions.ServiceError as e:
+            logging.error(f"Error requesting time series: {e}")
+            span.record_exception(e)
+            return {"error": str(e)}
+
 def run_showusage(
     profile: Optional[str] = None,
     time_range: Optional[str] = None,
@@ -198,12 +250,20 @@ def run_showusage(
 ) -> Dict:
     with tool_span(tracer, "run_showusage", mcp_server="oci-mcp-cost") as span:
         # Local imports for this tool (avoid global optional deps)
-        import subprocess, json, hashlib, difflib
+        import subprocess, json, hashlib, difflib, sys, shutil, os as _os
         from mcp_oci_common.observability import record_token_usage
         config_path = os.path.expanduser("~/.oci/config")
-        # Use the full path to Python from the virtual environment
-        python_path = "/Users/abirzu/dev/mcp-oci/.venv/bin/python"
-        cmd = [python_path, "third_party/oci-python-sdk/examples/showusage/showusage.py"]
+        # Choose a portable Python executable
+        python_path = sys.executable or shutil.which("python3") or shutil.which("python") or "python"
+        # Try to locate the showusage script relative to this file → repo root
+        script_path = _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+            "third_party", "oci-python-sdk", "examples", "showusage", "showusage.py"
+        )
+        if not _os.path.exists(script_path):
+            # Fallback relative to repo root if execution path differs
+            script_path = _os.path.join(_os.getcwd(), "third_party", "oci-python-sdk", "examples", "showusage", "showusage.py")
+        cmd = [python_path, script_path]
         
         if profile:
             cmd.extend(["--config-file", config_path, "--profile", profile])
