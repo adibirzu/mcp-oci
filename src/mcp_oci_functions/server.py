@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:functions:list-applications",
+            "name": "oci_functions_list_applications",
             "description": "List Functions applications in a compartment.",
             "parameters": {
                 "type": "object",
@@ -40,7 +40,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_applications,
         },
         {
-            "name": "oci:functions:list-functions",
+            "name": "oci_functions_list_functions",
             "description": "List functions in an application.",
             "parameters": {
                 "type": "object",
@@ -57,7 +57,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_functions,
         },
         {
-            "name": "oci:functions:get-application",
+            "name": "oci_functions_get_application",
             "description": "Get application by OCID.",
             "parameters": {
                 "type": "object",
@@ -71,7 +71,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_application,
         },
         {
-            "name": "oci:functions:get-function",
+            "name": "oci_functions_get_function",
             "description": "Get function by OCID.",
             "parameters": {
                 "type": "object",
@@ -85,7 +85,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_function,
         },
         {
-            "name": "oci:functions:list-triggers",
+            "name": "oci_functions_list_triggers",
             "description": "List triggers for an application (if supported by SDK).",
             "parameters": {
                 "type": "object",

@@ -22,7 +22,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:monitoring:list-metrics",
+            "name": "oci_monitoring_list_metrics",
             "description": "List metric definitions in a compartment; optionally filter by namespace/name.",
             "parameters": {
                 "type": "object",
@@ -42,7 +42,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_metrics,
         },
         {
-            "name": "oci:monitoring:summarize-metrics",
+            "name": "oci_monitoring_summarize_metrics",
             "description": "Summarize metric data for a query between two times (UTC).",
             "parameters": {
                 "type": "object",
@@ -61,7 +61,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": summarize_metrics,
         },
         {
-            "name": "oci:monitoring:list-alarms",
+            "name": "oci_monitoring_list_alarms",
             "description": "List alarms in a compartment.",
             "parameters": {
                 "type": "object",
@@ -78,7 +78,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_alarms,
         },
         {
-            "name": "oci:monitoring:get-alarm",
+            "name": "oci_monitoring_get_alarm",
             "description": "Get an alarm by OCID.",
             "parameters": {
                 "type": "object",
@@ -92,7 +92,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_alarm,
         },
         {
-            "name": "oci:monitoring:list-metric-namespaces",
+            "name": "oci_monitoring_list_metric_namespaces",
             "description": "Discover metric namespaces (derived from metric definitions).",
             "parameters": {
                 "type": "object",
@@ -108,7 +108,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_metric_namespaces,
         },
         {
-            "name": "oci:monitoring:list-resource-groups",
+            "name": "oci_monitoring_list_resource_groups",
             "description": "Discover metric resource groups (derived from metric definitions).",
             "parameters": {
                 "type": "object",
@@ -125,7 +125,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_resource_groups,
         },
         {
-            "name": "oci:monitoring:list-alarm-statuses",
+            "name": "oci_monitoring_list_alarm_statuses",
             "description": "List alarm statuses in a compartment (if supported by SDK).",
             "parameters": {
                 "type": "object",
@@ -141,7 +141,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_alarm_statuses,
         },
         {
-            "name": "oci:monitoring:get-alarm-history",
+            "name": "oci_monitoring_get_alarm_history",
             "description": "Get alarm history for a time range (evaluations/state changes).",
             "parameters": {
                 "type": "object",
@@ -158,7 +158,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_alarm_history,
         },
         {
-            "name": "oci:monitoring:summarize-metrics-window",
+            "name": "oci_monitoring_summarize_metrics_window",
             "description": "Wrapper: summarize metrics for a recent window like 1h/24h with normalized resolution.",
             "parameters": {
                 "type": "object",
@@ -176,13 +176,13 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": summarize_metrics_window,
         },
         {
-            "name": "oci:monitoring:list-sdk-methods",
+            "name": "oci_monitoring_list_sdk_methods",
             "description": "Introspect available SDK methods on Monitoring and Alarm clients (for newer SDK versions).",
             "parameters": {"type": "object", "properties": {"profile": {"type": "string"}, "region": {"type": "string"}}},
             "handler": list_sdk_methods,
         },
         {
-            "name": "oci:monitoring:common-compute-queries",
+            "name": "oci_monitoring_common_compute_queries",
             "description": "Return common Compute metrics queries with suggested namespaces and help text.",
             "parameters": {"type": "object", "properties": {}},
             "handler": common_compute_queries,

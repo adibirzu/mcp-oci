@@ -9,7 +9,7 @@ from typing import Any
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:inventory:showoci-scan",
+            "name": "oci_inventory_showoci_scan",
             "description": "Run showoci to gather inventory; returns stdout (requires local clone).",
             "parameters": {
                 "type": "object",

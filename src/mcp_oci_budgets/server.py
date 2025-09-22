@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:budgets:list-budgets",
+            "name": "oci_budgets_list_budgets",
             "description": "List budgets for a compartment.",
             "parameters": {
                 "type": "object",
@@ -39,7 +39,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_budgets,
         },
         {
-            "name": "oci:budgets:get-budget",
+            "name": "oci_budgets_get_budget",
             "description": "Get a budget by OCID.",
             "parameters": {
                 "type": "object",
@@ -53,7 +53,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_budget,
         },
         {
-            "name": "oci:budgets:list-alert-rules",
+            "name": "oci_budgets_list_alert_rules",
             "description": "List alert rules for a budget.",
             "parameters": {
                 "type": "object",
@@ -69,7 +69,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_alert_rules,
         },
         {
-            "name": "oci:budgets:create-budget",
+            "name": "oci_budgets_create_budget",
             "description": "Create a budget (confirm=true required; dry_run supported).",
             "parameters": {
                 "type": "object",

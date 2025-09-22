@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:events:list-rules",
+            "name": "oci_events_list_rules",
             "description": "List Event Rules in a compartment.",
             "parameters": {
                 "type": "object",
@@ -38,7 +38,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_rules,
         },
         {
-            "name": "oci:events:get-rule",
+            "name": "oci_events_get_rule",
             "description": "Get Event Rule by OCID.",
             "parameters": {
                 "type": "object",

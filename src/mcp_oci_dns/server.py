@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:dns:list-zones",
+            "name": "oci_dns_list_zones",
             "description": "List DNS zones in a compartment.",
             "parameters": {
                 "type": "object",
@@ -37,7 +37,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_zones,
         },
         {
-            "name": "oci:dns:list-rrset",
+            "name": "oci_dns_list_rrset",
             "description": "List record set (RRSet) for a zone and domain.",
             "parameters": {
                 "type": "object",

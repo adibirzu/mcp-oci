@@ -25,7 +25,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:objectstorage:list-buckets",
+            "name": "oci_objectstorage_list_buckets",
             "description": "List buckets in a namespace/compartment.",
             "parameters": {
                 "type": "object",
@@ -42,7 +42,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_buckets,
         },
         {
-            "name": "oci:objectstorage:get-namespace",
+            "name": "oci_objectstorage_get_namespace",
             "description": "Get object storage namespace.",
             "parameters": {
                 "type": "object",
@@ -55,7 +55,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_namespace,
         },
         {
-            "name": "oci:objectstorage:list-objects",
+            "name": "oci_objectstorage_list_objects",
             "description": "List objects in a bucket.",
             "parameters": {
                 "type": "object",
@@ -73,7 +73,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_objects,
         },
         {
-            "name": "oci:objectstorage:get-bucket",
+            "name": "oci_objectstorage_get_bucket",
             "description": "Get bucket details.",
             "parameters": {
                 "type": "object",
@@ -88,7 +88,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_bucket,
         },
         {
-            "name": "oci:objectstorage:list-preauth-requests",
+            "name": "oci_objectstorage_list_preauth_requests",
             "description": "List preauthenticated requests for a bucket.",
             "parameters": {
                 "type": "object",
@@ -106,7 +106,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_preauth_requests,
         },
         {
-            "name": "oci:objectstorage:create-preauth-request",
+            "name": "oci_objectstorage_create_preauth_request",
             "description": "Create a preauthenticated request (requires confirm=true; supports dry_run).",
             "parameters": {
                 "type": "object",
@@ -128,7 +128,7 @@ def register_tools() -> list[dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:objectstorage:head-object",
+            "name": "oci_objectstorage_head_object",
             "description": "Get object metadata (HEAD).",
             "parameters": {
                 "type": "object",

@@ -25,7 +25,7 @@ def _client_or_none(factory):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:security:list-cloud-guard-problems",
+            "name": "oci_security_list_cloud_guard_problems",
             "description": "List Cloud Guard problems in a compartment.",
             "parameters": {
                 "type": "object",
@@ -43,7 +43,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_cloud_guard_problems,
         },
         {
-            "name": "oci:security:list-security-zones",
+            "name": "oci_security_list_security_zones",
             "description": "List Security Zones in a compartment (if supported).",
             "parameters": {
                 "type": "object",
@@ -59,7 +59,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_security_zones,
         },
         {
-            "name": "oci:security:list-host-scan-results",
+            "name": "oci_security_list_host_scan_results",
             "description": "List Vulnerability Scanning host scan results.",
             "parameters": {
                 "type": "object",
@@ -74,7 +74,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_host_scan_results,
         },
         {
-            "name": "oci:security:list-container-scan-results",
+            "name": "oci_security_list_container_scan_results",
             "description": "List Vulnerability Scanning container scan results.",
             "parameters": {
                 "type": "object",
@@ -89,7 +89,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_container_scan_results,
         },
         {
-            "name": "oci:security:list-kms-keys",
+            "name": "oci_security_list_kms_keys",
             "description": "List KMS keys in a vault.",
             "parameters": {
                 "type": "object",
@@ -106,7 +106,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_kms_keys,
         },
         {
-            "name": "oci:security:summary",
+            "name": "oci_security_summary",
             "description": "High-level security summary across Cloud Guard, Security Zones, VSS, and KMS.",
             "parameters": {
                 "type": "object",

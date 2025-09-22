@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:kms:list-keys",
+            "name": "oci_kms_list_keys",
             "description": "List keys in a vault (management endpoint required).",
             "parameters": {
                 "type": "object",
@@ -38,7 +38,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_keys,
         },
         {
-            "name": "oci:kms:list-key-versions",
+            "name": "oci_kms_list_key_versions",
             "description": "List versions for a key.",
             "parameters": {
                 "type": "object",

@@ -810,19 +810,8 @@ tools = [
     Tool.from_function(fn=check_oci_connection,         name="check_oci_connection",         description="Verify Logging Analytics connectivity and run optional test query"),
     Tool.from_function(fn=quick_checks,                 name="quick_checks",                 description="Basic LA checks: head, fields, stats by source"),
     # Observability helpers for planning and gap analysis
-    Tool.from_function(fn=lambda: list(_RECENT_CALLS[-50:]), name="oci:observability:get-recent-calls", description="Return recent MCP call path and query metadata (last 50)"),
-    Tool.from_function(fn=lambda: (_RECENT_CALLS.clear() or {"cleared": True}), name="oci:observability:clear-recent-calls", description="Clear the recent MCP call buffer"),
-    # Aliases following oci:<service>:<action> naming
-    Tool.from_function(fn=execute_logan_query,          name="oci:loganalytics:execute_query",           description="Execute enhanced OCI Logging Analytics query (alias)"),
-    Tool.from_function(fn=search_security_events,       name="oci:loganalytics:search_security_events",  description="Search security events (alias)"),
-    Tool.from_function(fn=get_mitre_techniques,         name="oci:loganalytics:get_mitre_techniques",    description="MITRE ATT&CK techniques (alias)"),
-    Tool.from_function(fn=analyze_ip_activity,          name="oci:loganalytics:analyze_ip_activity",     description="Analyze IP activity (alias)"),
-    Tool.from_function(fn=execute_statistical_analysis, name="oci:loganalytics:perform_statistical_analysis", description="Statistical analysis (alias)"),
-    Tool.from_function(fn=execute_advanced_analytics,   name="oci:loganalytics:perform_advanced_analytics", description="Advanced analytics (alias)"),
-    Tool.from_function(fn=validate_query,               name="oci:loganalytics:validate_query",          description="Validate query (alias)"),
-    Tool.from_function(fn=get_documentation,            name="oci:loganalytics:get_documentation",       description="Get documentation (alias)"),
-    Tool.from_function(fn=check_oci_connection,         name="oci:loganalytics:check_oci_connection",    description="Check LA connection (alias)"),
-    Tool.from_function(fn=quick_checks,                 name="oci:loganalytics:quick_checks",            description="Run basic LA checks (head, fields, stats)"),
+    Tool.from_function(fn=lambda: list(_RECENT_CALLS[-50:]), name="oci_observability_get_recent_calls", description="Return recent MCP call path and query metadata (last 50)"),
+    Tool.from_function(fn=lambda: (_RECENT_CALLS.clear() or {"cleared": True}), name="oci_observability_clear_recent_calls", description="Clear the recent MCP call buffer"),
 ]
 
 if __name__ == "__main__":

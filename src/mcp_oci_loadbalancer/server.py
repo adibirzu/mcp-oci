@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:loadbalancer:list-load-balancers",
+            "name": "oci_loadbalancer_list_load_balancers",
             "description": "List Load Balancers in a compartment.",
             "parameters": {
                 "type": "object",
@@ -39,7 +39,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_load_balancers,
         },
         {
-            "name": "oci:loadbalancer:get-backend-health",
+            "name": "oci_loadbalancer_get_backend_health",
             "description": "Get backend set health for a Load Balancer.",
             "parameters": {
                 "type": "object",

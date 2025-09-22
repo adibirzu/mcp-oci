@@ -909,7 +909,7 @@ def register_tools() -> list[dict[str, Any]]:
     return [
         # Core Query Tools
         {
-            "name": "oci:loganalytics:execute_query",
+            "name": "oci_loganalytics_execute_query",
             "description": "Execute a Log Analytics query with enhanced security analysis capabilities",
             "parameters": {
                 "type": "object",
@@ -927,7 +927,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": execute_query,
         },
         {
-            "name": "oci:loganalytics:search_security_events",
+            "name": "oci_loganalytics_search_security_events",
             "description": "Search for security events using natural language or predefined patterns",
             "parameters": {
                 "type": "object",
@@ -945,7 +945,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": search_security_events,
         },
         {
-            "name": "oci:loganalytics:get_mitre_techniques",
+            "name": "oci_loganalytics_get_mitre_techniques",
             "description": "Search for MITRE ATT&CK techniques in the logs",
             "parameters": {
                 "type": "object",
@@ -962,7 +962,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_mitre_techniques,
         },
         {
-            "name": "oci:loganalytics:analyze_ip_activity",
+            "name": "oci_loganalytics_analyze_ip_activity",
             "description": "Analyze activity for specific IP addresses",
             "parameters": {
                 "type": "object",
@@ -980,7 +980,7 @@ def register_tools() -> list[dict[str, Any]]:
         },
         # Advanced Analytics Tools
         {
-            "name": "oci:loganalytics:perform_statistical_analysis",
+            "name": "oci_loganalytics_perform_statistical_analysis",
             "description": "Execute statistical analysis using stats, timestats, and eventstats commands",
             "parameters": {
                 "type": "object",
@@ -1000,7 +1000,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": perform_statistical_analysis,
         },
         {
-            "name": "oci:loganalytics:perform_advanced_analytics",
+            "name": "oci_loganalytics_perform_advanced_analytics",
             "description": "Execute advanced analytics queries using OCI Log Analytics specialized commands",
             "parameters": {
                 "type": "object",
@@ -1019,7 +1019,7 @@ def register_tools() -> list[dict[str, Any]]:
         },
         # Utility Tools
         {
-            "name": "oci:loganalytics:validate_query",
+            "name": "oci_loganalytics_validate_query",
             "description": "Validate an OCI Logging Analytics query syntax",
             "parameters": {
                 "type": "object",
@@ -1032,7 +1032,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": validate_query,
         },
         {
-            "name": "oci:loganalytics:get_documentation",
+            "name": "oci_loganalytics_get_documentation",
             "description": "Get documentation and help for OCI Logging Analytics and Logan queries",
             "parameters": {
                 "type": "object",
@@ -1044,7 +1044,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_documentation,
         },
         {
-            "name": "oci:loganalytics:check_oci_connection",
+            "name": "oci_loganalytics_check_oci_connection",
             "description": "Check OCI Logging Analytics connection and authentication",
             "parameters": {
                 "type": "object",
@@ -1060,7 +1060,7 @@ def register_tools() -> list[dict[str, Any]]:
         },
         # Original tools for backward compatibility
         {
-            "name": "oci:loganalytics:run-query",
+            "name": "oci_loganalytics_run_query",
             "description": "Run a Log Analytics query for a namespace and time range (legacy)",
             "parameters": {
                 "type": "object",

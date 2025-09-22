@@ -25,7 +25,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:networking:list-subnets",
+            "name": "oci_networking_list_subnets",
             "description": "List subnets in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -42,7 +42,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_subnets,
         },
         {
-            "name": "oci:networking:list-vcns",
+            "name": "oci_networking_list_vcns",
             "description": "List VCNs in a compartment.",
             "parameters": {
                 "type": "object",
@@ -58,7 +58,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_vcns,
         },
         {
-            "name": "oci:networking:list-vcns-by-dns",
+            "name": "oci_networking_list_vcns_by_dns",
             "description": "List VCNs filtered by dns_label (client-side filter).",
             "parameters": {
                 "type": "object",
@@ -75,7 +75,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_vcns_by_dns,
         },
         {
-            "name": "oci:networking:list-route-tables",
+            "name": "oci_networking_list_route_tables",
             "description": "List route tables in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -92,7 +92,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_route_tables,
         },
         {
-            "name": "oci:networking:list-security-lists",
+            "name": "oci_networking_list_security_lists",
             "description": "List security lists in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -109,7 +109,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_security_lists,
         },
         {
-            "name": "oci:networking:create-vcn",
+            "name": "oci_networking_create_vcn",
             "description": "Create a VCN (confirm=true supports required; dry_run available).",
             "parameters": {
                 "type": "object",
@@ -129,7 +129,7 @@ def register_tools() -> list[dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:networking:list-network-security-groups",
+            "name": "oci_networking_list_network_security_groups",
             "description": "List Network Security Groups (NSGs) in a compartment; optional VCN filter.",
             "parameters": {
                 "type": "object",
