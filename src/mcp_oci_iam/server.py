@@ -30,7 +30,7 @@ def register_tools() -> list[dict[str, Any]]:
     """
     tools: list[dict[str, Any]] = [
         {
-            "name": "oci:iam:list-users",
+            "name": "oci_iam_list_users",
             "description": "List IAM users in a compartment; optional exact name filter.",
             "parameters": {
                 "type": "object",
@@ -47,7 +47,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_users,  # to be wired by the MCP runtime
         },
         {
-            "name": "oci:iam:list-policy-statements",
+            "name": "oci_iam_list_policy_statements",
             "description": "List policy statements (strings) in a compartment.",
             "parameters": {
                 "type": "object",
@@ -63,7 +63,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_policy_statements,
         },
         {
-            "name": "oci:iam:list-api-keys",
+            "name": "oci_iam_list_api_keys",
             "description": "List API keys for a user.",
             "parameters": {
                 "type": "object",
@@ -77,7 +77,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_api_keys,
         },
         {
-            "name": "oci:iam:add-user-to-group",
+            "name": "oci_iam_add_user_to_group",
             "description": "Add a user to a group (confirm=true required; supports dry_run).",
             "parameters": {
                 "type": "object",
@@ -95,7 +95,7 @@ def register_tools() -> list[dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:iam:get-user",
+            "name": "oci_iam_get_user",
             "description": "Get a user by OCID.",
             "parameters": {
                 "type": "object",
@@ -109,7 +109,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_user,
         },
         {
-            "name": "oci:iam:list-compartments",
+            "name": "oci_iam_list_compartments",
             "description": "List compartments with optional subtree traversal.",
             "parameters": {
                 "type": "object",
@@ -127,7 +127,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_compartments,
         },
         {
-            "name": "oci:iam:list-groups",
+            "name": "oci_iam_list_groups",
             "description": "List groups in a compartment.",
             "parameters": {
                 "type": "object",
@@ -143,7 +143,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_groups,
         },
         {
-            "name": "oci:iam:list-policies",
+            "name": "oci_iam_list_policies",
             "description": "List policies in a compartment.",
             "parameters": {
                 "type": "object",
@@ -159,7 +159,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_policies,
         },
         {
-            "name": "oci:iam:list-user-groups",
+            "name": "oci_iam_list_user_groups",
             "description": "List group memberships for a user; optionally expand group details.",
             "parameters": {
                 "type": "object",
@@ -177,7 +177,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_user_groups,
         },
         {
-            "name": "oci:iam:list-dynamic-groups",
+            "name": "oci_iam_list_dynamic_groups",
             "description": "List dynamic groups in a compartment.",
             "parameters": {
                 "type": "object",
@@ -193,7 +193,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_dynamic_groups,
         },
         {
-            "name": "oci:iam:list-auth-tokens",
+            "name": "oci_iam_list_auth_tokens",
             "description": "List auth tokens for a user.",
             "parameters": {
                 "type": "object",

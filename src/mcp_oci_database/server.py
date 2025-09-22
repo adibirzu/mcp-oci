@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:database:list-autonomous-databases",
+            "name": "oci_database_list_autonomous_databases",
             "description": "List Autonomous Databases in a compartment.",
             "parameters": {
                 "type": "object",
@@ -38,7 +38,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_autonomous_databases,
         },
         {
-            "name": "oci:database:list-db-systems",
+            "name": "oci_database_list_db_systems",
             "description": "List DB Systems in a compartment.",
             "parameters": {
                 "type": "object",
@@ -55,7 +55,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_db_systems,
         },
         {
-            "name": "oci:database:list-backups",
+            "name": "oci_database_list_backups",
             "description": "List database backups in a compartment.",
             "parameters": {
                 "type": "object",

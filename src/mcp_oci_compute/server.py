@@ -32,7 +32,7 @@ def create_search_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:compute:list-instances",
+            "name": "oci_compute_list_instances",
             "description": "List compute instances; defaults to tenancy root if compartment_id omitted; can include all subcompartments.",
             "parameters": {
                 "type": "object",
@@ -62,7 +62,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_instances,
         },
         {
-            "name": "oci:compute:list-boot-volume-attachments",
+            "name": "oci_compute_list_boot_volume_attachments",
             "description": "List boot volume attachments; filter by instance or compartment.",
             "parameters": {
                 "type": "object",
@@ -79,7 +79,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_boot_volume_attachments,
         },
         {
-            "name": "oci:compute:list-images",
+            "name": "oci_compute_list_images",
             "description": "List images in a compartment; filter by OS and version.",
             "parameters": {
                 "type": "object",
@@ -97,7 +97,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_images,
         },
         {
-            "name": "oci:compute:list-vnics",
+            "name": "oci_compute_list_vnics",
             "description": "List VNIC attachments for an instance.",
             "parameters": {
                 "type": "object",
@@ -114,7 +114,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_vnics,
         },
         {
-            "name": "oci:compute:get-instance",
+            "name": "oci_compute_get_instance",
             "description": "Get instance details by OCID.",
             "parameters": {
                 "type": "object",
@@ -128,7 +128,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_instance,
         },
         {
-            "name": "oci:compute:list-boot-volumes",
+            "name": "oci_compute_list_boot_volumes",
             "description": "List boot volumes in an availability domain (Blockstorage).",
             "parameters": {
                 "type": "object",
@@ -145,7 +145,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_boot_volumes,
         },
         {
-            "name": "oci:compute:list-instance-configurations",
+            "name": "oci_compute_list_instance_configurations",
             "description": "List instance configurations (Compute Management).",
             "parameters": {
                 "type": "object",
@@ -161,7 +161,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_instance_configurations,
         },
         {
-            "name": "oci:compute:list-shapes",
+            "name": "oci_compute_list_shapes",
             "description": "List compute shapes in a compartment.",
             "parameters": {
                 "type": "object",
@@ -179,7 +179,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_shapes,
         },
         {
-            "name": "oci:compute:instance-action",
+            "name": "oci_compute_instance_action",
             "description": "Perform an instance action (START, STOP, SOFTSTOP, RESET). Requires confirm=true; supports dry_run.",
             "parameters": {
                 "type": "object",
@@ -197,7 +197,7 @@ def register_tools() -> list[dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:compute:search-instances",
+            "name": "oci_compute_search_instances",
             "description": "Search instances via OCI Resource Search (structured query).",
             "parameters": {
                 "type": "object",
@@ -219,7 +219,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": search_instances,
         },
         {
-            "name": "oci:compute:list-stopped-instances",
+            "name": "oci_compute_list_stopped_instances",
             "description": "Convenience alias: list STOPPED instances. Prompts to narrow by compartment/time window if results are large or empty.",
             "parameters": {
                 "type": "object",

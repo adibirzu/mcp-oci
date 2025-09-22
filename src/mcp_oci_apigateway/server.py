@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:apigateway:list-gateways",
+            "name": "oci_apigateway_list_gateways",
             "description": "List API Gateways in a compartment.",
             "parameters": {
                 "type": "object",
@@ -38,7 +38,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_gateways,
         },
         {
-            "name": "oci:apigateway:get-gateway",
+            "name": "oci_apigateway_get_gateway",
             "description": "Get an API Gateway by OCID.",
             "parameters": {
                 "type": "object",

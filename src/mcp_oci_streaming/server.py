@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:streaming:list-streams",
+            "name": "oci_streaming_list_streams",
             "description": "List streams in a compartment.",
             "parameters": {
                 "type": "object",
@@ -40,7 +40,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_streams,
         },
         {
-            "name": "oci:streaming:get-stream",
+            "name": "oci_streaming_get_stream",
             "description": "Get stream by OCID.",
             "parameters": {
                 "type": "object",

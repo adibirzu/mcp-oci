@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:usageapi:request-summarized-usages",
+            "name": "oci_usageapi_request_summarized_usages",
             "description": "Request summarized usage or cost between two timestamps.",
             "parameters": {
                 "type": "object",
@@ -44,7 +44,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": request_summarized_usages,
         },
         {
-            "name": "oci:usageapi:cost-by-service",
+            "name": "oci_usageapi_cost_by_service",
             "description": "Convenience: Summarized COST grouped by service for the last N days (times normalized to midnight UTC). Optional client-side service filter.",
             "parameters": {
                 "type": "object",
@@ -61,7 +61,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": cost_by_service,
         },
         {
-            "name": "oci:usageapi:cost-by-compartment",
+            "name": "oci_usageapi_cost_by_compartment",
             "description": "Convenience: Summarized COST grouped by compartmentId for last N days (midnight UTC). Optional client-side compartment filter.",
             "parameters": {
                 "type": "object",
@@ -78,7 +78,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": cost_by_compartment,
         },
         {
-            "name": "oci:usageapi:usage-by-service",
+            "name": "oci_usageapi_usage_by_service",
             "description": "Convenience: Summarized USAGE grouped by service for last N days (midnight UTC). Optional service filter.",
             "parameters": {
                 "type": "object",
@@ -95,7 +95,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": usage_by_service,
         },
         {
-            "name": "oci:usageapi:usage-by-compartment",
+            "name": "oci_usageapi_usage_by_compartment",
             "description": "Convenience: Summarized USAGE grouped by compartmentId for last N days (midnight UTC). Optional compartment filter.",
             "parameters": {
                 "type": "object",
@@ -112,7 +112,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": usage_by_compartment,
         },
         {
-            "name": "oci:usageapi:showusage-run",
+            "name": "oci_usageapi_showusage_run",
             "description": "Run Oracle showusage example tool and return its output (requires local clone).",
             "parameters": {
                 "type": "object",
@@ -132,7 +132,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": showusage_run,
         },
         {
-            "name": "oci:usageapi:list-rate-cards",
+            "name": "oci_usageapi_list_rate_cards",
             "description": "List rate cards (list price) for a subscription.",
             "parameters": {
                 "type": "object",

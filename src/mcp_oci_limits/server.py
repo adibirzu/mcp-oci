@@ -29,7 +29,7 @@ def create_client_quotas(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:limits:list-services",
+            "name": "oci_limits_list_services",
             "description": "List services with limits for a compartment.",
             "parameters": {
                 "type": "object",
@@ -45,7 +45,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_services,
         },
         {
-            "name": "oci:limits:list-limit-values",
+            "name": "oci_limits_list_limit_values",
             "description": "List limit values for a service in a compartment.",
             "parameters": {
                 "type": "object",
@@ -64,7 +64,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_limit_values,
         },
         {
-            "name": "oci:quotas:list-quotas",
+            "name": "oci_quotas_list_quotas",
             "description": "List quotas in a compartment.",
             "parameters": {
                 "type": "object",
@@ -80,7 +80,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_quotas,
         },
         {
-            "name": "oci:quotas:get-quota",
+            "name": "oci_quotas_get_quota",
             "description": "Get a quota by OCID.",
             "parameters": {
                 "type": "object",

@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:filestorage:list-file-systems",
+            "name": "oci_filestorage_list_file_systems",
             "description": "List File Systems in a compartment and availability domain.",
             "parameters": {
                 "type": "object",
@@ -38,7 +38,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_file_systems,
         },
         {
-            "name": "oci:filestorage:list-mount-targets",
+            "name": "oci_filestorage_list_mount_targets",
             "description": "List Mount Targets in a compartment and availability domain.",
             "parameters": {
                 "type": "object",
