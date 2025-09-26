@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:osub:list-subscriptions",
+            "name": "oci_osub_list_subscriptions",
             "description": "List subscriptions for a tenancy.",
             "parameters": {
                 "type": "object",

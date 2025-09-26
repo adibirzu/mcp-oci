@@ -6,6 +6,7 @@ service-specific convenience tools following the pattern `oci:<service>:list-sdk
 
 from typing import Any
 from mcp_oci_common.name_registry import get_registry
+import json
 
 try:
     import oci  # type: ignore
@@ -65,7 +66,7 @@ def _list_methods_of(obj: Any) -> list[str]:
 def register_tools() -> list[dict[str, Any]]:
     tools: list[dict[str, Any]] = [
         {
-            "name": "oci:sdk:list-methods",
+            "name": "oci_sdk_list_methods",
             "description": "List SDK methods for a given client class (e.g., usage_api.UsageapiClient).",
             "parameters": {
                 "type": "object",
@@ -77,13 +78,13 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": sdk_list_methods,
         },
         {
-            "name": "mcp:registry:dump",
+            "name": "mcp_registry_dump",
             "description": "Dump in-process name→OCID registry (counts and sample entries).",
             "parameters": {"type": "object", "properties": {}},
             "handler": registry_dump,
         },
         {
-            "name": "mcp:registry:resolve",
+            "name": "mcp_registry_resolve",
             "description": "Resolve a resource name to OCID using the registry (no API calls).",
             "parameters": {
                 "type": "object",
@@ -97,13 +98,13 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": registry_resolve,
         },
         {
-            "name": "mcp:registry:report",
+            "name": "mcp_registry_report",
             "description": "Summarize registry coverage and suggest warm-up actions.",
             "parameters": {"type": "object", "properties": {}},
             "handler": registry_report,
         },
         {
-            "name": "mcp:warm:services",
+            "name": "mcp_warm_services",
             "description": "Warm the registry/cache by listing common resources (compartments, VCNs, subnets, instances, users, OKE clusters, Functions apps, streams, buckets).",
             "parameters": {
                 "type": "object",
@@ -117,7 +118,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": warm_services,
         },
         {
-            "name": "mcp:warm:compartment",
+            "name": "mcp_warm_compartment",
             "description": "Warm a specific compartment deeply (VCNs, subnets, instances, LBs, functions, streams).",
             "parameters": {
                 "type": "object",
@@ -148,7 +149,7 @@ def register_tools() -> list[dict[str, Any]]:
 
         tools.append(
             {
-                "name": f"oci:{service}:list-sdk-methods",
+                "name": f"oci_{service}_list_sdk_methods",
                 "description": f"List SDK methods for common {service} clients (class-level introspection).",
                 "parameters": {"type": "object", "properties": {}},
                 "handler": _make_handler(candidates),
@@ -237,21 +238,21 @@ def registry_report() -> dict[str, Any]:
     }
     suggestions: list[str] = []
     if report["compartments_by_name"] == 0:
-        suggestions.append("Run oci:iam:list-compartments include_subtree=true to index compartment names")
+        suggestions.append("Run mcp_warm_services to index compartment names")
     if report["vcns_by_name"] == 0:
-        suggestions.append("Run oci:networking:list-vcns for key compartments to index VCN names")
+        suggestions.append("Run mcp_warm_services for key compartments to index VCN names")
     if report["subnets_by_name"] == 0:
-        suggestions.append("Run oci:networking:list-subnets for VCNs to index subnet names")
+        suggestions.append("Run mcp_warm_compartment for specific compartments to index subnet names")
     if report["instances_by_name"] == 0:
-        suggestions.append("Run oci:compute:list-instances with small max_items to index instance names")
+        suggestions.append("Run mcp_warm_services with small limit to index instance names")
     if report["users_by_name"] == 0:
-        suggestions.append("Run oci:iam:list-users to index IAM users")
+        suggestions.append("Run mcp_warm_services to index IAM users")
     if report["clusters_by_name"] == 0:
-        suggestions.append("Run oci:oke:list-clusters to index OKE clusters")
+        suggestions.append("Run mcp_warm_services to index OKE clusters")
     if report["applications_by_name"] == 0:
-        suggestions.append("Run oci:functions:list-applications to index Fn applications")
+        suggestions.append("Run mcp_warm_services to index Fn applications")
     if report["streams_by_name"] == 0:
-        suggestions.append("Run oci:streaming:list-streams to index streams")
+        suggestions.append("Run mcp_warm_services to index streams")
     return {"counts": report, "suggestions": suggestions}
 
 
@@ -260,7 +261,6 @@ def warm_services(profile: str | None = None, region: str | None = None, compart
 
     Handles modules that return JSON strings (with_meta) and those that return dicts.
     """
-    import json as _json
     from mcp_oci_common.config import get_oci_config
 
     # Resolve tenancy if compartment_id not provided
@@ -273,7 +273,7 @@ def warm_services(profile: str | None = None, region: str | None = None, compart
 
     def _load(x):
         try:
-            return _json.loads(x) if isinstance(x, str) else x
+            return json.loads(x) if isinstance(x, str) else x
         except Exception:
             return x
 
@@ -361,11 +361,10 @@ def warm_compartment(compartment_id: str, profile: str | None = None, region: st
     """Warm a specific compartment: VCNs -> subnets, instances, load balancers, functions, streams.
     Returns counts warmed per resource type.
     """
-    import json as _json
 
     def _load(x):
         try:
-            return _json.loads(x) if isinstance(x, str) else x
+            return json.loads(x) if isinstance(x, str) else x
         except Exception:
             return x
 

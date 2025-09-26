@@ -9,12 +9,66 @@ scrape_configs:
 
   - job_name: 'obs-app'
     static_configs:
-      - targets: ['obs-app:8000', 'host.docker.internal:8000']
+      - targets: ['obs-app:8000']
 
-  # Add more jobs for MCP servers if they expose metrics
-  # - job_name: 'mcp-compute'
-  #   static_configs:
-  #     - targets: ['localhost:8001']  # Assuming MCP servers run on different ports
+  - job_name: 'ux-app'
+    static_configs:
+      - targets: ['host.docker.internal:8010']
+
+  # MCP servers metrics
+  - job_name: 'mcp-compute'
+    static_configs:
+      - targets: ['host.docker.internal:8001']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-db'
+    static_configs:
+      - targets: ['host.docker.internal:8002']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-observability'
+    static_configs:
+      - targets: ['host.docker.internal:8003']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-security'
+    static_configs:
+      - targets: ['host.docker.internal:8004']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-network'
+    static_configs:
+      - targets: ['host.docker.internal:8006']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-blockstorage'
+    static_configs:
+      - targets: ['host.docker.internal:8007']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-loadbalancer'
+    static_configs:
+      - targets: ['host.docker.internal:8008']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-inventory'
+    static_configs:
+      - targets: ['host.docker.internal:8009']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-agents'
+    static_configs:
+      - targets: ['host.docker.internal:8011']
+    scrape_interval: 30s
+    metrics_path: /metrics
 
   - job_name: 'otel-collector'
     static_configs:

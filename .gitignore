@@ -1,25 +1,90 @@
 # Python
-.venv/
 __pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Coverage/Reports
-.coverage*
-htmlcov/
-
-# Env/Secrets
-.env
-*.env.local
-
-# Build
-dist/
+*.py[cod]
+*.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Docs cache
-docs/.docusaurus/
-docs/build/
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Temporary files
+tmp_*
+*.tmp
+
+# OCI specific
+.oci/
+*.pem
+*.key
+wallet/
+Wallet_*.zip
+
+# Docker/Container data
+ops/pyroscope/*
+ops/grafana/data/*
+ops/prometheus/data/*
+ops/tempo/data/*
+
+# Test results
+test-results/
+verification_results/
+
+# Documentation builds
+docs/_build/
+
+# Local development
+.local/
+*.local
+
+# OS generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

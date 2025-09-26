@@ -1,280 +1,434 @@
-# OCI MCP for OCI + Observability (Production-Ready)
+# MCP-OCI: Oracle Cloud Infrastructure MCP Servers
 
-## Overview
-Production-ready MCP servers for Oracle Cloud Infrastructure (OCI), including a consolidated Observability server that exposes Log Analytics tools. The project follows MCP server best practices and adds in-process caching and a shared name→OCID registry to reduce API calls and token usage.
+A comprehensive suite of Model Context Protocol (MCP) servers for Oracle Cloud Infrastructure, providing AI-powered cloud operations, cost analysis, and observability.
 
-Key features:
-- Single consolidated Observability server (oci-mcp-observability) with Log Analytics and observability helpers.
-- Individual MCP servers for IAM, Compute, Networking, Object Storage, etc.
-- Deterministic, idempotent behavior; explicit confirmation for destructive actions.
-- Name→OCID registry populated by list calls; subsequent name-based requests avoid backend calls.
-- Tunable cache TTLs per service; secrets are never committed (see .gitignore).
+## 🌟 Overview
 
-## Installation
-From GitHub:
+MCP-OCI is a collection of specialized MCP servers that enable Large Language Models (LLMs) like Claude to interact with Oracle Cloud Infrastructure services. Each server focuses on specific OCI domains, providing tools for automation, analysis, and monitoring.
+
+### Key Features
+
+- 🔧 **Multi-Domain Coverage**: 10+ specialized MCP servers covering compute, networking, security, cost analysis, and more
+- 📊 **Advanced Analytics**: AI-powered cost optimization, trend analysis, and anomaly detection
+- 🔍 **Comprehensive Observability**: Full-stack monitoring with Grafana, Prometheus, Tempo, and Pyroscope
+- 🛡️ **Security-First**: Built-in security scanning, vulnerability assessment, and compliance checking
+- 🚀 **Cloud-Native**: Containerized deployment with Docker and Kubernetes support
+- 📈 **FinOps Integration**: Advanced financial operations with cost forecasting and budget management
+
+## 🏗️ Architecture
+
 ```
-git clone https://github.com/<org>/<repo>.git
-cd <repo>
+┌─────────────────────────────────────────────────────────────────┐
+│                     Claude AI / LLM Client                      │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │ MCP Protocol
+┌─────────────────────────────┴───────────────────────────────────┐
+│                    MCP-OCI Server Suite                         │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
+│  │   Compute   │ │  Networking │ │  Security   │ │    Cost     ││
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
+│  │ Block Store │ │     DB      │ │ Observ.     │ │ Inventory   ││
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
+└─────────────────────────────┬───────────────────────────────────┘
+                              │ OCI SDK
+┌─────────────────────────────┴───────────────────────────────────┐
+│                Oracle Cloud Infrastructure                      │
+│     Compute • Network • Security • Storage • Database         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Copy environment template and edit:
-```
-cp .env.sample .env   # then edit to set COMPARTMENT_OCID, etc.
-```
+## 🚀 Quick Start
 
-Option A (one‑shot):
-```
-scripts/deploy.sh
-```
+### Prerequisites
 
-Option B (manual):
-```
+- Python 3.11+
+- Oracle Cloud Infrastructure account and CLI configuration
+- Docker (for observability stack)
+- Git
+
+### 1. Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/mcp-oci.git
+cd mcp-oci
+
+# Create and activate virtual environment
 python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .[dev]
-make lint
-make test
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
 ```
 
-Prerequisites:
-- Python 3.10+ with venv
-- git
-- OCI config at `~/.oci/config` with a working profile (DEFAULT by default)
-- On Linux, ensure `build-essential` (or equivalent) for any native deps
+### 2. OCI Configuration
 
-## Configuration
-Set OCI credentials in `~/.oci/config`. Optionally set defaults:
-```
-export OCI_PROFILE=DEFAULT
-export OCI_REGION=eu-frankfurt-1
-```
+Set up your OCI credentials using one of these methods:
 
-## Quickstart
+#### Option A: OCI CLI Configuration
+```bash
+# Install and configure OCI CLI
+pip install oci-cli
+oci setup config
 
-### 1-Click Local Run for Observability Stack
-
-To quickly start the observability stack (Grafana, Prometheus, Tempo, OTEL Collector, obs_app):
-
-```
-cd ops
-docker compose up -d
+# Your credentials will be stored in ~/.oci/config
 ```
 
-This provides monitoring and tracing. Access Grafana at http://localhost:3000 (admin/admin).
-
-### Launching MCP Servers
-
-Run each server in a separate terminal (or use tmux/screen):
-
-```
-poetry run python mcp_servers/compute/server.py
-poetry run python mcp_servers/db/server.py
-poetry run python mcp_servers/network/server.py
-poetry run python mcp_servers/security/server.py
-poetry run python mcp_servers/observability/server.py   # Consolidated server (includes Log Analytics)
-poetry run python mcp_servers/cost/server.py
-poetry run python mcp_servers/blockstorage/server.py
-poetry run python mcp_servers/loadbalancer/server.py
+#### Option B: Environment Variables
+```bash
+# Copy and edit environment template
+cp .env.sample .env
+# Edit .env with your OCI details
 ```
 
-Alternatively, use the launcher script for all:
+#### Option C: Resource Principal (for OCI Compute)
+When running on OCI compute instances, the servers automatically use Resource Principal authentication.
 
-```
-scripts/mcp-launchers/start-mcp-server.sh all
-```
+### 3. Quick Test
 
-### One‑Shot AIOps Deploy (Web3 UX + DB)
+```bash
+# Test a single server
+python -m mcp_servers.compute.server
 
-End‑to‑end setup that provisions Autonomous JSON DB (optional), creates tables, populates data from MCP, warms caches/registry, and starts both the consolidated Observability MCP server and the Web3 UX on port 8080:
-
-```
-scripts/deploy_full_aiops.sh
+# Test with Claude Code or your MCP client
 ```
 
-Environment variables (examples) for DB wallet and optional Agents proxy:
+## 📦 Available MCP Servers
 
-- ORACLE_DB_USER=ADMIN
-- ORACLE_DB_PASSWORD=ChangeMe123!
-- ORACLE_DB_SERVICE=<adb_service_name>  # e.g., abcd1234_high
-- ORACLE_DB_WALLET_ZIP=/path/to/Wallet_MyADB.zip
-- ORACLE_DB_WALLET_PASSWORD=ChangeMe123!
-- COMPARTMENT_OCID=ocid1.tenancy.oc1..xxxx  # used to scope provisioning/discovery
-- GAI_AGENT_ENDPOINT=http://localhost:8088/agents/chat  # optional, Java service proxy
-- GAI_AGENT_API_KEY=...  # optional
+| Server | Description | Port | Key Features |
+|--------|-------------|------|--------------|
+| **compute** | VM and container management | 8001 | Instance lifecycle, scaling, monitoring |
+| **network** | Networking and connectivity | 8006 | VCNs, subnets, load balancers, security |
+| **security** | Security and compliance | 8004 | Vulnerability scanning, policy analysis |
+| **cost** | Financial operations | 8005 | Cost analysis, forecasting, optimization |
+| **db** | Database operations | 8002 | Autonomous DB, MySQL, PostgreSQL |
+| **blockstorage** | Storage management | 8007 | Block volumes, backups, lifecycle |
+| **observability** | Monitoring and metrics | 8003 | APM, logging, alerting integration |
+| **inventory** | Asset discovery | 8009 | Resource discovery, tagging, compliance |
+| **loadbalancer** | Load balancing | 8008 | LB configuration, SSL, health checks |
+| **agents** | AI agents integration | 8011 | OCI GenAI agents, chat proxies |
 
-After it completes:
+## 🔧 Individual Server Usage
 
-- Observability MCP server logs: `logs/observability.log`
-- Web3 UX: http://localhost:8080 (Redwood‑styled SPA with Discovery, Relations, Costs, FinOps AI, DB Sync)
-  - If 8080 is busy, set `WEB3_UX_PORT=8081 scripts/deploy_full_aiops.sh` and open http://localhost:8081
+### Running Single Servers
 
-Notes:
-- Works on macOS and Linux. No hard‑coded paths; Python executables are detected dynamically.
-- DB features are optional. If DB envs are not set, the app still starts; DB endpoints will return guidance.
-- For provisioning AJD from the script, set both `COMPARTMENT_OCID` and `ADMIN_PASSWORD`.
+Each MCP server can be run independently:
 
-### Linux Prerequisites
-- Python 3.10+ and venv available (`python3 -m venv`)
-- Ability to create processes (for background servers)
-- Network access to install pip dependencies (first run)
+```bash
+# Compute server
+python -m mcp_servers.compute.server
 
-### Stopping services
-```
-kill $(cat logs/observability.pid) || true
-kill $(cat logs/web3_ux.pid) || true
-```
+# Cost analysis server
+python -m mcp_servers.cost.server
 
-### Web3 UX Integrations
-- Discovery/Capacity require a compartment OCID. Either:
-  - set `COMPARTMENT_OCID` in your environment (recommended), or
-  - enter a compartment OCID in the UI inputs, or
-  - pass `?compartment_id=...` to the API endpoints.
-- Costs/ShowUsage/ShowOCI read your `~/.oci/config` profile; set `OCI_PROFILE` and `OCI_REGION` if needed.
-- If DB envs are not configured, DB endpoints will return a helpful error. Configure wallet/DSN to enable DB features.
+# Security server
+python -m mcp_servers.security.server
 
-### Troubleshooting
-- Import errors in Web3 UX endpoints: ensure you launched from the repo root or via the deploy script (the app auto-adds repo `src` to `PYTHONPATH`).
-- Missing compartmentId errors: set `COMPARTMENT_OCID` or supply `compartment_id` to endpoints/UI.
-- Port already in use: set `WEB3_UX_PORT` when running the deploy script or starting `web3_ux/server.py`.
-
-### First‑Run Experience (from GitHub)
-- If `.env` is missing, the deploy script offers to create it interactively. Defaults include:
-  - `OCI_PROFILE=DEFAULT`
-  - `OCI_REGION=eu-frankfurt-1`
-  - `COMPARTMENT_OCID=ocid1.compartment.oc1..aaaaaaaagy3yddkkampnhj3cqm5ar7w2p7tuq5twbojyycvol6wugfav3ckq` (you can change it)
-  - `ALLOW_MUTATIONS=false`
-- If the OCI CLI is not installed, the script offers to install it (`brew install oci-cli` or Oracle’s install.sh via curl).
-- If `~/.oci/config` is missing, you’ll be prompted to run `oci setup config` interactively to generate it.
-
-### Generative AI Agents (OCI mode)
-- MCP server `oci-mcp-agents` uses OCI SDK for Generative AI Agents with your profile/region/compartment:
-  - Set `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID` in `.env`.
-  - Default `GAI_MODE=oci` (no proxy required). Tools: `list_agents`, `create_agent`, `get_agent`, `update_agent`, `delete_agent`.
-- Optional legacy proxy mode: set `GAI_MODE=proxy` and configure `GAI_ADMIN_ENDPOINT`/`GAI_AGENT_ENDPOINT` (used for admin/chat REST if you already have a Java service).
-- Web3 UX → Agents tab integrates with the MCP server to create/list/update/delete agents; “Test” uses proxy mode if configured.
-
-#### Endpoints & Knowledge Bases & Data Sources
-- Endpoints (OCI): `create_agent_endpoint`, `list_agent_endpoints`, `get_agent_endpoint`, `update_agent_endpoint`, `delete_agent_endpoint`.
-- Knowledge Bases (OCI): `create_knowledge_base`, `list_knowledge_bases`, `get_knowledge_base`, `update_knowledge_base`, `delete_knowledge_base`.
-- Data Sources (OCI): `create_data_source` (Object Storage prefixes), `list_data_sources`, `get_data_source`, `update_data_source`, `delete_data_source`.
-- Web3 UX panels added for KBs, Data Sources, and Endpoints under the corresponding tabs.
-
-### Metrics, Traces, Pyroscope
-- All MCP servers initialize OpenTelemetry tracing and metrics. Many start a Prometheus metrics endpoint via `prometheus_client` with `METRICS_PORT`.
-- Web3 UX also exposes Prometheus metrics (set `METRICS_PORT`, default 8012) and instruments FastAPI with OpenTelemetry.
-- Optional Pyroscope profiling across servers: set `ENABLE_PYROSCOPE=true`, and configure `PYROSCOPE_SERVER_ADDRESS`, `PYROSCOPE_APP_NAME`, `PYROSCOPE_SAMPLE_RATE`.
-
-### Adding to Claude Desktop / Cline
-
-For Claude Desktop: Edit claude_desktop_config.json and add MCP server entries from mcp.json under "mcp_servers".
-
-For Cline: In cline_mcp_settings.json, add:
-
-```json
-"mcp_servers": [  // paste array from mcp.json ]
+# With custom port (via environment)
+METRICS_PORT=9001 python -m mcp_servers.compute.server
 ```
 
-STDIO command definitions are in mcp.json, e.g.:
+### MCP Configuration
 
+Add servers to your MCP client configuration:
+
+#### Claude Code Configuration
 ```json
 {
-  "name": "oci-mcp-compute",
-  "command": ["python", "-m", "mcp_servers.compute.server"],
-  "args": [],
-  "env": { "OCI_PROFILE": "${OCI_PROFILE}", "OCI_REGION": "${OCI_REGION}", "COMPARTMENT_OCID": "${COMPARTMENT_OCID}" },
-  "transport": "stdio"
+  "mcpServers": {
+    "oci-compute": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.compute.server"],
+      "cwd": "/path/to/mcp-oci"
+    },
+    "oci-cost": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.cost.server"],
+      "cwd": "/path/to/mcp-oci"
+    }
+  }
 }
 ```
 
-### Infrastructure Creation & Management
+#### Environment Variables per Server
+```bash
+# Compute server
+export OCI_REGION=us-ashburn-1
+export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export ALLOW_MUTATIONS=true
+export METRICS_PORT=8001
 
-**⚠️ Safety First**: All creation operations require `ALLOW_MUTATIONS=true` environment variable.
-
-#### Example Creation Prompts:
-- "Create a VCN with CIDR 10.0.0.0/16 in my compartment"
-- "Create a subnet in VCN ocid1.vcn..example with CIDR 10.0.1.0/24"
-- "Launch a VM.Standard.E2.1.Micro compute instance in subnet ocid1.subnet..example"
-- "Create a 100GB block volume in availability domain AD-1"
-- "Set up a load balancer with listeners for my web application"
-
-### Example Prompts for Claude
-
-- "List my instances in compartment ocid1.compartment.oc1..example and start ocid1.instance.oc1.example"
-- "Create a complete infrastructure stack: VCN, subnet, VM, and load balancer"
-- "Run Log Analytics query using the oci:loganalytics:execute_query tool (auto-discovers namespace)"
-- "Show Grafana dashboard and a trace in Tempo"
-- "Run cost anomaly on series [100, 200, 150, 500, 180]"
-- "Summarize open Cloud Guard problems in last 24h"
-- "List my block volumes and create a new 50GB volume"
-
-## Architecture & Data Flow
-
-```mermaid
-graph TD
-    A[Claude/Cline] -->|MCP/STDIO| B[MCP Servers]
-    B -->|OCI SDK| C[OCI APIs]
-    B -->|OTel Traces/Metrics| D[OTel Collector]
-    D --> E[Tempo Traces]
-    D --> F[Prometheus Metrics]
-    G[obs_app] -->| /metrics | F
-    F --> H[Grafana Dashboards]
-    E --> H
-    I[UX App] -->|HTTP| H
-    I -->|/metrics| F
+# Cost server
+export FINOPSAI_CACHE_TTL_SECONDS=600
+export TENANCY_OCID=ocid1.tenancy.oc1..example
 ```
 
-## Demo Script (5-7 min flow)
+## 📊 Observability Stack
 
-1. In Claude (with MCP): Ask to list instances and start one.
-2. Run a Log Analytics query (e.g., `oci:loganalytics:execute_query`) or list sources.
-3. Visit UX at localhost:8000 to see servers and relations.
-4. Navigate to /dashboards to view embedded Grafana.
-5. In Tempo (Grafana), search for a trace from obs_app.
-6. Run cost anomaly tool on a sample series.
-7. Summarize Cloud Guard open problems.
+MCP-OCI includes a complete observability stack with metrics, tracing, and profiling.
 
-## Example Workflows
+### Setup Observability
 
-### Workflow 1: Compute Management
-- Prompt: "List running instances in my compartment and provide CPU metrics for the last hour."
-- Expected: Uses compute list + metrics tools; outputs summary.
+```bash
+cd ops
 
-### Workflow 2: Security Check
-- Prompt: "Scan for open Cloud Guard problems and Data Safe findings."
-- Expected: Aggregates security posture.
+# Start all observability services
+./start-observability.sh
 
-### Workflow 3: Cost Analysis
-- Prompt: "Get cost breakdown for last week and detect anomalies."
-- Expected: Usage report + anomaly flags.
+# Start all MCP servers with metrics
+../scripts/mcp-launchers/start-mcp-server.sh start all
 
-### Workflow 4: Log Query & Observe
-- Prompt: "Run LA query for errors in last 24h; check traces in Tempo."
-- Expected: Query results + navigation to traces.
+# Start UX application
+./run-ux-local.sh
 
-Polish notes:
-- All servers tested with unit tests.
-- Env vars documented in .env.example.
-- For production, deploy obs_app to OCI Container Instances.
-## Performance & Token Optimization
-- Registry: list operations populate a name→OCID registry (compartments, VCNs, subnets, instances, users, etc.). Subsequent name-based calls resolve locally without API requests.
-- Caching: per-service caches with tunable TTLs (seconds):
-  - Global: `MCP_CACHE_TTL` (default 3600)
-  - Service overrides: `MCP_CACHE_TTL_COMPUTE`, `..._NETWORKING`, `..._IAM` (users cached 6h), `..._OKE`, `..._FUNCTIONS`, `..._STREAMING`, `..._OBJECTSTORAGE`, `..._LOADBALANCER`
-- Warm helpers:
-  - `mcp:warm:services` — warms global resources (compartments, users, buckets, vcns, etc.)
-  - `mcp:warm:compartment` — warms a specific compartment (vcns→subnets, instances, lbs, functions, streams)
-  - CLI: `scripts/warm_registry.py --profile DEFAULT --region eu-frankfurt-1 --limit 20`
+# Test the complete stack
+./test-observability.sh
+```
 
-## Observability helpers
-- `oci:observability:get-recent-calls` — last 50 MCP calls with full path (server→tool→SDK) and success flag.
-- `oci:observability:clear-recent-calls` — clear the buffer.
+### Access Dashboards
 
-## Security & Secrets
-- No secrets are committed. `.env` is git-ignored. SDK credentials are read from `~/.oci/config` or instance principals.
-- Logging redacts sensitive info and does not echo credentials.
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Tempo**: http://localhost:3200
+- **Pyroscope**: http://localhost:4040
+- **UX Overview**: http://localhost:8010
 
-## Development
-- Lint/format: `make lint` / `make fmt`
-- Tests: `make test`
-- Launch servers via `python mcp_servers/<service>/server.py` or use entries in `mcp.json`.
+### OCI Observability Integration
+
+#### Option 1: OCI Monitoring Integration
+
+```bash
+# Configure OCI Monitoring
+export OCI_MONITORING_NAMESPACE=mcp-oci
+export OCI_MONITORING_COMPARTMENT_ID=ocid1.compartment.oc1..example
+
+# Enable OCI metrics export
+export OTEL_EXPORTER_OCI_ENABLED=true
+export OTEL_EXPORTER_OCI_ENDPOINT=https://telemetry-ingestion.us-ashburn-1.oraclecloud.com
+```
+
+#### Option 2: OCI Logging Analytics
+
+```bash
+# Configure Logging Analytics
+export OCI_LOG_ANALYTICS_NAMESPACE=mcp-oci
+export OCI_LOG_ANALYTICS_LOG_GROUP_ID=ocid1.loggroup.oc1..example
+
+# Enable log export
+export OTEL_EXPORTER_LOGGING_ENABLED=true
+```
+
+#### Option 3: OCI APM
+
+```bash
+# Configure Application Performance Monitoring
+export OCI_APM_DOMAIN_ID=ocid1.apmdomain.oc1..example
+export OCI_APM_PRIVATE_DATA_KEY=your-private-data-key
+export OCI_APM_PUBLIC_DATA_KEY=your-public-data-key
+
+# Enable APM tracing
+export OTEL_EXPORTER_APM_ENABLED=true
+```
+
+### Metrics Collection
+
+All servers automatically expose Prometheus metrics:
+
+```bash
+# Server health and performance
+curl http://localhost:8001/metrics  # Compute server
+curl http://localhost:8004/metrics  # Security server
+
+# Aggregated metrics
+curl http://localhost:8889/metrics  # OTEL Collector
+```
+
+## 🛠️ Configuration
+
+### Environment Variables
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `OCI_REGION` | OCI region | `us-ashburn-1` | `eu-frankfurt-1` |
+| `OCI_PROFILE` | OCI config profile | `DEFAULT` | `my-profile` |
+| `COMPARTMENT_OCID` | Default compartment | - | `ocid1.compartment.oc1..` |
+| `ALLOW_MUTATIONS` | Enable write operations | `false` | `true` |
+| `METRICS_PORT` | Prometheus metrics port | Server-specific | `8001` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry endpoint | `localhost:4317` | Custom endpoint |
+
+### Advanced Configuration
+
+#### Cost Server (FinOps)
+```bash
+export FINOPSAI_CACHE_TTL_SECONDS=600
+export TENANCY_OCID=ocid1.tenancy.oc1..example
+export OCI_BILLING_NAMESPACE=oci_billing
+```
+
+#### Security Server
+```bash
+export SECURITY_SCAN_ENABLED=true
+export VULNERABILITY_DB_PATH=/path/to/vuln-db
+export COMPLIANCE_FRAMEWORKS=PCI,SOX,GDPR
+```
+
+#### Observability Stack
+```bash
+export GRAFANA_ADMIN_PASSWORD=secure-password
+export PROMETHEUS_RETENTION=30d
+export TEMPO_RETENTION=7d
+export PYROSCOPE_STORAGE_PATH=/data/pyroscope
+```
+
+## 🔐 Security & Compliance
+
+### Authentication Methods
+
+1. **OCI CLI Configuration** (Development)
+2. **Resource Principal** (Production on OCI)
+3. **Instance Principal** (OCI Compute instances)
+4. **Environment Variables** (Containerized deployments)
+
+### Security Best Practices
+
+- Never commit real credentials to version control
+- Use Resource Principals in production
+- Enable audit logging for all operations
+- Regularly rotate access keys
+- Monitor and alert on unusual access patterns
+- Use least-privilege IAM policies
+
+### IAM Policies Required
+
+```hcl
+# Minimum required policies
+Allow group mcp-users to inspect all-resources in compartment id <compartment-ocid>
+Allow group mcp-users to read all-resources in compartment id <compartment-ocid>
+
+# For write operations (when ALLOW_MUTATIONS=true)
+Allow group mcp-users to manage instances in compartment id <compartment-ocid>
+Allow group mcp-users to manage volumes in compartment id <compartment-ocid>
+
+# For cost analysis
+Allow group mcp-users to read usage-report in tenancy
+Allow group mcp-users to read budgets in tenancy
+```
+
+## 🧪 Testing
+
+### Unit Tests
+```bash
+# Run all tests
+python -m pytest tests/
+
+# Run specific server tests
+python -m pytest tests/unit/test_compute.py
+
+# With coverage
+python -m pytest --cov=mcp_servers tests/
+```
+
+### Integration Tests
+```bash
+# Requires OCI credentials
+python -m pytest tests/integration/
+
+# Specific integration test
+python -m pytest tests/integration/test_compute.py -v
+```
+
+## 🚀 Deployment
+
+### Local Development
+```bash
+# Start all servers
+./scripts/start-all-servers.sh
+
+# Development mode with auto-reload
+./scripts/dev-mode.sh
+```
+
+### Container Deployment
+```bash
+# Build containers
+docker-compose build
+
+# Start with observability
+docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+```
+
+## 📚 Advanced Usage
+
+### Custom Tool Development
+
+Create custom tools for specific use cases:
+
+```python
+from fastmcp import FastMCP
+from fastmcp.tools import Tool
+
+app = FastMCP("my-custom-server")
+
+@app.tool("my_custom_operation")
+def my_operation(param1: str, param2: int = 10) -> dict:
+    """Custom OCI operation"""
+    # Your implementation
+    return {"result": "success"}
+
+if __name__ == "__main__":
+    app.run()
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make your changes and add tests
+4. Run the test suite: `python -m pytest`
+5. Commit your changes: `git commit -am 'Add my feature'`
+6. Push to the branch: `git push origin feature/my-feature`
+7. Submit a pull request
+
+### Development Setup
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+
+# Run linting
+flake8 mcp_servers/
+mypy mcp_servers/
+
+# Format code
+black mcp_servers/
+isort mcp_servers/
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: [Full documentation](docs/)
+- **Issues**: [GitHub Issues](https://github.com/your-org/mcp-oci/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/mcp-oci/discussions)
+
+## 🗺️ Roadmap
+
+- [ ] Additional OCI services integration
+- [ ] Multi-cloud support (AWS, Azure, GCP)
+- [ ] Advanced AI-powered automation
+- [ ] GraphQL API interface
+- [ ] Mobile dashboard application
+- [ ] Enterprise SSO integration
+- [ ] Advanced compliance reporting
+- [ ] Machine learning model deployment tools
+
+---
+
+**Made with ❤️ for the Oracle Cloud community**

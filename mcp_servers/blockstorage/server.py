@@ -20,6 +20,47 @@ tracer = trace.get_tracer("oci-mcp-blockstorage")
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 logger = logging.getLogger(__name__)
 
+def _safe_serialize(obj):
+    """Safely serialize OCI SDK objects and other complex types"""
+    if obj is None:
+        return None
+
+    # Handle OCI SDK objects
+    if hasattr(obj, '__dict__'):
+        try:
+            # Try to convert OCI objects to dict
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+                return obj._data.__dict__
+            else:
+                # Fallback to manual serialization of object attributes
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if not key.startswith('_'):
+                        result[key] = _safe_serialize(value)
+                return result
+        except Exception as e:
+            return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+    # Handle lists and tuples
+    elif isinstance(obj, (list, tuple)):
+        return [_safe_serialize(item) for item in obj]
+
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {key: _safe_serialize(value) for key, value in obj.items()}
+
+    # Handle primitive types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # For unknown types, try to convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return {"unknown_type": str(type(obj))}
 
 def list_volumes(
     compartment_id: Optional[str] = None,
@@ -55,17 +96,7 @@ def list_volumes(
             except Exception:
                 pass
             volumes = response.data
-            return [{
-                'id': vol.id,
-                'display_name': getattr(vol, 'display_name', ''),
-                'size_in_gbs': getattr(vol, 'size_in_gbs', 0),
-                'size_in_mbs': getattr(vol, 'size_in_mbs', 0),
-                'lifecycle_state': getattr(vol, 'lifecycle_state', ''),
-                'availability_domain': getattr(vol, 'availability_domain', ''),
-                'compartment_id': getattr(vol, 'compartment_id', compartment),
-                'time_created': getattr(vol, 'time_created', '').isoformat() if hasattr(vol, 'time_created') and vol.time_created else '',
-                'vpus_per_gb': getattr(vol, 'vpus_per_gb', 0)
-            } for vol in volumes]
+            return [_safe_serialize(vol) for vol in volumes]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing volumes: {e}")
             span.record_exception(e)
@@ -117,17 +148,7 @@ def create_volume(
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             volume = response.data
-            return {
-                'id': volume.id,
-                'display_name': getattr(volume, 'display_name', ''),
-                'size_in_gbs': getattr(volume, 'size_in_gbs', 0),
-                'size_in_mbs': getattr(volume, 'size_in_mbs', 0),
-                'lifecycle_state': getattr(volume, 'lifecycle_state', ''),
-                'availability_domain': getattr(volume, 'availability_domain', ''),
-                'compartment_id': getattr(volume, 'compartment_id', compartment),
-                'time_created': getattr(volume, 'time_created', '').isoformat() if hasattr(volume, 'time_created') and volume.time_created else '',
-                'vpus_per_gb': getattr(volume, 'vpus_per_gb', 0)
-            }
+            return _safe_serialize(volume)
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error creating volume: {e}")
             span.record_exception(e)

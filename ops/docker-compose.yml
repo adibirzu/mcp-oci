@@ -7,13 +7,25 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_INSTALL_PLUGINS=grafana-pyroscope-datasource
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
+    depends_on:
+      - prometheus
+      - tempo
+      - pyroscope
+    networks:
+      - default
 
   prometheus:
     image: prom/prometheus:latest
@@ -22,18 +34,42 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
+    networks:
+      - default
 
   tempo:
     image: grafana/tempo:latest
     container_name: tempo
+    user: "0:0"  # Run as root to avoid permission issues
     ports:
       - "3200:3200"  # HTTP
       - "4318:4318"  # OTLP HTTP
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
     command: ["-config.file=/etc/tempo.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:3200/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
+    networks:
+      - default
 
   pyroscope:
     image: grafana/pyroscope:latest
@@ -42,8 +78,15 @@ services:
       - "4040:4040"  # Pyroscope UI
     volumes:
       - ./pyroscope:/var/lib/pyroscope
-    command: ["server"]
+    command: ["server", "--server.http-listen-address=0.0.0.0:4040"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:4040/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
+    networks:
+      - default
 
   otel-collector:
     image: otel/opentelemetry-collector:latest
@@ -54,10 +97,19 @@ services:
     volumes:
       - ./otel/otel-collector.yaml:/etc/otel-collector.yaml
     command: ["--config=/etc/otel-collector.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:8889/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     depends_on:
-      - tempo
-      - prometheus
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - default
 
   obs-app:
     build:
@@ -71,8 +123,18 @@ services:
     depends_on:
       - otel-collector
     restart: unless-stopped
+    networks:
+      - default
 
 volumes:
   grafana-data:
   prometheus-data:
   tempo-data:
+
+networks:
+  default:
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

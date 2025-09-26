@@ -87,7 +87,8 @@ def init_tracing(
     Configure a global TracerProvider with a Resource including service.name to avoid 'unknown_service'.
     This is idempotent: calling it multiple times will not re-create providers.
     """
-    if isinstance(trace.get_tracer_provider(), TracerProvider):
+    current_provider = trace.get_tracer_provider()
+    if isinstance(current_provider, TracerProvider):
         # Already initialized; return tracer for the requested service name.
         return trace.get_tracer(service_name)
 
@@ -109,7 +110,13 @@ def init_metrics(
 ) -> metrics.Meter:
     """
     Initialize OTLP metrics export (optional). Uses the same endpoint as tracing by default.
+    This is idempotent: calling it multiple times will not re-create providers.
     """
+    current_provider = metrics.get_meter_provider()
+    if isinstance(current_provider, MeterProvider):
+        # Already initialized; return meter for the requested name.
+        return metrics.get_meter(meter_name)
+
     exporter_endpoint = _normalize_otlp_endpoint(endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"))
     metric_reader = PeriodicExportingMetricReader(
         OTLPMetricExporter(endpoint=exporter_endpoint, insecure=insecure)
@@ -190,9 +197,9 @@ def get_token_counter():
 
 def record_token_usage(
     total: int,
-    request: Optional[int] = None,
-    response: Optional[int] = None,
-    attrs: Optional[Dict[str, Any]] = None
+    request: int | None = None,
+    response: int | None = None,
+    attrs: dict[str, t.Any] | None = None
 ) -> None:
     """Record token usage metrics for future LLM integrations"""
     counter = get_token_counter()

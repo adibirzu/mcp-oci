@@ -59,3 +59,8 @@ datasources:
     url: http://pyroscope:4040
     version: 1
     editable: true
+    jsonData:
+      httpMethod: GET
+      timeout: 30
+    basicAuth: false
+    isDefault: false

@@ -20,6 +20,47 @@ tracer = trace.get_tracer("oci-mcp-loadbalancer")
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 logger = logging.getLogger(__name__)
 
+def _safe_serialize(obj):
+    """Safely serialize OCI SDK objects and other complex types"""
+    if obj is None:
+        return None
+
+    # Handle OCI SDK objects
+    if hasattr(obj, '__dict__'):
+        try:
+            # Try to convert OCI objects to dict
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+                return obj._data.__dict__
+            else:
+                # Fallback to manual serialization of object attributes
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if not key.startswith('_'):
+                        result[key] = _safe_serialize(value)
+                return result
+        except Exception as e:
+            return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+    # Handle lists and tuples
+    elif isinstance(obj, (list, tuple)):
+        return [_safe_serialize(item) for item in obj]
+
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {key: _safe_serialize(value) for key, value in obj.items()}
+
+    # Handle primitive types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # For unknown types, try to convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return {"unknown_type": str(type(obj))}
 
 def list_load_balancers(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_load_balancers", mcp_server="oci-mcp-loadbalancer") as span:
@@ -48,21 +89,7 @@ def list_load_balancers(compartment_id: Optional[str] = None) -> List[Dict[str, 
             except Exception:
                 pass
             load_balancers = response.data
-            return [{
-                'id': lb.id,
-                'display_name': getattr(lb, 'display_name', ''),
-                'lifecycle_state': getattr(lb, 'lifecycle_state', ''),
-                'shape_name': getattr(lb, 'shape_name', ''),
-                'shape_details': getattr(lb, 'shape_details', {}),
-                'ip_addresses': getattr(lb, 'ip_addresses', []),
-                'is_private': getattr(lb, 'is_private', False),
-                'subnet_ids': getattr(lb, 'subnet_ids', []),
-                'network_security_group_ids': getattr(lb, 'network_security_group_ids', []),
-                'listeners': getattr(lb, 'listeners', {}),
-                'backend_sets': getattr(lb, 'backend_sets', {}),
-                'compartment_id': getattr(lb, 'compartment_id', compartment),
-                'time_created': getattr(lb, 'time_created', '').isoformat() if hasattr(lb, 'time_created') and lb.time_created else ''
-            } for lb in load_balancers]
+            return [_safe_serialize(lb) for lb in load_balancers]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing load balancers: {e}")
             span.record_exception(e)
@@ -121,21 +148,7 @@ def create_load_balancer(
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             lb = response.data
-            return {
-                'id': lb.id,
-                'display_name': getattr(lb, 'display_name', ''),
-                'lifecycle_state': getattr(lb, 'lifecycle_state', ''),
-                'shape_name': getattr(lb, 'shape_name', ''),
-                'shape_details': getattr(lb, 'shape_details', {}),
-                'ip_addresses': getattr(lb, 'ip_addresses', []),
-                'is_private': getattr(lb, 'is_private', False),
-                'subnet_ids': getattr(lb, 'subnet_ids', []),
-                'network_security_group_ids': getattr(lb, 'network_security_group_ids', []),
-                'listeners': getattr(lb, 'listeners', {}),
-                'backend_sets': getattr(lb, 'backend_sets', {}),
-                'compartment_id': getattr(lb, 'compartment_id', compartment),
-                'time_created': getattr(lb, 'time_created', '').isoformat() if hasattr(lb, 'time_created') and lb.time_created else ''
-            }
+            return _safe_serialize(lb)
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error creating load balancer: {e}")
             span.record_exception(e)

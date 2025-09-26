@@ -445,7 +445,21 @@ def emit_test_log(
 # -----------------------------
 
 def _ensure_compartment_id(cid: Optional[str]) -> str:
-    return cid or get_compartment_id()
+    """
+    Ensure we pass a valid compartment OCID to Logan.
+    Priority:
+      1) Explicit param
+      2) COMPARTMENT_OCID env (via get_compartment_id)
+      3) Tenancy OCID from OCI config (fallback for broad queries)
+    """
+    if cid:
+        return cid
+    try:
+        from mcp_oci_common import get_oci_config  # local import to avoid cycles
+        cfg = get_oci_config()
+    except Exception:
+        cfg = {}
+    return get_compartment_id() or cfg.get("tenancy")
 
 def _parse_result(result):
     try:
@@ -763,7 +777,8 @@ def quick_checks(
 
         head_q = f"* | head {max(1, int(sample_size))}"
         fields_q = f"* | fields Time, 'Log Source' | head {max(1, int(sample_size))}"
-        stats_q = f"* | fields 'Log Source' | head 100 | stats count() by 'Log Source' | sort -count | head {max(1, int(sample_size))}"
+        # Use LA-compliant COUNT syntax for this tenancy (COUNT without arg is rejected)
+        stats_q = f"* | fields 'Log Source' | head 100 | stats COUNT as logrecords by 'Log Source' | sort -logrecords | head {max(1, int(sample_size))}"
 
         checks.append(_run("head", head_q))
         checks.append(_run("fields", fields_q))

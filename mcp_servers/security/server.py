@@ -7,7 +7,7 @@ import oci
 from oci.identity import IdentityClient
 from oci.cloud_guard import CloudGuardClient
 from oci.data_safe import DataSafeClient
-from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes
+from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, validate_and_log_tools
 from mcp_oci_common.cache import get_cache
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
@@ -311,6 +311,12 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8004")))
         except Exception:
             pass
+
+    # Validate MCP tool names at startup
+    if not validate_and_log_tools(tools, "oci-mcp-security"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     mcp = FastMCP(tools=tools, name="oci-mcp-security")
     if _FastAPIInstrumentor:
         try:
@@ -343,3 +349,46 @@ if __name__ == "__main__":
         pass
 
     mcp.run()
+
+
+def _safe_serialize(obj):
+    """Safely serialize OCI SDK objects and other complex types"""
+    if obj is None:
+        return None
+
+    # Handle OCI SDK objects
+    if hasattr(obj, '__dict__'):
+        try:
+            # Try to convert OCI objects to dict
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+                return obj._data.__dict__
+            else:
+                # Fallback to manual serialization of object attributes
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if not key.startswith('_'):
+                        result[key] = _safe_serialize(value)
+                return result
+        except Exception as e:
+            return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+    # Handle lists and tuples
+    elif isinstance(obj, (list, tuple)):
+        return [_safe_serialize(item) for item in obj]
+
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {key: _safe_serialize(value) for key, value in obj.items()}
+
+    # Handle primitive types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # For unknown types, try to convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return {"unknown_type": str(type(obj))}

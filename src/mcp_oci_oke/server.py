@@ -23,7 +23,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:oke:list-clusters",
+            "name": "oci_oke_list_clusters",
             "description": "List OKE clusters in a compartment.",
             "parameters": {
                 "type": "object",
@@ -41,7 +41,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_clusters,
         },
         {
-            "name": "oci:oke:list-node-pools",
+            "name": "oci_oke_list_node_pools",
             "description": "List node pools for a cluster.",
             "parameters": {
                 "type": "object",
@@ -60,7 +60,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_node_pools,
         },
         {
-            "name": "oci:oke:get-cluster",
+            "name": "oci_oke_get_cluster",
             "description": "Get OKE cluster by OCID.",
             "parameters": {
                 "type": "object",
@@ -74,7 +74,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": get_cluster,
         },
         {
-            "name": "oci:oke:get-node-pool",
+            "name": "oci_oke_get_node_pool",
             "description": "Get node pool by OCID.",
             "parameters": {
                 "type": "object",
