@@ -13,10 +13,18 @@ from dataclasses import dataclass
 
 from mcp_oci_common import get_oci_config
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+from opentelemetry import trace
 
 import oci  # type: ignore
 import requests
 from oci.signer import Signer
+
+# Set up tracing with proper Resource so service.name is set (avoids unknown_service)
+os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-loganalytics")
+init_tracing(service_name="oci-mcp-loganalytics")
+init_metrics()
+tracer = trace.get_tracer("oci-mcp-loganalytics")
 
 
 @dataclass
@@ -116,16 +124,22 @@ class SecurityQueryMapper:
         
         query_def = self.security_queries[query_type]
         
-        # Add time filter to queries
+        # Add time filter to queries (append in a syntax-safe way)
         time_filter = f"Time > dateRelative({time_period_minutes}m)"
         enhanced_queries = []
         
         for query in query_def.queries:
-            if "Time >" not in query:
-                enhanced_query = f"{query} and {time_filter}"
+            q = query
+            # If query already constrains Time, keep as-is
+            if "Time >" in q or "time >" in q:
+                enhanced_queries.append(q)
+                continue
+            # If query already has a where clause, extend it
+            if "| where" in q:
+                enhanced_queries.append(f"{q} and {time_filter}")
             else:
-                enhanced_query = query
-            enhanced_queries.append(enhanced_query)
+                # For search/other pipelines, add a where stage
+                enhanced_queries.append(f"{q} | where {time_filter}")
         
         return {
             "success": True,
@@ -196,6 +210,26 @@ def _format_time_range(time_range: str) -> tuple[datetime, datetime]:
     return start_time, now
 
 
+def _minutes_from_time_range(time_range: str) -> int:
+    """Convert strings like '60m', '24h', '7d', '1w', '30d' to minutes."""
+    if not isinstance(time_range, str):
+        return 60
+    tr = time_range.strip().lower()
+    try:
+        if tr.endswith("m"):
+            return int(tr[:-1])
+        if tr.endswith("h"):
+            return int(tr[:-1]) * 60
+        if tr.endswith("d"):
+            return int(tr[:-1]) * 1440
+        if tr.endswith("w"):
+            return int(tr[:-1]) * 7 * 1440
+        # plain number → minutes
+        return int(tr)
+    except Exception:
+        return 60
+
+
 def run_query_legacy(
     namespace_name: str,
     query_string: str,
@@ -262,17 +296,19 @@ def run_query_legacy(
 def _get_namespace(compartment_id: str, profile: str | None = None, region: str | None = None) -> str:
     """Get Log Analytics namespace for the tenancy.
 
-    Tries official SDK list_namespaces; falls back to object storage namespace; last resort returns compartment_id.
+    Tries official SDK list_namespaces; falls back to object storage namespace; last resort returns tenancy or provided compartment_id.
     """
     # Load config using supported signature and apply region override
     cfg = get_oci_config(profile_name=profile)
     if region:
         cfg["region"] = region
 
-    # Prefer proper Log Analytics namespace discovery
+    tenancy_id = cfg.get("tenancy") or compartment_id
+
+    # Prefer proper Log Analytics namespace discovery (requires tenancy OCID)
     try:
         la = oci.log_analytics.LogAnalyticsClient(cfg)
-        resp = la.list_namespaces(compartment_id=compartment_id)
+        resp = la.list_namespaces(compartment_id=tenancy_id)
         items = getattr(resp.data, 'items', None) or []
         if items:
             return items[0].namespace_name
@@ -284,7 +320,8 @@ def _get_namespace(compartment_id: str, profile: str | None = None, region: str 
         os_client = oci.object_storage.ObjectStorageClient(cfg)
         return os_client.get_namespace().data
     except Exception:
-        return compartment_id
+        # Last resort: return tenancy or the provided compartment_id
+        return tenancy_id
 
 
 def execute_query(
@@ -297,80 +334,81 @@ def execute_query(
     region: str | None = None,
 ) -> str:
     """Execute a Log Analytics query using direct REST API"""
-    if requests is None or Signer is None:
-        return with_meta({"error": "Required libraries not available"}, success=False)
-    
-    try:
-        # Load config and apply region override
-        config = get_oci_config(profile_name=profile)
-        if region:
-            config["region"] = region
-        namespace = _get_namespace(compartment_id, profile, region)
-        
-        # Convert time range
-        start_time, end_time = _format_time_range(time_range)
-        
-        # Create signer
-        signer = Signer(
-            tenancy=config["tenancy"],
-            user=config["user"],
-            fingerprint=config["fingerprint"],
-            private_key_file_location=config["key_file"],
-            pass_phrase=config.get("pass_phrase")
-        )
-        
-        # Build URL
-        api_region = region or config.get("region", "us-ashburn-1")
-        url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace}/search/actions/query"
-        
-        # Build query details
-        query_details = {
-            "subSystem": "LOG",
-            "queryString": query,
-            "shouldRunAsync": False,
-            "shouldIncludeTotalCount": True,
-            "compartmentId": compartment_id,
-            "compartmentIdInSubtree": True,
-            "timeFilter": {
-                "timeStart": start_time.isoformat().replace('+00:00', 'Z'),
-                "timeEnd": end_time.isoformat().replace('+00:00', 'Z'),
-                "timeZone": os.getenv("TIME_ZONE", "UTC")
-            },
-            "maxTotalCount": max_count
-        }
-        
-        params = {"limit": max_count}
-        
-        response = requests.post(url, json=query_details, auth=signer, params=params)
-        
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("items", [])
-        elif response.status_code == 201:
-            data = response.json()
-            results = []
-        else:
-            raise Exception(f"HTTP Error {response.status_code}: {response.text}")
-        
-        return with_meta(
-            {
-                "query": query,
-                "query_name": query_name,
-                "time_range": time_range,
-                "namespace": namespace,
-                "compartment_id": compartment_id,
-                "results": results,
-                "count": len(results)
-            },
-            success=True,
-            message=f"Query executed successfully. Found {len(results)} results."
-        )
-    except Exception as e:
-        return with_meta(
-            {"error": str(e)},
-            success=False,
-            message=f"Query execution failed: {str(e)}"
-        )
+    with tool_span(tracer, "execute_query", mcp_server="oci-mcp-loganalytics") as span:
+        if requests is None or Signer is None:
+            return with_meta({"error": "Required libraries not available"}, success=False)
+
+        try:
+            # Load config and apply region override
+            config = get_oci_config(profile_name=profile)
+            if region:
+                config["region"] = region
+            namespace = _get_namespace(compartment_id, profile, region)
+
+            # Convert time range
+            start_time, end_time = _format_time_range(time_range)
+
+            # Create signer
+            signer = Signer(
+                tenancy=config["tenancy"],
+                user=config["user"],
+                fingerprint=config["fingerprint"],
+                private_key_file_location=config["key_file"],
+                pass_phrase=config.get("pass_phrase")
+            )
+
+            # Build URL
+            api_region = region or config.get("region", "us-ashburn-1")
+            url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace}/search/actions/query"
+
+            # Build query details
+            query_details = {
+                "subSystem": "LOG",
+                "queryString": query,
+                "shouldRunAsync": False,
+                "shouldIncludeTotalCount": True,
+                "compartmentId": compartment_id,
+                "compartmentIdInSubtree": True,
+                "timeFilter": {
+                    "timeStart": start_time.isoformat().replace('+00:00', 'Z'),
+                    "timeEnd": end_time.isoformat().replace('+00:00', 'Z'),
+                    "timeZone": os.getenv("TIME_ZONE", "UTC")
+                },
+                "maxTotalCount": max_count
+            }
+
+            params = {"limit": max_count}
+
+            response = requests.post(url, json=query_details, auth=signer, params=params)
+
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("items", [])
+            elif response.status_code == 201:
+                data = response.json()
+                results = []
+            else:
+                raise Exception(f"HTTP Error {response.status_code}: {response.text}")
+
+            return with_meta(
+                {
+                    "query": query,
+                    "query_name": query_name,
+                    "time_range": time_range,
+                    "namespace": namespace,
+                    "compartment_id": compartment_id,
+                    "results": results,
+                    "count": len(results)
+                },
+                success=True,
+                message=f"Query executed successfully. Found {len(results)} results."
+            )
+        except Exception as e:
+            return with_meta(
+                {"error": str(e)},
+                success=False,
+                message=f"Query execution failed: {str(e)}"
+            )
 
 # The rest of the functions remain the same as in enhanced, since they call execute_query
 
@@ -385,28 +423,43 @@ def search_security_events(
     profile: str | None = None,
     region: str | None = None,
 ) -> str:
-    try:
+    with tool_span(tracer, "search_security_events", mcp_server="oci-mcp-loganalytics") as span:
+        try:
         mapper = SecurityQueryMapper()
         
-        # Map search term to security query
+        # Normalize event_type and map synonyms; then infer from search_term if needed
+        synonyms = {
+            "login": "failed_logins",
+            "failed_login": "failed_logins",
+            "failed_logins": "failed_logins",
+            "network_anomaly": "suspicious_network",
+            "network": "suspicious_network",
+            "privilege_escalation": "privilege_escalation",
+            "data_exfiltration": "data_exfiltration",
+            "malware": "malware",
+            "all": "all",
+        }
+        if event_type and event_type in synonyms and event_type != "all":
+            event_type = synonyms[event_type]
+
         if event_type == "all":
-            # Try to match search term to known patterns
-            search_lower = search_term.lower()
-            if any(term in search_lower for term in ["login", "auth", "signin"]):
+            search_lower = (search_term or "").lower()
+            if any(term in search_lower for term in ["login", "auth", "signin", "failed"]):
                 event_type = "failed_logins"
             elif any(term in search_lower for term in ["privilege", "escalation", "sudo"]):
                 event_type = "privilege_escalation"
-            elif any(term in search_lower for term in ["network", "connection", "traffic"]):
+            elif any(term in search_lower for term in ["network", "connection", "traffic", "blocked", "deny"]):
                 event_type = "suspicious_network"
-            elif any(term in search_lower for term in ["data", "exfiltration", "theft"]):
+            elif any(term in search_lower for term in ["data", "exfiltration", "theft", "download"]):
                 event_type = "data_exfiltration"
-            elif any(term in search_lower for term in ["malware", "virus", "threat"]):
+            elif any(term in search_lower for term in ["malware", "virus", "trojan", "ransom"]):
                 event_type = "malware"
             else:
                 event_type = "failed_logins"  # Default fallback
-        
-        # Get security query
-        query_result = mapper.get_security_query(event_type, 60)  # Convert time_range to minutes
+
+        # Get security query using parsed time window
+        minutes = _minutes_from_time_range(time_range)
+        query_result = mapper.get_security_query(event_type, minutes)
         
         if not query_result.get("success"):
             return with_meta(
@@ -473,8 +526,9 @@ def get_mitre_techniques(
                 message=f"Found {len(mapper.mitre_techniques)} MITRE techniques"
             )
         
-        # Get specific technique query
-        query_result = mapper.get_mitre_technique_query(technique_id, 60)  # Convert time_range to minutes
+        # Get specific technique query using parsed time window
+        minutes = _minutes_from_time_range(time_range)
+        query_result = mapper.get_mitre_technique_query(technique_id, minutes)
         
         if not query_result.get("success"):
             return with_meta(
@@ -599,7 +653,20 @@ def perform_statistical_analysis(
         elif statistics_type == "rare":
             stats_query = f"{base_query} | rare 10"
         else:  # stats
-            agg_str = ", ".join([f"{agg.get('function', 'count')}({agg.get('field', '1')}) as {agg.get('alias', 'count')}" for agg in aggregations or [{"function": "count"}]])
+            # Build aggregations using LA-compliant syntax:
+            # - COUNT() (no arg) is accepted; or COUNT(<fieldName>)
+            # - Other functions keep their field argument if provided
+            def _agg_fmt(agg: Dict) -> str:
+                fn = str(agg.get("function", "count")).upper()
+                field = agg.get("field")
+                alias = agg.get("alias", fn.lower())
+                if fn == "COUNT":
+                    expr = "COUNT()" if not field else f"COUNT({field})"
+                else:
+                    expr = f"{fn}({field})" if field else f"{fn}()"
+                return f"{expr} as {alias}"
+            effective_aggs = aggregations or [{"function": "count"}]
+            agg_str = ", ".join(_agg_fmt(a) for a in effective_aggs)
             group_str = f" by {', '.join(group_by)}" if group_by else ""
             stats_query = f"{base_query} | stats {agg_str}{group_str}"
         
@@ -810,6 +877,13 @@ def get_documentation(
                         "Limit result sets with '| head 100'",
                         "Use indexed fields for filtering"
                     ]
+                }
+            },
+            "examples": {
+                "title": "Practical Logan queries",
+                "content": {
+                    "sources_last_24h": "* | where Time > dateRelative(24h) | stats COUNT as logrecords by 'Log Source' | sort -logrecords | head 100",
+                    "top_failed_logins_24h": "* | where Time > dateRelative(24h) and 'Event Name' = 'UserLoginFailed' | stats COUNT as failures by 'User Name' | sort -failures | head 20"
                 }
             }
         }

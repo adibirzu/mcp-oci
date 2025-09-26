@@ -69,6 +69,27 @@ CONFIG_JSON='{
         "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
       }
+    },
+    "oci-observability": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.observability.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "LA_NAMESPACE": "${LA_NAMESPACE:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
+    },
+    "oci-inventory": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.inventory.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
     }
   }
 }'

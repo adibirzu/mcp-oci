@@ -21,7 +21,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:vault:list-secrets",
+            "name": "oci_vault_list_secrets",
             "description": "List secrets in a compartment.",
             "parameters": {
                 "type": "object",
@@ -37,7 +37,7 @@ def register_tools() -> list[dict[str, Any]]:
             "handler": list_secrets,
         },
         {
-            "name": "oci:vault:get-secret-bundle",
+            "name": "oci_vault_get_secret_bundle",
             "description": "Get latest secret bundle.",
             "parameters": {
                 "type": "object",

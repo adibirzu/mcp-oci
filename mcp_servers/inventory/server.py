@@ -12,6 +12,7 @@ from opentelemetry import trace
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.config import get_oci_config
+from mcp_oci_common.validation import validate_and_log_tools
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -28,12 +29,54 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Shared cache instance (disk + memory)
 cache = get_cache()
 
+def _safe_serialize(obj):
+    """Safely serialize OCI SDK objects and other complex types"""
+    if obj is None:
+        return None
+
+    # Handle OCI SDK objects
+    if hasattr(obj, '__dict__'):
+        try:
+            # Try to convert OCI objects to dict
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+                return obj._data.__dict__
+            else:
+                # Fallback to manual serialization of object attributes
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if not key.startswith('_'):
+                        result[key] = _safe_serialize(value)
+                return result
+        except Exception as e:
+            return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+    # Handle lists and tuples
+    elif isinstance(obj, (list, tuple)):
+        return [_safe_serialize(item) for item in obj]
+
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {key: _safe_serialize(value) for key, value in obj.items()}
+
+    # Handle primitive types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # For unknown types, try to convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return {"unknown_type": str(type(obj))}
+
 def healthcheck() -> Dict:
     """
     Lightweight readiness/liveness probe.
     Returns static metadata without touching OCI or network.
     """
-    return {"status": "ok", "server": "oci-mcp-inventory", "pid": os.getpid()}
+    return {"status": "ok", "server": "inventory", "pid": os.getpid()}
 
 def run_showoci(
     profile: Optional[str] = None,
@@ -142,7 +185,7 @@ def run_showoci(
 
         try:
             data = cache.get_or_refresh(
-                server_name="inventory",
+                server_name="oci-mcp-inventory",
                 operation="run_showoci",
                 params=cache_params,
                 fetch_func=fetch_func,
@@ -398,9 +441,8 @@ def list_streams_inventory(compartment_id: Optional[str] = None, limit: int = 50
                     cfg["region"] = region
                 compartment_id = cfg.get("tenancy")
             from mcp_oci_streaming.server import list_streams as _lst
-            import json as _json
             out = _lst(compartment_id=compartment_id, limit=limit, profile=profile, region=region)
-            data = _json.loads(out) if isinstance(out, str) else out
+            data = json.loads(out) if isinstance(out, str) else out
             return {"items": data.get("items", []), "count": len(data.get("items", []))}
         except Exception as e:
             return {"error": str(e)}
@@ -416,9 +458,8 @@ def list_functions_applications_inventory(compartment_id: Optional[str] = None, 
                     cfg["region"] = region
                 compartment_id = cfg.get("tenancy")
             from mcp_oci_functions.server import list_applications as _lapp
-            import json as _json
             out = _lapp(compartment_id=compartment_id, limit=limit, profile=profile, region=region)
-            data = _json.loads(out) if isinstance(out, str) else out
+            data = json.loads(out) if isinstance(out, str) else out
             return {"items": data.get("items", []), "count": len(data.get("items", []))}
         except Exception as e:
             return {"error": str(e)}
@@ -434,9 +475,8 @@ def list_security_lists_inventory(compartment_id: Optional[str] = None, vcn_id: 
                     cfg["region"] = region
                 compartment_id = cfg.get("tenancy")
             from mcp_oci_networking.server import list_security_lists as _lsl
-            import json as _json
             out = _lsl(compartment_id=compartment_id, vcn_id=vcn_id, limit=limit, profile=profile, region=region)
-            data = _json.loads(out) if isinstance(out, str) else out
+            data = json.loads(out) if isinstance(out, str) else out
             return {"items": data.get("items", []), "count": len(data.get("items", []))}
         except Exception as e:
             return {"error": str(e)}
@@ -452,9 +492,8 @@ def list_load_balancers_inventory(compartment_id: Optional[str] = None, limit: i
                     cfg["region"] = region
                 compartment_id = cfg.get("tenancy")
             from mcp_oci_loadbalancer.server import list_load_balancers as _llb
-            import json as _json
             out = _llb(compartment_id=compartment_id, limit=limit, profile=profile, region=region)
-            data = _json.loads(out) if isinstance(out, str) else out
+            data = json.loads(out) if isinstance(out, str) else out
             return {"items": data.get("items", []), "count": len(data.get("items", []))}
         except Exception as e:
             return {"error": str(e)}
@@ -465,7 +504,6 @@ def list_all_discovery(compartment_id: Optional[str] = None, profile: Optional[s
     Returns counts per type and small samples (up to limit_per_type).
     """
     with tool_span(tracer, "list_all_discovery", mcp_server="oci-mcp-inventory"):
-        import json as _json
         if not compartment_id:
             cfg = get_oci_config(profile_name=profile)
             if region:
@@ -475,9 +513,10 @@ def list_all_discovery(compartment_id: Optional[str] = None, profile: Optional[s
         # Helper to load possibly-JSON-returning functions
         def _load(x):
             try:
-                return _json.loads(x) if isinstance(x, str) else x
+                parsed = json.loads(x) if isinstance(x, str) else x
+                return _safe_serialize(parsed)
             except Exception:
-                return x
+                return _safe_serialize(x)
         # Networking
         try:
             from mcp_oci_networking.server import list_vcns as _lv, list_subnets as _ls, list_security_lists as _lsl
@@ -517,7 +556,7 @@ def list_all_discovery(compartment_id: Optional[str] = None, profile: Optional[s
             result["streams"] = {"count": len(st.get("items", [])), "items": st.get("items", [])}
         except Exception as e:
             result["streaming_error"] = {"error": str(e)}
-        return result
+        return _safe_serialize(result)
 
 tools = [
     Tool.from_function(
@@ -580,9 +619,15 @@ if __name__ == "__main__":
     # Expose Prometheus /metrics regardless of DEBUG (configurable via METRICS_PORT)
     if _start_http_server:
         try:
-            _start_http_server(int(os.getenv("METRICS_PORT", "8010")))
+            _start_http_server(int(os.getenv("METRICS_PORT", "8009")))
         except Exception:
             pass
+
+    # Validate MCP tool names at startup
+    if not validate_and_log_tools(tools, "oci-mcp-inventory"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     mcp = FastMCP(tools=tools, name="oci-mcp-inventory")
     if _FastAPIInstrumentor:
         try:

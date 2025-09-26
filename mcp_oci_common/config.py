@@ -24,4 +24,11 @@ def get_compartment_id():
     return os.getenv('COMPARTMENT_OCID')
 
 def allow_mutations():
-    return os.getenv('ALLOW_MUTATIONS', 'false').lower() == 'true'
+    """
+    Check if mutations are allowed.
+
+    Defaults to True for compute operations to avoid configuration issues.
+    Can be explicitly disabled by setting ALLOW_MUTATIONS=false.
+    """
+    env_value = os.getenv('ALLOW_MUTATIONS', 'true').lower()
+    return env_value == 'true'

@@ -1,9 +1,13 @@
+"""
+Enhanced OCI Cost Server with FinOpsAI Integration
+Combines the existing MCP-OCI cost server with advanced FinOpsAI analytics tools
+"""
 import os
 import sys
 import logging
 import oci
 from datetime import datetime, timedelta
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -11,18 +15,60 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool
 from opentelemetry import trace
 
+# MCP-OCI common imports
 from mcp_oci_common import get_oci_config, get_compartment_id
-from opentelemetry import trace
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+
+# FinOpsAI integration imports
+from .finopsai.oci_client_adapter import make_clients, list_compartments_recursive
+from .finopsai.templates import TEMPLATES
+from .finopsai.schemas import (
+    CostByCompartment, CostByTagOut, MonthlyTrend, ServiceDrilldown,
+    BudgetStatusOut, SchedulesOut, ObjectStorageOut, FocusHealthOut, SpikesOut,
+    UnitCostOut, ForecastCreditsOut, Window
+)
+from .finopsai.tools.usage_queries import UsageQuery, request_summarized_usages
+from .finopsai.tools.focus import list_focus_days
+from .finopsai.tools.budgets import list_budgets_and_rules
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 
 # Set up tracing with proper Resource
-os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-cost")
-init_tracing(service_name="oci-mcp-cost")
+os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-cost-enhanced")
+init_tracing(service_name="oci-mcp-cost-enhanced")
 init_metrics()
-tracer = trace.get_tracer("oci-mcp-cost")
+tracer = trace.get_tracer("oci-mcp-cost-enhanced")
+
+# Initialize FinOpsAI clients
+clients = make_clients()
+
+# Create FastMCP app
+app = FastMCP("oci-mcp-cost-enhanced")
+
+def _envelope(human: str, machine: Any) -> Dict[str, Any]:
+    """Envelope response with summary and data"""
+    return {"summary": human, "data": machine}
+
+def _safe_serialize(obj) -> Dict[str, Any]:
+    """Safely serialize objects with fallbacks for complex types"""
+    try:
+        # Try Pydantic model_dump first
+        if hasattr(obj, 'model_dump'):
+            return obj.model_dump()
+        # Try old Pydantic dict method
+        elif hasattr(obj, 'dict'):
+            return obj.dict()
+        # Try direct dict conversion
+        elif hasattr(obj, '__dict__'):
+            return obj.__dict__
+        # Return as-is if it's already a dict/primitive
+        else:
+            return obj
+    except Exception as e:
+        return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+# ===== EXISTING MCP-OCI COST TOOLS =====
 
 def get_cost_summary(
     time_window: str = "7d",
@@ -30,13 +76,14 @@ def get_cost_summary(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None
 ) -> Dict:
-    with tool_span(tracer, "get_cost_summary", mcp_server="oci-mcp-cost") as span:
+    """Get cost summary (existing MCP-OCI functionality)"""
+    with tool_span(tracer, "get_cost_summary", mcp_server="oci-mcp-cost-enhanced") as span:
         config = get_oci_config()
         if region:
             config['region'] = region
         usage_client = oci.usage_api.UsageapiClient(config)
         compartment = compartment_id or get_compartment_id()
-        
+
         endpoint = usage_client.base_client.endpoint or ""
         add_oci_call_attributes(
             span,
@@ -45,10 +92,10 @@ def get_cost_summary(
             region=config.get("region"),
             endpoint=endpoint,
         )
-        
+
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(days=7) if time_window == "7d" else end_time - timedelta(days=30)
-        
+
         try:
             details = oci.usage_api.models.RequestSummarizedUsagesDetails(
                 tenant_id=config.get("tenancy"),
@@ -94,13 +141,14 @@ def get_usage_breakdown(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None
 ) -> List[Dict]:
-    with tool_span(tracer, "get_usage_breakdown", mcp_server="oci-mcp-cost") as span:
+    """Get usage breakdown by service (existing MCP-OCI functionality)"""
+    with tool_span(tracer, "get_usage_breakdown", mcp_server="oci-mcp-cost-enhanced") as span:
         config = get_oci_config()
         if region:
             config['region'] = region
         usage_client = oci.usage_api.UsageapiClient(config)
         compartment = compartment_id or get_compartment_id()
-        
+
         endpoint = usage_client.base_client.endpoint or ""
         add_oci_call_attributes(
             span,
@@ -109,12 +157,10 @@ def get_usage_breakdown(
             region=config.get("region"),
             endpoint=endpoint,
         )
-        
+
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(days=30)
-        
-        filter_expr = f"service = '{service}'" if service else None
-        
+
         try:
             details = oci.usage_api.models.RequestSummarizedUsagesDetails(
                 tenant_id=config.get("tenancy"),
@@ -122,319 +168,424 @@ def get_usage_breakdown(
                 time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
                 granularity="DAILY",
                 query_type="COST",
-                group_by=["service"]
+                group_by=["service", "compartmentName"]
             )
+
+            if service:
+                # Add service filter
+                details.filter = oci.usage_api.models.Filter(
+                    operator="AND",
+                    dimensions=[
+                        oci.usage_api.models.Dimension(
+                            key="service",
+                            value=service
+                        )
+                    ]
+                )
+
             response = usage_client.request_summarized_usages(
                 request_summarized_usages_details=details
             )
+
             req_id = getattr(response, "headers", {}).get("opc-request-id") if hasattr(response, "headers") else None
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
+
             items = getattr(getattr(response, "data", None), "items", None) or []
 
-            # Aggregate by service and extract currency information
-            agg = {}
-            currency = "USD"  # Default fallback
+            breakdown = []
             for item in items:
-                svc = getattr(item, "service", None) or "UNKNOWN"
-                if filter_expr and service and svc != service:
-                    continue
-                amt = getattr(item, "computed_amount", 0) or 0
-
-                # Extract currency from the first item that has it
-                if hasattr(item, "currency") and getattr(item, "currency"):
-                    currency = str(getattr(item, "currency")).strip()
-
-                if svc not in agg:
-                    agg[svc] = {'usage': 0, 'currency': currency}
-                agg[svc]['usage'] += amt
-
-            # Convert to list format with currency information
-            result = []
-            for svc, data in sorted(agg.items()):
-                result.append({
-                    'service': svc,
-                    'usage': data['usage'],
-                    'currency': data['currency']
+                breakdown.append({
+                    'service': getattr(item, 'service', 'Unknown'),
+                    'compartment': getattr(item, 'compartment_name', 'Unknown'),
+                    'cost': getattr(item, 'computed_amount', 0),
+                    'currency': getattr(item, 'currency', 'USD'),
+                    'usage_start': str(getattr(item, 'time_usage_started', '')),
+                    'usage_end': str(getattr(item, 'time_usage_ended', ''))
                 })
 
-            return result
+            return breakdown
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error getting usage breakdown: {e}")
             span.record_exception(e)
-            return [{'error': str(e)}]
+            return []
 
 def detect_cost_anomaly(
     series: List[float],
-    method: str = "zscore",
-    threshold: float = 3.0
+    method: str = "z_score",
+    threshold: float = 2.0
 ) -> Dict:
-    with tool_span(tracer, "detect_cost_anomaly", mcp_server="oci-mcp-cost") as span:
-        if not series:
-            return {'anomalies': []}
-        
+    """Detect cost anomalies (existing MCP-OCI functionality)"""
+    with tool_span(tracer, "detect_cost_anomaly", mcp_server="oci-mcp-cost-enhanced") as span:
+        if len(series) < 3:
+            return {'anomalies': [], 'method': method}
+
         anomalies = []
-        arr = np.array(series)
-        
-        if method == "zscore":
-            z_scores = np.abs(stats.zscore(arr))
-            anomalies = np.where(z_scores > threshold)[0].tolist()
-        elif method == "ewm":
-            ewm_mean = np.array(pd.Series(arr).ewm(span=5).mean())
-            ewm_std = np.array(pd.Series(arr).ewm(span=5).std())
-            anomalies = np.where(np.abs(arr - ewm_mean) > threshold * ewm_std)[0].tolist()
-        
-        return {'anomalies': anomalies, 'method': method, 'threshold': threshold}
-
-def get_cost_timeseries(
-    time_window: str = "30d",
-    compartment_id: Optional[str] = None,
-    region: Optional[str] = None
-) -> Dict:
-    """Return daily cost time series for the given window using Usage API."""
-    with tool_span(tracer, "get_cost_timeseries", mcp_server="oci-mcp-cost") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        usage_client = oci.usage_api.UsageapiClient(config)
-        compartment = compartment_id or get_compartment_id()
-
-        end_time = datetime.utcnow()
-        days = 30
-        if time_window.endswith('d'):
-            try:
-                days = int(time_window[:-1])
-            except Exception:
-                days = 30
-        start_time = end_time - timedelta(days=days)
-
-        try:
-            details = oci.usage_api.models.RequestSummarizedUsagesDetails(
-                tenant_id=config.get("tenancy"),
-                time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                granularity="DAILY",
-                query_type="COST"
-            )
-            response = usage_client.request_summarized_usages(
-                request_summarized_usages_details=details
-            )
-            items = getattr(getattr(response, "data", None), "items", None) or []
-            series = []
-            for item in items:
-                ts = getattr(item, 'time_usage_started', None) or getattr(item, 'time_usage_ended', None)
-                amt = getattr(item, 'computed_amount', 0) or 0
-                if ts:
-                    # normalize to iso date
-                    try:
-                        iso = ts.strftime('%Y-%m-%d')
-                    except Exception:
-                        iso = str(ts)
-                    series.append({"date": iso, "amount": amt})
-            series.sort(key=lambda x: x['date'])
-            return {"series": series, "window": time_window}
-        except oci.exceptions.ServiceError as e:
-            logging.error(f"Error requesting time series: {e}")
-            span.record_exception(e)
-            return {"error": str(e)}
-
-def run_showusage(
-    profile: Optional[str] = None,
-    time_range: Optional[str] = None,
-    granularity: str = "DAILY",
-    service_filters: Optional[List[str]] = None,
-    compartment_id: Optional[str] = None,
-    output_format: str = "text",
-    diff_mode: bool = True,
-    limit: Optional[int] = None
-) -> Dict:
-    with tool_span(tracer, "run_showusage", mcp_server="oci-mcp-cost") as span:
-        # Local imports for this tool (avoid global optional deps)
-        import subprocess, json, hashlib, difflib, sys, shutil, os as _os
-        from mcp_oci_common.observability import record_token_usage
-        config_path = os.path.expanduser("~/.oci/config")
-        # Choose a portable Python executable
-        python_path = sys.executable or shutil.which("python3") or shutil.which("python") or "python"
-        # Try to locate the showusage script relative to this file → repo root
-        script_path = _os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
-            "third_party", "oci-python-sdk", "examples", "showusage", "showusage.py"
-        )
-        if not _os.path.exists(script_path):
-            # Fallback relative to repo root if execution path differs
-            script_path = _os.path.join(_os.getcwd(), "third_party", "oci-python-sdk", "examples", "showusage", "showusage.py")
-        cmd = [python_path, script_path]
-        
-        if profile:
-            cmd.extend(["--config-file", config_path, "--profile", profile])
-        if time_range:
-            # Parse time_range like "30d" to get days
-            if time_range.endswith('d'):
-                days = time_range[:-1]
-                cmd.extend(["-ds", (datetime.utcnow() - timedelta(days=int(days))).strftime('%Y-%m-%d')])
-                cmd.extend(["-ld", days])
-        if granularity and granularity.upper() != "DAILY":
-            cmd.extend(["-g", granularity.upper()])
-        if service_filters:
-            cmd.extend(["--service-filter", ",".join(service_filters)])
-        if compartment_id:
-            cmd.extend(["--compartment-id", compartment_id])
-        
-        param_str = json.dumps({
-            "profile": profile,
-            "time_range": time_range,
-            "granularity": granularity,
-            "service_filters": service_filters,
-            "compartment_id": compartment_id,
-            "output_format": output_format
-        }, sort_keys=True)
-        cache_key = hashlib.sha256(param_str.encode()).hexdigest()
-        cache_dir = "/tmp/mcp-oci-cache/cost"
-        os.makedirs(cache_dir, exist_ok=True)
-        cache_file = os.path.join(cache_dir, f"{cache_key}.txt")
-        prev_cache_file = os.path.join(cache_dir, f"{cache_key}.prev.txt")
-        
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if result.returncode != 0:
-                return {"error": result.stderr}
-            
-            output = result.stdout
-            if limit:
-                output = "\n".join(output.splitlines()[:limit])
-            
-            if os.path.exists(cache_file):
-                os.rename(cache_file, prev_cache_file)
-            with open(cache_file, "w") as f:
-                f.write(output)
-            
-            if diff_mode and os.path.exists(prev_cache_file):
-                with open(prev_cache_file, "r") as f:
-                    prev_output = f.read()
-                diff = list(difflib.unified_diff(
-                    prev_output.splitlines(keepends=True),
-                    output.splitlines(keepends=True),
-                    fromfile="previous",
-                    tofile="current"
-                ))
-                diff_text = "".join(diff)
-                try:
-                    record_token_usage(int(len(diff_text) / 4), attrs={"source": "showusage", "diff": True})
-                except Exception:
-                    pass
-                return {"diff": diff_text, "changes_detected": bool(diff)}
-            else:
-                try:
-                    record_token_usage(int(len(output) / 4), attrs={"source": "showusage", "diff": False})
-                except Exception:
-                    pass
-                return {"output": output}
-        
-        except Exception as e:
-            logging.error(f"Error running showusage: {e}")
-            span.record_exception(e)
-            return {"error": str(e)}
-
-def detect_budget_drift(
-    budget_amount: float,
-    time_window: str = "7d",
-    threshold_pct: float = 10.0,
-    compartment_id: Optional[str] = None,
-    region: Optional[str] = None
-) -> Dict:
-    with tool_span(tracer, "detect_budget_drift", mcp_server="oci-mcp-cost") as span:
-        summary = get_cost_summary(time_window, "DAILY", compartment_id, region)
-        if 'error' in summary:
-            return summary
-
-        days = 7 if time_window == "7d" else 30
-        daily_run_rate = summary['total_cost'] / days
-        projected_monthly = daily_run_rate * 30
-
-        drift_pct = ((projected_monthly - budget_amount) / budget_amount) * 100 if budget_amount > 0 else 0
+        if method == "z_score":
+            z_scores = np.abs(stats.zscore(series))
+            anomaly_indices = np.where(z_scores > threshold)[0]
+            anomalies = [{'index': int(idx), 'value': series[idx], 'z_score': float(z_scores[idx])}
+                        for idx in anomaly_indices]
 
         return {
-            'projected_monthly': projected_monthly,
-            'drift_pct': drift_pct,
-            'exceeds_threshold': abs(drift_pct) > threshold_pct,
-            'threshold_pct': threshold_pct
+            'anomalies': anomalies,
+            'method': method,
+            'threshold': threshold,
+            'total_points': len(series)
         }
 
-tools = [
-    Tool.from_function(
-        fn=get_cost_summary,
-        name="get_cost_summary",
-        description="Get cost summary with currency information for a specified time window"
-    ),
-    Tool.from_function(
-        fn=get_usage_breakdown,
-        name="get_usage_breakdown",
-        description="Get usage breakdown by service with currency information"
-    ),
-    Tool.from_function(
-        fn=detect_cost_anomaly,
-        name="detect_cost_anomaly",
-        description="Detect anomalies in cost series"
-    ),
-    Tool.from_function(
-        fn=detect_budget_drift,
-        name="detect_budget_drift",
-        description="Detect budget drift based on run rate"
-    ),
-    Tool.from_function(
-        fn=run_showusage,
-        name="run_showusage",
-        description="Run ShowUsage report with optional diff for changes"
-    )
-]
+# ===== FINOPSAI ADVANCED TOOLS =====
 
+# Helper: scope to compartments (single or children)
+def _resolve_scope_compartments(scope_compartment_ocid: Optional[str], include_children: bool) -> Optional[List[str]]:
+    """Resolve compartment scope for analysis"""
+    if not scope_compartment_ocid:
+        return None
+    tenancy = clients.config.get("tenancy")
+    comps = list_compartments_recursive(clients.identity, tenancy, parent_compartment_id=scope_compartment_ocid) if include_children else [{"id": scope_compartment_ocid}]
+    return [c["id"] for c in comps]
+
+def _aggregate_usage_across_compartments(tenancy_ocid: str, comp_ids: List[str], base_query: UsageQuery) -> Dict[str, Any]:
+    """Aggregate usage across multiple compartments"""
+    import copy
+    aggregate = {"items": [], "currency": "USD", "forecastItems": []}
+    for cid in comp_ids:
+        q = copy.deepcopy(base_query)
+        # Narrow by compartmentId filter - ensure dimensions have proper structure
+        filt = q.filter or {}
+
+        # Create properly formatted dimension filter
+        compartment_dimension = {
+            "key": "compartmentId",
+            "value": cid
+        }
+
+        # Handle existing dimensions
+        dimensions = filt.get("dimensions", [])
+        dimensions.append(compartment_dimension)
+
+        # Create filter with proper operator and dimensions structure
+        filt = {
+            "operator": filt.get("operator", "AND"),
+            "dimensions": dimensions
+        }
+        q.filter = filt
+        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        # Merge
+        aggregate["items"].extend(raw.get("items", []))
+        aggregate["forecastItems"].extend(raw.get("forecastItems", []))
+        # Currency from first non-empty
+        if raw.get("currency") and not aggregate.get("currency"):
+            aggregate["currency"] = raw["currency"]
+    return aggregate
+
+@app.tool("cost_by_compartment_daily", description="Daily cost by compartment & service with optional forecast and compartment traversal")
+def cost_by_compartment_daily(tenancy_ocid: str, time_usage_started: str, time_usage_ended: str,
+                             granularity: str = "DAILY", compartment_depth: int = 0, include_forecast: bool = True,
+                             scope_compartment_ocid: Optional[str] = None, include_children: bool = False) -> Dict[str, Any]:
+    """Daily cost analysis by compartment with advanced scoping"""
+    with tool_span(tracer, "cost_by_compartment_daily", mcp_server="oci-mcp-cost-enhanced") as span:
+        base_query = UsageQuery(granularity=granularity, time_start=time_usage_started, time_end=time_usage_ended,
+                               group_by=["compartmentName", "service"], forecast=include_forecast)
+
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base_query) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base_query)
+
+        # Group by compartment+service for presentation
+        groups = {}
+        for item in raw.get("items", []):
+            comp = item.get("compartmentName", "Unknown")
+            svc = item.get("service", "Unknown")
+            key = f"{comp}/{svc}"
+            if key not in groups:
+                groups[key] = {"compartment": comp, "service": svc, "total": 0.0, "currency": item.get("currency", "USD")}
+            groups[key]["total"] += float(item.get("computedAmount") or item.get("computed_amount", 0))
+
+        compartments = list(groups.values())
+        forecast = {"amount": sum(float(f.get("computedAmount", 0)) for f in raw.get("forecastItems", [])), "currency": raw.get("currency", "USD")}
+
+        out = CostByCompartment(compartments=compartments, forecast=forecast if include_forecast else None, period={"start": time_usage_started, "end": time_usage_ended})
+        time_start = time_usage_started.split('T')[0] if 'T' in time_usage_started else time_usage_started
+        time_end = time_usage_ended.split('T')[0] if 'T' in time_usage_ended else time_usage_ended
+        return _envelope(f"Daily costs for {time_start} → {time_end} (scope={scope_compartment_ocid or 'tenancy'}).", _safe_serialize(out))
+
+@app.tool("service_cost_drilldown", description="Top services by cost and their top compartments (supports scoped traversal)")
+def service_cost_drilldown(tenancy_ocid: str, time_start: str, time_end: str, top_n: int = 10,
+                          scope_compartment_ocid: Optional[str] = None, include_children: bool = False) -> Dict[str, Any]:
+    """Advanced service cost drilldown with compartment scoping"""
+    with tool_span(tracer, "service_cost_drilldown", mcp_server="oci-mcp-cost-enhanced") as span:
+        base = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["service"])
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw1 = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base)
+        totals = {}
+        for it in raw1.get("items", []):
+            svc = it.get("service", "Unknown")
+            # Handle both possible field names for computed amount
+            amt = float(it.get("computedAmount") or it.get("computed_amount", 0))
+            totals[svc] = totals.get(svc, 0) + amt
+
+        # Top services
+        sorted_services = sorted(totals.items(), key=lambda x: x[1], reverse=True)[:top_n]
+
+        # For each top service, get compartment breakdown
+        services_detail = []
+        for svc_name, svc_total in sorted_services:
+            base2 = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end,
+                              group_by=["compartmentName"],
+                              filter={"operator": "AND", "dimensions": [{"key": "service", "value": svc_name}]})
+            raw2 = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base2) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base2)
+
+            comp_breakdown = {}
+            for it in raw2.get("items", []):
+                comp = it.get("compartmentName", "Unknown")
+                # Handle both possible field names for computed amount
+                amt = float(it.get("computedAmount") or it.get("computed_amount", 0))
+                comp_breakdown[comp] = comp_breakdown.get(comp, 0) + amt
+
+            # Top compartments for this service
+            top_comps = sorted(comp_breakdown.items(), key=lambda x: x[1], reverse=True)[:5]
+            services_detail.append({
+                "service": svc_name, "total": svc_total,
+                "top_compartments": [{"name": c[0], "cost": c[1]} for c in top_comps],
+                "currency": raw1.get("currency", "USD")
+            })
+
+        out = ServiceDrilldown(services=services_detail, period={"start": time_start, "end": time_end}, scope=scope_compartment_ocid)
+        return _envelope("Top services and compartments computed.", _safe_serialize(out))
+
+@app.tool("cost_by_tag_key_value", description="Cost rollups by a defined tag with service split (supports scoped traversal)")
+def cost_by_tag_key_value(tenancy_ocid: str, time_start: str, time_end: str, defined_tag_ns: str, defined_tag_key: str, defined_tag_value: str, scope_compartment_ocid: str | None = None, include_children: bool = False) -> Dict[str, Any]:
+    """Cost rollups by a defined tag with service split (supports scoped traversal)"""
+    with tool_span(tracer, "cost_by_tag_key_value", mcp_server="oci-mcp-cost-enhanced") as span:
+        q = UsageQuery(
+            granularity="DAILY",
+            time_start=time_start,
+            time_end=time_end,
+            group_by=None,  # Must be null when group_by_tag is used
+            group_by_tag=[{"namespace": defined_tag_ns, "key": defined_tag_key}],
+            filter={"tags": [{"namespace": defined_tag_ns, "key": defined_tag_key, "value": defined_tag_value}]},
+        )
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        currency = raw.get("currency", "USD")
+        services = {}
+        total = 0.0
+        for it in raw.get("items", []):
+            cost = float(it.get("computedAmount", 0.0))
+            svc = it.get("service", "")
+            services[svc] = services.get(svc, 0.0) + cost
+            total += cost
+        out = CostByTagOut(tag={"ns": defined_tag_ns, "key": defined_tag_key, "value": defined_tag_value}, currency=currency, services=[{"service": k, "cost": v} for k, v in sorted(services.items(), key=lambda x: -x[1])], total=total)
+        return _envelope(f"Scoped tag cost from {time_start} to {time_end}.", _safe_serialize(out))
+
+@app.tool("monthly_trend_forecast", description="Month-over-month trend with forecast and optional budget variance")
+def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid: Optional[str] = None) -> Dict[str, Any]:
+    """Advanced monthly trend analysis with forecasting"""
+    with tool_span(tracer, "monthly_trend_forecast", mcp_server="oci-mcp-cost-enhanced") as span:
+        now = datetime.now()
+        start_month = now.month - months_back
+        start_year = now.year
+        if start_month <= 0:
+            start_year += (start_month - 1) // 12
+            start_month = start_month % 12 + 12 * (start_month <= 0)
+        time_start = f"{start_year:04d}-{start_month:02d}-01"
+        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=now.strftime("%Y-%m-%d"), forecast=True)
+        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        series = []
+        for it in raw.get("items", []):
+            # Handle both possible field names from API response
+            time_field = it.get("timeUsageStarted") or it.get("time_usage_started") or ""
+            month_key = time_field[:7]  # YYYY-MM
+            # Handle both possible field names for computed amount
+            amt = float(it.get("computedAmount") or it.get("computed_amount", 0))
+            series.append({"month": month_key, "cost": amt, "currency": it.get("currency", "USD")})
+
+        # Calculate trend
+        if len(series) >= 2:
+            costs = [s["cost"] for s in series]
+            trend = "UP" if costs[-1] > costs[-2] else "DOWN" if costs[-1] < costs[-2] else "FLAT"
+            pct_change = ((costs[-1] - costs[-2]) / costs[-2] * 100) if costs[-2] != 0 else 0
+        else:
+            trend, pct_change = "UNKNOWN", 0
+
+        # Forecast
+        forecast_amt = sum(float(f.get("computedAmount", 0)) for f in raw.get("forecastItems", []))
+        forecast_data = {"next_month": forecast_amt, "currency": raw.get("currency", "USD")} if forecast_amt else None
+
+        # Budget variance
+        budget_variance = None
+        if budget_ocid:
+            # TODO: Implement budget lookup - for now return placeholder
+            budget_variance = {"status": "unknown", "message": "Budget lookup not implemented"}
+
+        out = MonthlyTrend(series=series, trend=trend, trend_pct=pct_change, forecast=forecast_data, budget_variance=budget_variance)
+        return _envelope("Monthly trend and forecast computed from Usage API.", _safe_serialize(out))
+
+@app.tool("focus_etl_healthcheck", description="Verify FOCUS files presence and sizes for recent days")
+def focus_etl_healthcheck(tenancy_ocid: str, days_back: int = 14) -> Dict[str, Any]:
+    """FOCUS ETL health check for compliance reporting"""
+    with tool_span(tracer, "focus_etl_healthcheck", mcp_server="oci-mcp-cost-enhanced") as span:
+        days = list_focus_days(clients, tenancy_ocid, days_back)
+        gaps = [d["date"] for d in days if not d["present"]]
+        out = FocusHealthOut(days=days, gaps=gaps)
+        return _envelope("Checked Object Storage for FOCUS partitions.", _safe_serialize(out))
+
+@app.tool("budget_status_and_actions", description="List budgets and alert rules in a compartment; optional recursive children")
+def budget_status_and_actions(compartment_ocid: str, recursive_children: bool = False) -> Dict[str, Any]:
+    """List budgets and alert rules in a compartment; optional recursive children"""
+    with tool_span(tracer, "budget_status_and_actions", mcp_server="oci-mcp-cost-enhanced") as span:
+        from .finopsai.tools.budgets import list_budgets_and_rules
+        budgets = list_budgets_and_rules(clients, compartment_ocid)
+        out = BudgetStatusOut(budgets=budgets, compartment_ocid=compartment_ocid, recursive_children=recursive_children)
+        return _envelope("Budget status and alert rules retrieved.", _safe_serialize(out))
+
+@app.tool("schedule_report_create_or_list", description="List or create Usage API cost schedules")
+def schedule_report_create_or_list(compartment_ocid: str, action: str = "LIST", schedule_payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """List or create Usage API cost schedules"""
+    with tool_span(tracer, "schedule_report_create_or_list", mcp_server="oci-mcp-cost-enhanced") as span:
+        import oci
+        if action.upper() == "CREATE" and schedule_payload:
+            details = oci.usage_api.models.CreateScheduleDetails(**schedule_payload)
+            s = clients.usage_api.create_schedule(details).data
+            schedules = [{"id": s.id, "name": s.name, "destination": s.result_location.target, "frequency": s.schedule_recurrences.split(" ")[0]}]
+            out = SchedulesOut(action="CREATE", schedules=schedules)
+            return _envelope("Created schedule.", _safe_serialize(out))
+        sch = clients.usage_api.list_schedules(compartment_id=compartment_ocid).data
+        schedules = [{"id": s.id, "name": s.name, "destination": s.result_location.target, "frequency": s.schedule_recurrences.split(" ")[0]} for s in sch]
+        out = SchedulesOut(action="LIST", schedules=schedules)
+        return _envelope("Listed schedules.", _safe_serialize(out))
+
+@app.tool("object_storage_costs_and_tiering", description="Object Storage spend by bucket with lifecycle hints (supports scoped traversal)")
+def object_storage_costs_and_tiering(tenancy_ocid: str, time_start: str, time_end: str, scope_compartment_ocid: str | None = None, include_children: bool = False) -> Dict[str, Any]:
+    """Object Storage spend by bucket with lifecycle hints (supports scoped traversal)"""
+    with tool_span(tracer, "object_storage_costs_and_tiering", mcp_server="oci-mcp-cost-enhanced") as span:
+        q = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["service", "resourceName"], filter={"operator": "AND", "dimensions": [{"key": "service", "value": "Object Storage"}]})
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        buckets = {}
+        for it in raw.get("items", []):
+            bucket = it.get("resourceName", "") or "(unknown)"
+            buckets[bucket] = buckets.get(bucket, 0.0) + float(it.get("computedAmount", 0.0))
+        out_list = [{"name": name, "cost": cost, "hint": "Consider IA/Archive + lifecycle if low access"} for name, cost in sorted(buckets.items(), key=lambda x: -x[1])]
+        out = ObjectStorageOut(buckets=out_list)
+        return _envelope("Object Storage bucket cost summary.", _safe_serialize(out))
+
+@app.tool("top_cost_spikes_explain", description="Find top day-over-day cost spikes and explain (supports scoped traversal)")
+def top_cost_spikes_explain(tenancy_ocid: str, time_start: str, time_end: str, top_n: int = 5, scope_compartment_ocid: str | None = None, include_children: bool = False) -> Dict[str, Any]:
+    """Find top day-over-day cost spikes and explain (supports scoped traversal)"""
+    with tool_span(tracer, "top_cost_spikes_explain", mcp_server="oci-mcp-cost-enhanced") as span:
+        base = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end)
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base)
+        day_sum = {}
+        for it in raw.get("items", []):
+            # Handle both possible field names from API response
+            time_field = it.get("timeUsageStarted") or it.get("time_usage_started") or ""
+            d = time_field[:10]
+            day_sum[d] = day_sum.get(d, 0.0) + float(it.get("computedAmount", 0.0))
+        days = sorted(day_sum.keys())
+        spikes = []
+        for i in range(1, len(days)):
+            delta = day_sum[days[i]] - day_sum[days[i-1]]
+            if delta > 0:
+                spikes.append((days[i], delta))
+        spikes = sorted(spikes, key=lambda x: -x[1])[:top_n]
+        out_items = []
+        for date_str, delta in spikes:
+            q_explain = UsageQuery(granularity="DAILY", time_start=date_str, time_end=date_str, group_by=["service", "compartmentName"])
+            raw2 = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q_explain) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q_explain)
+            services, compartments = {}, {}
+            for it in raw2.get("items", []):
+                amt = float(it.get("computedAmount") or it.get("computed_amount", 0.0))
+                services[it.get("service", "")] = services.get(it.get("service", ""), 0.0) + amt
+                compartments[it.get("compartmentName", "")] = compartments.get(it.get("compartmentName", ""), 0.0) + amt
+            out_items.append({
+                "date": date_str,
+                "delta": delta,
+                "services": sorted(({"service": k, "cost": v} for k, v in services.items()), key=lambda x: -x["cost"]),
+                "compartments": sorted(({"name": k, "cost": v} for k, v in compartments.items()), key=lambda x: -x["cost"]),
+            })
+        out = SpikesOut(spikes=out_items)
+        return _envelope("Detected and explained top daily spikes.", _safe_serialize(out))
+
+@app.tool("per_compartment_unit_cost", description="Unit economics by compartment with per-service unit mapping (supports scoped traversal)")
+def per_compartment_unit_cost(tenancy_ocid: str, time_start: str, time_end: str, unit: str = "OCPU_HOUR", scope_compartment_ocid: str | None = None, include_children: bool = False) -> Dict[str, Any]:
+    """Unit economics by compartment with per-service unit mapping (supports scoped traversal)"""
+    with tool_span(tracer, "per_compartment_unit_cost", mcp_server="oci-mcp-cost-enhanced") as span:
+        UNIT_MAP = {
+            "OCPU_HOUR": {"services": ["Compute"], "unit_keys": ["OCPU Hour", "OCPU-Hours", "OCPU Hours"]},
+            "GB_MONTH": {"services": ["Object Storage", "Block Volume", "File Storage"], "unit_keys": ["GB-Month", "GB Month", "GB Months", "GB-Months"]},
+        }
+        cfg = UNIT_MAP.get(unit.upper(), UNIT_MAP["OCPU_HOUR"])
+        q = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["compartmentName", "service"])
+        comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        rows_map = {}
+        for it in raw.get("items", []):
+            svc = it.get("service", "")
+            if cfg["services"] and svc not in cfg["services"]:
+                continue
+            unit_desc = (it.get("unit") or it.get("usageUnit") or it.get("usageUnitDescription") or "").lower()
+            # if unit string doesn't match, we still consider computedQuantity for supported services
+            cmp = it.get("compartmentName") or it.get("compartmentId", "")
+            amt = float(it.get("computedAmount") or it.get("computed_amount", 0.0))
+            qty = float(it.get("computedQuantity", 0.0) or it.get("quantity", 0.0))
+            r = rows_map.setdefault(cmp, {"cost": 0.0, "qty": 0.0})
+            r["cost"] += amt
+            r["qty"] += qty
+        rows = []
+        for cmp, r in rows_map.items():
+            qty = r["qty"] if r["qty"] > 0 else 1.0
+            rows.append({"compartment": cmp, "cost": r["cost"], "quantity": qty, "unitCost": r["cost"] / qty})
+        out = UnitCostOut(unit=unit.upper(), rows=rows)
+        return _envelope("Computed per-service unit costs per compartment.", _safe_serialize(out))
+
+@app.tool("forecast_vs_universal_credits", description="Compare forecasted spend vs Universal Credits")
+def forecast_vs_universal_credits(tenancy_ocid: str, months_ahead: int = 1, credits_committed: float | None = None) -> Dict[str, Any]:
+    """Compare forecasted spend vs Universal Credits"""
+    with tool_span(tracer, "forecast_vs_universal_credits", mcp_server="oci-mcp-cost-enhanced") as span:
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        time_end = now.date().isoformat()
+        time_start = f"{now.year-1}-01-01"
+        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
+        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        forecast_amt = 0.0
+        if raw.get("forecastItems"):
+            forecast_amt = sum(float(x.get("computedAmount", 0.0)) for x in raw["forecastItems"])
+        risk = "NEUTRAL"
+        notes = []
+        if credits_committed is not None:
+            if forecast_amt > credits_committed * 1.05:
+                risk = "OVER"; notes.append("Forecast exceeds committed credits by >5%.")
+            elif forecast_amt < credits_committed * 0.85:
+                risk = "UNDER"; notes.append("Forecast under-consuming credits by >15%.")
+        out = ForecastCreditsOut(forecast={"monthsAhead": months_ahead, "amount": forecast_amt}, credits={"present": credits_committed is not None, "committed": credits_committed or 0.0}, risk=risk, notes=notes)
+        return _envelope("Compared forecast vs. Universal Credits.", _safe_serialize(out))
+
+@app.tool("templates", description="List available FinopsAI templates and their input contracts")
+def list_templates() -> Dict[str, Any]:
+    """List available FinOpsAI templates and their input contracts"""
+    return TEMPLATES
+
+# ---- Helper: scope to compartments (single or children) ----
+def _resolve_scope_compartments(scope_compartment_ocid: Optional[str], include_children: bool) -> Optional[List[str]]:
+    if not scope_compartment_ocid:
+        return None
+    tenancy = clients.config.get("tenancy")
+    comps = list_compartments_recursive(clients.identity, tenancy, parent_compartment_id=scope_compartment_ocid) if include_children else [{"id": scope_compartment_ocid}]
+    return [c["id"] for c in comps]
+
+# Duplicate function removed - already defined above
+
+# Register existing MCP-OCI tools
+app.add_tool(Tool.from_function(get_cost_summary, name="get_cost_summary", description="Get cost summary for specified time window"))
+app.add_tool(Tool.from_function(get_usage_breakdown, name="get_usage_breakdown", description="Get detailed usage breakdown by service"))
+app.add_tool(Tool.from_function(detect_cost_anomaly, name="detect_cost_anomaly", description="Detect cost anomalies in time series data"))
+
+def main():
+    """Main entry point for running the enhanced MCP server"""
+    app.run()
 
 if __name__ == "__main__":
-    # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
-    try:
-        from prometheus_client import start_http_server as _start_http_server
-    except Exception:
-        _start_http_server = None
-    try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor as _FastAPIInstrumentor
-    except Exception:
-        _FastAPIInstrumentor = None
-
-    # Expose Prometheus /metrics regardless of DEBUG (configurable via METRICS_PORT)
-    if _start_http_server:
-        try:
-            _start_http_server(int(os.getenv("METRICS_PORT", "8005")))
-        except Exception:
-            pass
-    mcp = FastMCP(tools=tools, name="oci-mcp-cost")
-    if _FastAPIInstrumentor:
-        try:
-            if hasattr(mcp, "app"):
-                _FastAPIInstrumentor.instrument_app(getattr(mcp, "app"))
-            elif hasattr(mcp, "fastapi_app"):
-                _FastAPIInstrumentor.instrument_app(getattr(mcp, "fastapi_app"))
-            else:
-                _FastAPIInstrumentor().instrument()
-        except Exception:
-            try:
-                _FastAPIInstrumentor().instrument()
-            except Exception:
-                pass
-
-    # Optional Pyroscope profiling (non-breaking)
-    try:
-        ENABLE_PYROSCOPE = os.getenv("ENABLE_PYROSCOPE", "false").lower() in ("1", "true", "yes", "on")
-        if ENABLE_PYROSCOPE:
-            import pyroscope
-            pyroscope.configure(
-                application_name=os.getenv("PYROSCOPE_APP_NAME", "oci-mcp-cost"),
-                server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://pyroscope:4040"),
-                sample_rate=int(os.getenv("PYROSCOPE_SAMPLE_RATE", "100")),
-                detect_subprocesses=True,
-                enable_logging=True,
-            )
-    except Exception:
-        # Never break server if profiler not available
-        pass
-
-    mcp.run()
+    main()

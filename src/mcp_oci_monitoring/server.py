@@ -221,34 +221,47 @@ def summarize_metrics(compartment_id: str, namespace: str, query: str,
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     client = create_client(profile=profile, region=region)
     models = oci.monitoring.models
-    # Build MetricDataQuery with fallbacks
-    mdq = None
+
+    # Build SummarizeMetricsDataDetails robustly across SDK variants
     last_err: Exception | None = None
-    for q_kwargs in (
-        {"namespace": namespace, "query": query, "resolution": resolution},
-        {"namespace": namespace, "query": query},
-    ):
-        try:
-            mdq = models.MetricDataQuery(**{k: v for k, v in q_kwargs.items() if v})
-            break
-        except Exception as e:
-            last_err = e
-    if mdq is None:
-        raise last_err or RuntimeError("Unable to build MetricDataQuery")
-    # Build SummarizeMetricsDataDetails with alternative field names
     details = None
+
+    # Try legacy-friendly style: namespace and query on details (accepted by many SDK versions)
     for d_kwargs in (
-        {"start_time": start_time, "end_time": end_time, "queries": [mdq], "compartment_id": compartment_id},
-        {"startTime": start_time, "endTime": end_time, "queries": [mdq], "compartmentId": compartment_id},
+        {"namespace": namespace, "query": query, "start_time": start_time, "end_time": end_time, "resolution": resolution},
+        {"namespace": namespace, "query": query, "start_time": start_time, "end_time": end_time},
     ):
         try:
-            details = models.SummarizeMetricsDataDetails(**d_kwargs)
+            details = models.SummarizeMetricsDataDetails(**{k: v for k, v in d_kwargs.items() if v})
             break
         except Exception as e:
             last_err = e
+
+    # Fallback to official style: queries list + resolution at top level
+    if details is None:
+        try:
+            mdq = models.MetricDataQuery(query=query)
+            details = models.SummarizeMetricsDataDetails(
+                start_time=start_time,
+                end_time=end_time,
+                queries=[mdq],
+                resolution=resolution
+            )
+        except Exception as e:
+            last_err = e
+
     if details is None:
         raise last_err or RuntimeError("Unable to build SummarizeMetricsDataDetails")
-    resp = client.summarize_metrics_data(namespace, details)
+
+    # Call API with compartment_id parameter and details in body
+    try:
+        resp = client.summarize_metrics_data(
+            compartment_id=compartment_id,
+            summarize_metrics_data_details=details
+        )
+    except TypeError:
+        # Fallback for older SDK signature: summarize_metrics_data(namespace, details, ...)
+        resp = client.summarize_metrics_data(namespace, details)
     items = [d.__dict__ for d in getattr(resp, "data", [])]
     return with_meta(resp, {"items": items})
 

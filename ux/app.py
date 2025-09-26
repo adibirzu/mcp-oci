@@ -26,7 +26,7 @@ try:
         import pyroscope  # provided by pyroscope-io
         pyroscope.configure(
             application_name=os.getenv("PYROSCOPE_APP_NAME", "mcp-ux"),
-            server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://pyroscope:4040"),
+            server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://localhost:4040"),
             # reasonable defaults
             sample_rate=int(os.getenv("PYROSCOPE_SAMPLE_RATE", "100")),  # Hz
             detect_subprocesses=True,
@@ -201,7 +201,7 @@ async def index(request: Request):
         "grafana_url": os.getenv("GRAFANA_URL", "http://localhost:3000"),
         "prometheus_url": os.getenv("PROMETHEUS_URL", "http://localhost:9090"),
         "tempo_url": os.getenv("TEMPO_URL", "http://localhost:3200"),
-        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
     }
     payload = {
         "servers": servers,

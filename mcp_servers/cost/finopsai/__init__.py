@@ -1,0 +1,1 @@
+# FinOpsAI integration for MCP-OCI cost server

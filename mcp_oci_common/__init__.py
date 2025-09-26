@@ -1,5 +1,6 @@
 from .config import get_oci_config, get_compartment_id, allow_mutations
 from .observability import add_oci_call_attributes
+from .validation import validate_and_log_tools
 
 # Placeholder for with_oci_errors if needed
 def with_oci_errors(func):
