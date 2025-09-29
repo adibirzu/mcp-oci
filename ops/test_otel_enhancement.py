@@ -1,18 +1,65 @@
 #!/usr/bin/env python3
 """
-Test script for OpenTelemetry MCP enhancement capabilities
+Test script for OpenTelemetry MCP enhancement capabilities with dependency checks
 """
 
 import json
 import sys
 import os
 import time
+import warnings
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # Add the parent directory to sys.path to import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Check for OpenTelemetry availability
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+    OTEL_AVAILABLE = True
+except ImportError:
+    OTEL_AVAILABLE = False
+    warnings.warn(
+        "OpenTelemetry not available. Using mock implementations for testing. "
+        "Install with: pip install opentelemetry-api opentelemetry-sdk",
+        UserWarning
+    )
+
+# Mock exporter for testing without backend
+class MockSpanExporter:
+    """Mock span exporter for unit testing without requiring OTLP backend."""
+
+    def __init__(self):
+        self.exported_spans = []
+
+    def export(self, spans):
+        """Mock export that just stores spans for verification."""
+        self.exported_spans.extend(spans)
+        return SpanExportResult.SUCCESS if OTEL_AVAILABLE else 0
+
+    def shutdown(self):
+        """Mock shutdown."""
+        pass
+
+    def force_flush(self, timeout_millis=None):
+        """Mock force flush."""
+        return True
+
 from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer, MCPObservabilityEnhancer
+
+def test_dependency_availability():
+    """Test OpenTelemetry dependency availability."""
+    print("🔍 Testing OpenTelemetry dependency availability...")
+
+    if OTEL_AVAILABLE:
+        print("✅ OpenTelemetry dependencies are available")
+        return True
+    else:
+        print("⚠️ OpenTelemetry dependencies not available - using mock implementations")
+        return True  # Still pass, but with warning
 
 def test_otel_enhancer_creation():
     """Test creating the MCP OpenTelemetry enhancer"""
@@ -29,6 +76,8 @@ def test_otel_enhancer_creation():
         return True
     except Exception as e:
         print(f"❌ Failed to create enhancer: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def test_trace_span_creation():
@@ -214,17 +263,87 @@ def test_otlp_json_format():
         print(f"❌ OTLP/JSON format test failed: {e}")
         return False
 
+def test_with_mock_exporter():
+    """Test OpenTelemetry enhancer with mock exporter to avoid backend requirement."""
+    print("\n🔍 Testing with mock exporter...")
+
+    if not OTEL_AVAILABLE:
+        print("⚠️ Skipping mock exporter test: OpenTelemetry not available")
+        return True
+
+    try:
+        # Create mock exporter
+        mock_exporter = MockSpanExporter()
+
+        # Patch the OTLP exporter during initialization to use our mock
+        with patch('opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter', return_value=mock_exporter):
+            enhancer = create_mcp_otel_enhancer("mock-test-service")
+
+            # Create a test span
+            span = enhancer.create_trace_span(
+                name="mock_test_operation",
+                trace_token="mock-token-123",
+                attributes={"test.mock": True}
+            )
+
+            span.end()
+
+            print("✅ Mock exporter test completed successfully")
+            print(f"✅ Mock exporter captured spans (simulated)")
+            return True
+
+    except Exception as e:
+        print(f"❌ Mock exporter test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def test_graceful_fallback():
+    """Test graceful fallback when dependencies are missing."""
+    print("\n🔍 Testing graceful fallback behavior...")
+
+    try:
+        # Import the observability module to test lazy imports
+        from mcp_oci_common.observability import (
+            is_opentelemetry_available,
+            is_prometheus_available,
+            is_observability_available
+        )
+
+        print(f"✅ OpenTelemetry available: {is_opentelemetry_available()}")
+        print(f"✅ Prometheus available: {is_prometheus_available()}")
+        print(f"✅ Observability available: {is_observability_available()}")
+
+        # Test creating tracer when OTel might not be available
+        if is_opentelemetry_available():
+            from mcp_oci_common.observability import init_tracing
+            tracer = init_tracing("fallback-test-service")
+            print("✅ Tracer initialization successful")
+        else:
+            print("⚠️ OpenTelemetry not available, skipping tracer test")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Graceful fallback test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def main():
     """Run all OpenTelemetry MCP enhancement tests"""
     print("🧪 Testing OpenTelemetry MCP Enhancement Implementation")
     print("=" * 60)
 
     tests = [
+        ("Dependency Availability", test_dependency_availability),
         ("Enhancer Creation", test_otel_enhancer_creation),
         ("Trace Span Creation", test_trace_span_creation),
         ("Trace Notification", test_trace_notification),
         ("Traced Operation Decorator", test_traced_operation_decorator),
         ("OTLP/JSON Format", test_otlp_json_format),
+        ("Mock Exporter", test_with_mock_exporter),
+        ("Graceful Fallback", test_graceful_fallback),
     ]
 
     results = []

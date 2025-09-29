@@ -12,15 +12,19 @@ processors:
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
-  otlphttp:
-    endpoint: "http://localhost:4318"
+  otlphttp/tempo:
+    endpoint: "http://tempo:4318"
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlphttp]
+      exporters: [otlphttp/tempo, jaeger]
     metrics:
       receivers: [otlp]
       processors: [batch]

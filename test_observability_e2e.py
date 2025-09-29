@@ -3,10 +3,22 @@
 import sys
 import os
 import time
-import requests
 import json
 
 sys.path.append('.')
+
+# Handle requests dependency gracefully for CI environments
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    import warnings
+    warnings.warn(
+        "requests not available. Observability pipeline tests will be skipped. "
+        "Install with: pip install requests or pip install mcp-oci[test]",
+        UserWarning
+    )
 
 # Set environment variables for observability
 os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = 'localhost:4317'
@@ -15,6 +27,10 @@ os.environ['PYROSCOPE_SERVER_ADDRESS'] = 'http://localhost:4040'
 def test_metrics_pipeline():
     """Test that metrics are flowing through the pipeline"""
     print("🔍 Testing metrics pipeline...")
+
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping metrics pipeline test: requests not available")
+        return False
 
     try:
         # Check OTLP collector metrics
@@ -49,6 +65,10 @@ def test_metrics_pipeline():
 def test_traces_pipeline():
     """Test that traces are flowing through the pipeline"""
     print("\n🔍 Testing traces pipeline...")
+
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping traces pipeline test: requests not available")
+        return False
 
     try:
         # Import after setting environment
@@ -93,6 +113,10 @@ def test_grafana_connectivity():
     """Test that Grafana can access all data sources"""
     print("\n🔍 Testing Grafana connectivity...")
 
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping Grafana connectivity test: requests not available")
+        return False
+
     try:
         # Check data sources
         response = requests.get(
@@ -126,6 +150,10 @@ def test_service_health():
     """Test that all observability services are healthy"""
     print("\n🔍 Testing service health...")
 
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping service health test: requests not available")
+        return False
+
     services = [
         ('Grafana', 'http://localhost:3000/api/health'),
         ('Prometheus', 'http://localhost:9090/-/ready'),
@@ -152,6 +180,10 @@ def test_service_health():
 def test_mcp_servers_metrics():
     """Test that MCP servers are exposing metrics"""
     print("\n🔍 Testing MCP server metrics...")
+
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping MCP servers metrics test: requests not available")
+        return False
 
     # Common MCP server ports
     servers = [
