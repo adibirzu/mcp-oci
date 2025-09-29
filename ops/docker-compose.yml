@@ -24,6 +24,7 @@ services:
       - prometheus
       - tempo
       - pyroscope
+      - jaeger
     networks:
       - default
 
@@ -68,6 +69,30 @@ services:
     networks:
       - default
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"  # agent zipkin thrift
+      - "6831:6831/udp"  # agent jaeger thrift compact
+      - "6832:6832/udp"  # agent jaeger thrift binary
+      - "5778:5778"      # agent config
+      - "16686:16686"    # query frontend
+      - "14250:14250"    # grpc
+      - "14268:14268"    # jaeger thrift
+      - "9411:9411"      # zipkin
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:14269/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - default
+
   pyroscope:
     image: grafana/pyroscope:latest
     container_name: pyroscope
@@ -100,6 +125,7 @@ services:
     depends_on:
       - tempo
       - prometheus
+      - jaeger
     restart: unless-stopped
     networks:
       - default

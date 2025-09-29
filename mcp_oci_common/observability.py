@@ -3,37 +3,163 @@ from __future__ import annotations
 import os
 import socket
 import typing as t
+import warnings
+from typing import Optional
 
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.sdk.resources import Resource
+
+class ObservabilityImportError(ImportError):
+    """Custom exception for observability dependency import failures with actionable guidance."""
+
+    def __init__(self, dependency: str, operation: str, original_error: Exception):
+        self.dependency = dependency
+        self.operation = operation
+        self.original_error = original_error
+
+        message = f"""
+Failed to import {dependency} for {operation}.
+
+This likely means observability dependencies are not installed. To fix this:
+
+1. Install observability dependencies:
+   pip install opentelemetry-api opentelemetry-sdk
+   pip install opentelemetry-exporter-otlp-proto-grpc
+   pip install prometheus-client
+
+2. Or install with optional dependencies:
+   pip install "mcp-oci[observability]"
+
+3. For development with all dependencies:
+   pip install "mcp-oci[dev]"
+
+Original error: {original_error}
+
+Note: Core MCP functionality works without observability dependencies.
+Observability features will be disabled gracefully when dependencies are missing.
+"""
+        super().__init__(message)
+
+
+# Lazy import flags and objects
+_OTEL_AVAILABLE = None
+_PROM_AVAILABLE = None
+_otel_modules = {}
+_prom_modules = {}
+
+
+def _lazy_import_opentelemetry():
+    """Lazy import of OpenTelemetry with informative error handling."""
+    global _OTEL_AVAILABLE, _otel_modules
+
+    if _OTEL_AVAILABLE is not None:
+        return _OTEL_AVAILABLE, _otel_modules
+
+    try:
+        from opentelemetry import trace, metrics
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        from opentelemetry.sdk.resources import Resource
+
+        _otel_modules = {
+            'trace': trace,
+            'metrics': metrics,
+            'TracerProvider': TracerProvider,
+            'BatchSpanProcessor': BatchSpanProcessor,
+            'OTLPSpanExporter': OTLPSpanExporter,
+            'MeterProvider': MeterProvider,
+            'PeriodicExportingMetricReader': PeriodicExportingMetricReader,
+            'OTLPMetricExporter': OTLPMetricExporter,
+            'Resource': Resource,
+        }
+        _OTEL_AVAILABLE = True
+        return True, _otel_modules
+
+    except ImportError as e:
+        _OTEL_AVAILABLE = False
+        warnings.warn(
+            f"OpenTelemetry not available: {e}. "
+            "Tracing and metrics will be disabled. "
+            "Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc",
+            UserWarning,
+            stacklevel=2
+        )
+        return False, {}
+
+
+def _lazy_import_prometheus():
+    """Lazy import of Prometheus client with informative error handling."""
+    global _PROM_AVAILABLE, _prom_modules
+
+    if _PROM_AVAILABLE is not None:
+        return _PROM_AVAILABLE, _prom_modules
+
+    try:
+        from prometheus_client import Counter as _PromCounter, Histogram as _PromHistogram
+
+        _prom_modules = {
+            'Counter': _PromCounter,
+            'Histogram': _PromHistogram,
+        }
+        _PROM_AVAILABLE = True
+        return True, _prom_modules
+
+    except ImportError as e:
+        _PROM_AVAILABLE = False
+        warnings.warn(
+            f"Prometheus client not available: {e}. "
+            "Prometheus metrics will be disabled. "
+            "Install with: pip install prometheus-client",
+            UserWarning,
+            stacklevel=2
+        )
+        return False, {}
+
+
+def is_observability_available() -> bool:
+    """Check if observability dependencies are available."""
+    otel_available, _ = _lazy_import_opentelemetry()
+    prom_available, _ = _lazy_import_prometheus()
+    return otel_available or prom_available
+
+
+def is_opentelemetry_available() -> bool:
+    """Check if OpenTelemetry dependencies are available."""
+    available, _ = _lazy_import_opentelemetry()
+    return available
+
+
+def is_prometheus_available() -> bool:
+    """Check if Prometheus client is available."""
+    available, _ = _lazy_import_prometheus()
+    return available
+
+
+# Import time for duration measurement (always available)
 import time
-try:
-    from prometheus_client import Counter as _PromCounter, Histogram as _PromHistogram  # type: ignore
-    _PROM_AVAILABLE = True
-except Exception:
-    _PROM_AVAILABLE = False
 
 _tool_calls_counter = None
 _tool_duration_histogram = None
 
+
 def _get_prom_metrics():
+    """Get Prometheus metrics with lazy import and graceful fallback."""
     global _tool_calls_counter, _tool_duration_histogram
-    if not _PROM_AVAILABLE:
+
+    prom_available, prom_modules = _lazy_import_prometheus()
+    if not prom_available:
         return None, None
+
     if _tool_calls_counter is None:
-        _tool_calls_counter = _PromCounter(
+        _tool_calls_counter = prom_modules['Counter'](
             'mcp_tool_calls_total',
             'Total MCP tool calls',
             ['server', 'tool', 'outcome']
         )
     if _tool_duration_histogram is None:
-        _tool_duration_histogram = _PromHistogram(
+        _tool_duration_histogram = prom_modules['Histogram'](
             'mcp_tool_duration_seconds',
             'MCP tool duration (s)',
             ['server', 'tool']
@@ -60,7 +186,14 @@ def _normalize_otlp_endpoint(ep: str | None) -> str | None:
     return ep
 
 
-def _build_resource(service_name: str, service_namespace: str | None = None) -> Resource:
+def _build_resource(service_name: str, service_namespace: str | None = None):
+    """Build OpenTelemetry resource with lazy import and graceful fallback."""
+    otel_available, otel_modules = _lazy_import_opentelemetry()
+    if not otel_available:
+        return None
+
+    Resource = otel_modules['Resource']
+
     # Minimal semantic attributes to avoid unknown_service in Tempo
     attrs = {
         "service.name": service_name,
@@ -82,11 +215,26 @@ def init_tracing(
     service_namespace: str | None = None,
     endpoint: str | None = None,
     insecure: bool = True,
-) -> trace.Tracer:
+):
     """
     Configure a global TracerProvider with a Resource including service.name to avoid 'unknown_service'.
     This is idempotent: calling it multiple times will not re-create providers.
+    Returns None if OpenTelemetry is not available.
     """
+    otel_available, otel_modules = _lazy_import_opentelemetry()
+    if not otel_available:
+        warnings.warn(
+            f"Skipping tracing initialization for {service_name}: OpenTelemetry not available",
+            UserWarning,
+            stacklevel=2
+        )
+        return None
+
+    trace = otel_modules['trace']
+    TracerProvider = otel_modules['TracerProvider']
+    BatchSpanProcessor = otel_modules['BatchSpanProcessor']
+    OTLPSpanExporter = otel_modules['OTLPSpanExporter']
+
     current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
         # Already initialized; return tracer for the requested service name.
@@ -107,11 +255,26 @@ def init_metrics(
     endpoint: str | None = None,
     insecure: bool = True,
     meter_name: str = "mcp_oci_metrics",
-) -> metrics.Meter:
+):
     """
     Initialize OTLP metrics export (optional). Uses the same endpoint as tracing by default.
     This is idempotent: calling it multiple times will not re-create providers.
+    Returns None if OpenTelemetry is not available.
     """
+    otel_available, otel_modules = _lazy_import_opentelemetry()
+    if not otel_available:
+        warnings.warn(
+            f"Skipping metrics initialization for {meter_name}: OpenTelemetry not available",
+            UserWarning,
+            stacklevel=2
+        )
+        return None
+
+    metrics = otel_modules['metrics']
+    MeterProvider = otel_modules['MeterProvider']
+    PeriodicExportingMetricReader = otel_modules['PeriodicExportingMetricReader']
+    OTLPMetricExporter = otel_modules['OTLPMetricExporter']
+
     current_provider = metrics.get_meter_provider()
     if isinstance(current_provider, MeterProvider):
         # Already initialized; return meter for the requested name.
@@ -127,7 +290,7 @@ def init_metrics(
 
 
 def set_common_span_attributes(
-    span: trace.Span,
+    span,  # Can be None if OpenTelemetry is not available
     *,
     mcp_server: str | None = None,
     mcp_tool: str | None = None,
@@ -135,9 +298,11 @@ def set_common_span_attributes(
 ) -> None:
     """
     Attach common attributes for MCP spans so dashboards/TraceQL can group effectively.
+    Gracefully handles None spans when OpenTelemetry is not available.
     """
-    if not span.is_recording():
+    if span is None or not hasattr(span, 'is_recording') or not span.is_recording():
         return
+
     if mcp_server:
         # Preferred attribute keys
         span.set_attribute("mcp.server.name", mcp_server)
@@ -158,7 +323,7 @@ def set_common_span_attributes(
 
 
 def add_oci_call_attributes(
-    span: trace.Span,
+    span,  # Can be None if OpenTelemetry is not available
     *,
     oci_service: str,
     oci_operation: str,
@@ -168,6 +333,7 @@ def add_oci_call_attributes(
 ) -> None:
     """
     Enrich a span with OCI call metadata so we can answer: which REST backend call was made.
+    Gracefully handles None spans when OpenTelemetry is not available.
     """
     set_common_span_attributes(
         span,
@@ -178,15 +344,23 @@ def add_oci_call_attributes(
             "oci.endpoint": endpoint or "",
         },
     )
-    if request_id:
+    if span and request_id and hasattr(span, 'set_attribute'):
         span.set_attribute("oci.request_id", request_id)
 
 
 _token_counter = None
 
+
 def get_token_counter():
+    """Get token counter with graceful fallback for missing OpenTelemetry."""
     global _token_counter
+
+    otel_available, otel_modules = _lazy_import_opentelemetry()
+    if not otel_available:
+        return None
+
     if not _token_counter:
+        metrics = otel_modules['metrics']
         meter = metrics.get_meter("oci_mcp_metrics")
         _token_counter = meter.create_counter(
             name="oci.mcp.tokens.total",
@@ -195,42 +369,52 @@ def get_token_counter():
         )
     return _token_counter
 
+
 def record_token_usage(
     total: int,
     request: int | None = None,
     response: int | None = None,
     attrs: dict[str, t.Any] | None = None
 ) -> None:
-    """Record token usage metrics for future LLM integrations"""
+    """Record token usage metrics for future LLM integrations. Gracefully handles missing OpenTelemetry."""
     counter = get_token_counter()
-    attributes = attrs or {}
-    counter.add(total, attributes)
-    
+    if counter:
+        attributes = attrs or {}
+        counter.add(total, attributes)
+
     # Also add to current span if available
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.set_attribute("oci.mcp.tokens.total", total)
-        if request:
-            span.set_attribute("oci.mcp.tokens.request", request)
-        if response:
-            span.set_attribute("oci.mcp.tokens.response", response)
+    otel_available, otel_modules = _lazy_import_opentelemetry()
+    if otel_available:
+        trace = otel_modules['trace']
+        span = trace.get_current_span()
+        if span and hasattr(span, 'is_recording') and span.is_recording():
+            span.set_attribute("oci.mcp.tokens.total", total)
+            if request:
+                span.set_attribute("oci.mcp.tokens.request", request)
+            if response:
+                span.set_attribute("oci.mcp.tokens.response", response)
 
 class tool_span:
     """
     Context manager to simplify instrumenting a tool function:
         with tool_span(tracer, "list_instances", mcp_server="oci-mcp-compute"):
             ...
+    Gracefully handles None tracer when OpenTelemetry is not available.
     """
 
-    def __init__(self, tracer: trace.Tracer, tool_name: str, *, mcp_server: str):
-        self._tracer = tracer
+    def __init__(self, tracer, tool_name: str, *, mcp_server: str):
+        self._tracer = tracer  # Can be None if OpenTelemetry is not available
         self._tool_name = tool_name
         self._mcp_server = mcp_server
-        self._span: trace.Span | None = None
+        self._span = None
 
     def __enter__(self):
-        self._span = self._tracer.start_span(self._tool_name)
-        set_common_span_attributes(self._span, mcp_server=self._mcp_server, mcp_tool=self._tool_name)
+        if self._tracer and hasattr(self._tracer, 'start_span'):
+            self._span = self._tracer.start_span(self._tool_name)
+            set_common_span_attributes(self._span, mcp_server=self._mcp_server, mcp_tool=self._tool_name)
+        else:
+            self._span = None
+
         try:
             self._start = time.perf_counter()
         except Exception:
@@ -238,10 +422,14 @@ class tool_span:
         return self._span
 
     def __exit__(self, exc_type, exc, tb):
-        # Record error on span if present
-        if self._span and exc:
-            self._span.record_exception(exc)
-            self._span.set_status(trace.Status(trace.StatusCode.ERROR, str(exc)))
+        # Record error on span if present and OpenTelemetry is available
+        if self._span and exc and hasattr(self._span, 'record_exception'):
+            otel_available, otel_modules = _lazy_import_opentelemetry()
+            if otel_available:
+                trace = otel_modules['trace']
+                self._span.record_exception(exc)
+                self._span.set_status(trace.Status(trace.StatusCode.ERROR, str(exc)))
+
         # Prometheus metrics for tool duration and outcome
         try:
             c, h = _get_prom_metrics()
@@ -253,5 +441,6 @@ class tool_span:
                 c.labels(self._mcp_server, self._tool_name, outcome).inc()
         except Exception:
             pass
-        if self._span:
+
+        if self._span and hasattr(self._span, 'end'):
             self._span.end()

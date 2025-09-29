@@ -52,6 +52,34 @@ datasources:
           - key: service.name
             value: ""
 
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: GET
+      # Enable trace-to-metrics correlation with Prometheus
+      tracesToMetrics:
+        datasourceUid: prom
+        tags:
+          - key: service_name
+            value: service.name
+          - key: operation_name
+            value: operation
+        spanStartTimeShift: "1h"
+        spanEndTimeShift: "1h"
+      # Enable trace-to-logs correlation
+      tracesToLogs:
+        datasourceUid: prom
+        tags:
+          - service_name
+          - traceID
+    basicAuth: false
+    isDefault: false
+
   - name: Pyroscope
     uid: pyro
     type: pyroscope
