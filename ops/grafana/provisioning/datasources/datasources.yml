@@ -5,7 +5,7 @@ datasources:
     uid: prom
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://localhost:9090
     isDefault: true
     version: 1
     editable: true
@@ -15,12 +15,14 @@ datasources:
       exemplarTraceIdDestinations:
         - name: Tempo
           datasourceUid: tempo
+        - name: Jaeger
+          datasourceUid: jaeger
 
   - name: Tempo
     uid: tempo
     type: tempo
     access: proxy
-    url: http://tempo:3200
+    url: http://localhost:3200
     version: 1
     editable: true
     jsonData:
@@ -36,27 +38,27 @@ datasources:
         # These tags map span attributes to Prometheus labels (adjust to your metrics if needed)
         tags:
           - key: service.name
-            value: $__span.serviceName
-          - key: service.namespace
-            value: $__span.serviceNamespace
-          - key: operation
-            value: $__span.name
+            value: service_name
+          - key: mcp.server.name
+            value: mcp_server
+          - key: mcp.tool.name
+            value: mcp_tool
         spanStartTimeShift: "1h"
         spanEndTimeShift: "1h"
         # Example PromQL for span count/rate (adjust to your metric names as needed)
-        query: sum by (service_name) (rate(otel_span_duration_milliseconds_count[5m]))
+        query: sum by (service_name) (rate(mcp_tool_duration_seconds_count[5m]))
       # Enable metrics->trace linking from Prometheus panels back to Tempo
       metricsToTraces:
         datasourceUid: prom
         tags:
           - key: service.name
-            value: ""
+            value: service_name
 
   - name: Jaeger
     uid: jaeger
     type: jaeger
     access: proxy
-    url: http://jaeger:16686
+    url: http://localhost:16686
     version: 1
     editable: true
     jsonData:
@@ -67,10 +69,14 @@ datasources:
         tags:
           - key: service_name
             value: service.name
-          - key: operation_name
-            value: operation
+          - key: mcp_server
+            value: mcp.server.name
+          - key: mcp_tool
+            value: mcp.tool.name
         spanStartTimeShift: "1h"
         spanEndTimeShift: "1h"
+        # Example PromQL for MCP metrics
+        query: sum by (mcp_server, mcp_tool) (rate(mcp_tool_calls_total[5m]))
       # Enable trace-to-logs correlation
       tracesToLogs:
         datasourceUid: prom
@@ -84,11 +90,17 @@ datasources:
     uid: pyro
     type: pyroscope
     access: proxy
-    url: http://pyroscope:4040
+    url: http://localhost:4040
     version: 1
     editable: true
     jsonData:
       httpMethod: GET
       timeout: 30
+      # Enable profiling-to-tracing correlation
+      tracesToProfiles:
+        datasourceUid: tempo
+        tags:
+          - service_name
+          - pyroscope_profile_id
     basicAuth: false
     isDefault: false

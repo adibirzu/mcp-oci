@@ -26,7 +26,7 @@ export PYTHONPATH="$(pwd)/src:$(pwd):${PYTHONPATH:-}"
 
 PID_DIR="${PID_DIR:-/tmp}"
 
-SERVERS=("compute" "db" "network" "security" "observability" "cost" "inventory" "blockstorage" "loadbalancer")
+SERVERS=("compute" "db" "network" "security" "observability" "cost" "inventory" "blockstorage" "loadbalancer" "loganalytics" "agents")
 
 usage() {
   echo "Usage:"
@@ -124,7 +124,7 @@ launch_server() {
     # Enable Pyroscope profiling (non-fatal if backend unavailable)
     export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-true}"
     export PYROSCOPE_APP_NAME="mcp-oci-$server"
-    export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}"
+    export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://localhost:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
 
     local entry="mcp_servers/$server/server.py"
@@ -172,8 +172,15 @@ case "$cmd" in
     ;;
 
   stop)
-    [[ $# -eq 1 ]] || usage
-    stop_server "$1"
+    if [[ "${1:-}" == "all" ]]; then
+      echo "Stopping all MCP servers..."
+      for server in "${SERVERS[@]}"; do
+        stop_server "$server"
+      done
+    else
+      [[ $# -eq 1 ]] || usage
+      stop_server "$1"
+    fi
     ;;
 
   all)
@@ -184,7 +191,7 @@ case "$cmd" in
     echo "All MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
     ;;
 
-  compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer)
+  compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer|loganalytics|agents)
     mode="foreground"
     if [[ "${1:-}" == "--daemon" ]]; then
       mode="daemon"

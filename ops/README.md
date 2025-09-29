@@ -1,248 +1,221 @@
-# MCP-OCI Observability Stack
+# MCP-OCI Observability Operations
 
-This directory contains the complete observability stack for the MCP-OCI project, including metrics, traces, logs, and continuous profiling.
+This directory contains the complete observability stack for MCP-OCI servers, providing metrics, tracing, and profiling capabilities.
+
+## 🚀 Quick Start
+
+```bash
+# Start the complete observability stack
+./restart_observability_stack.sh
+
+# Or start individual components
+docker-compose up -d
+
+# Start UX dashboard
+./run-ux-local.sh
+```
+
+## 📊 Access Points
+
+| Service | URL | Purpose | Credentials |
+|---------|-----|---------|-------------|
+| **Grafana** | http://localhost:3000 | Dashboards and visualization | admin/admin |
+| **Prometheus** | http://localhost:9090 | Metrics collection and querying | - |
+| **Tempo** | http://localhost:3200 | Distributed tracing backend | - |
+| **Pyroscope** | http://localhost:4040 | Continuous profiling | - |
+| **Jaeger** | http://localhost:16686 | Trace exploration and analysis | - |
+| **UX Dashboard** | http://localhost:8010 | MCP servers status and control | - |
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   UX App        │    │  MCP Servers    │    │  OCI Services   │
-│  (Port: 8010)   │    │  (Various)      │    │                 │
-└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
-          │                      │                      │
-          │ OTLP/Metrics         │ OTLP/Metrics         │ SDK Traces
-          │                      │                      │
-          ▼                      ▼                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  OpenTelemetry Collector                        │
-│                     (Port: 4317)                               │
-└─────────┬───────────────────────────────┬─────────────────────┘
-          │                               │
-          │ Traces                        │ Metrics
-          ▼                               ▼
-┌─────────────────┐              ┌─────────────────┐
-│     Tempo       │              │   Prometheus    │
-│  (Port: 3200)   │              │  (Port: 9090)   │
-└─────────────────┘              └─────────────────┘
-          │                               │
-          │                               │
-          ▼                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         Grafana                                 │
-│                      (Port: 3000)                               │
-│  • Dashboards  • Alerting  • Data Source Management           │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────┐
-│   Pyroscope     │ ◄─── Continuous Profiling Data
-│  (Port: 4040)   │
-└─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Servers (8001-8011)                 │
+│  compute │ db │ network │ security │ cost │ observability   │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Metrics & Traces
+┌─────────────────────┴───────────────────────────────────────┐
+│                OTLP Collector (4317/8889)                  │
+│           Routes metrics and traces to backends            │
+└─────────┬─────────────────────────────────────┬─────────────┘
+          │ Metrics                             │ Traces
+┌─────────▼─────────┐                  ┌────────▼─────────────┐
+│   Prometheus      │                  │  Tempo + Jaeger     │
+│   (host network)  │                  │  (distributed trace) │
+└─────────┬─────────┘                  └────────┬─────────────┘
+          │                                     │
+          └─────────────┬───────────────────────┘
+                        ▼
+                ┌───────────────┐
+                │    Grafana    │
+                │  (localhost)  │
+                └───────────────┘
 ```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker and Docker Compose
-- macOS with Colima (already configured)
-- jq (for testing scripts)
-- curl and nc (for health checks)
-
-### Starting the Stack
-
-1. **Start the observability services:**
-   ```bash
-   ./start-observability.sh
-   ```
-
-2. **Start the MCP servers:**
-   ```bash
-   ../scripts/mcp-launchers/start-mcp-server.sh start all
-   ```
-
-3. **Start the UX application:**
-   ```bash
-   ./run-ux-local.sh
-   ```
-
-4. **Test the integration:**
-   ```bash
-   ./test-observability.sh
-   ./test-mcp-metrics.sh
-   ```
-
-## 📊 Components
-
-### Grafana (Port: 3000)
-- **Credentials:** admin/admin
-- **Purpose:** Unified observability dashboard and alerting
-- **Data Sources:**
-  - Prometheus (metrics) - UID: `prom`
-  - Tempo (traces) - UID: `tempo`
-  - Pyroscope (profiles) - UID: `pyro`
-
-### Prometheus (Port: 9090)
-- **Purpose:** Metrics collection and storage
-- **Scrape Targets:**
-  - UX App (`host.docker.internal:8010`)
-  - MCP Servers:
-    - Compute (`host.docker.internal:8001`)
-    - DB (`host.docker.internal:8002`)
-    - Observability (`host.docker.internal:8003`)
-    - Security (`host.docker.internal:8004`)
-    - Network (`host.docker.internal:8006`)
-    - Blockstorage (`host.docker.internal:8007`)
-    - Loadbalancer (`host.docker.internal:8008`)
-    - Inventory (`host.docker.internal:8009`)
-    - Agents (`host.docker.internal:8011`)
-  - OTEL Collector (`otel-collector:8889`)
-
-### Tempo (Port: 3200)
-- **Purpose:** Distributed tracing storage and query
-- **Features:**
-  - Service maps
-  - Trace-to-metrics correlation
-  - TraceQL support
-
-### Pyroscope (Port: 4040)
-- **Purpose:** Continuous profiling
-- **Integration:** UX app automatically sends profiling data
-
-### OpenTelemetry Collector (Port: 4317)
-- **Purpose:** Telemetry data pipeline
-- **Receives:** OTLP traces and metrics
-- **Exports:**
-  - Traces → Tempo
-  - Metrics → Prometheus
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Network Setup
+- **Prometheus**: Uses host networking mode for localhost target access
+- **OTLP Collector**: Exports to both Tempo (HTTP) and Jaeger (gRPC)
+- **All Services**: Configured with localhost endpoints for proper connectivity
 
-The following environment variables control observability behavior:
+### Port Mapping
+- Prometheus: 9090 (host network)
+- Grafana: 3000
+- Tempo: 3200, 4318 (OTLP HTTP)
+- Pyroscope: 4040, 7946
+- Jaeger: 16686 (UI), 14317/14318 (OTLP), 14269 (metrics)
+- OTLP Collector: 4317 (gRPC), 8889 (metrics)
 
+## 🧪 Testing & Validation
+
+### End-to-End Test
 ```bash
-# OpenTelemetry
-OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
-OTEL_SERVICE_NAME=mcp-ux
-OTEL_SERVICE_NAMESPACE=mcp-oci
-
-# Pyroscope
-ENABLE_PYROSCOPE=true
-PYROSCOPE_SERVER_ADDRESS=http://localhost:4040
-PYROSCOPE_APP_NAME=mcp-ux
-PYROSCOPE_SAMPLE_RATE=100
-
-# Observability URLs
-GRAFANA_URL=http://localhost:3000
-PROMETHEUS_URL=http://localhost:9090
-TEMPO_URL=http://localhost:3200
+# Comprehensive observability pipeline test
+cd .. && python test_observability_e2e.py
 ```
 
-### Key Features
+### Generate Test Data
+```bash
+# Generate metrics (Prometheus format)
+python generate_test_data.py --mode metrics
 
-1. **Automatic Service Discovery:** Prometheus discovers services via static configuration
-2. **Health Checks:** All services include health checks for proper startup sequencing
-3. **Data Correlation:** Traces are linked to metrics and profiles
-4. **Persistent Storage:** Data is persisted using Docker volumes
+# Generate traces (OpenTelemetry)
+python generate_test_data.py --mode traces
+
+# Test all endpoints
+python generate_test_data.py --mode test
+```
+
+### Health Checks
+```bash
+# Check container status
+docker-compose ps
+
+# Check service health
+curl http://localhost:3000/api/health    # Grafana
+curl http://localhost:9090/-/ready       # Prometheus
+curl http://localhost:3200/api/echo      # Tempo
+curl http://localhost:4040/              # Pyroscope
+curl http://localhost:14269/             # Jaeger
+curl http://localhost:8889/metrics       # OTLP Collector
+```
+
+## 🛠️ Operations
+
+### Start/Stop Services
+```bash
+# Complete restart with cleanup
+./restart_observability_stack.sh
+
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# Stop with data cleanup
+docker-compose down -v
+```
+
+### View Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f grafana
+docker-compose logs -f prometheus
+docker-compose logs -f otel-collector
+```
+
+### Scaling & Performance
+```bash
+# Check resource usage
+docker stats
+
+# Restart specific service
+docker-compose restart grafana
+
+# Update configuration and restart
+docker-compose up -d --force-recreate grafana
+```
 
 ## 🔍 Troubleshooting
 
 ### Common Issues
 
-1. **Pyroscope connection errors:**
-   - Ensure UX app uses `localhost:4040` instead of `pyroscope:4040`
-   - Check that Pyroscope container is healthy
+1. **Prometheus targets down**
+   - Check MCP servers are running: `scripts/mcp-launchers/start-mcp-server.sh status compute`
+   - Verify localhost accessibility from host network
 
-2. **OpenTelemetry warnings:**
-   - Fixed with idempotent provider initialization
-   - No functional impact on telemetry collection
+2. **OTLP Collector errors**
+   - Check Tempo and Jaeger connectivity
+   - Verify port mappings (no conflicts on 4317/4318)
 
-3. **Missing metrics in Grafana:**
-   - Verify Prometheus is scraping targets successfully
-   - Check OTEL Collector logs for export errors
+3. **Grafana data source issues**
+   - Verify localhost URLs in data source configuration
+   - Check service connectivity from Grafana container
 
-### Debugging Commands
+4. **Missing traces/metrics**
+   - Confirm MCP servers have observability enabled
+   - Check OTLP endpoint configuration: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
 
+### Debug Commands
 ```bash
-# Check container health
-docker-compose ps
+# Check network connectivity
+docker-compose exec grafana curl http://localhost:9090/api/v1/targets
+docker-compose exec grafana curl http://localhost:3200/api/echo
 
-# View service logs
-docker-compose logs -f [service-name]
+# Check OTLP collector configuration
+docker-compose exec otel-collector cat /etc/otel-collector.yaml
 
-# Test endpoint connectivity
-curl http://localhost:9090/-/ready
-curl http://localhost:3000/api/health
-curl http://localhost:3200/ready
-
-# Check metrics collection
-curl http://localhost:9090/api/v1/targets
-
-# Verify OTLP endpoint
-nc -z localhost 4317
+# Restart problematic services
+docker-compose restart otel-collector jaeger
 ```
 
-## 📈 Metrics and Dashboards
+## 📁 File Structure
 
-### Available Metrics
+```
+ops/
+├── docker-compose.yml              # Main observability stack
+├── restart_observability_stack.sh  # Complete restart script
+├── run-ux-local.sh                 # UX dashboard startup
+├── generate_test_data.py           # Test data generation
+├── grafana/
+│   ├── provisioning/
+│   │   ├── datasources/            # Grafana data sources (localhost)
+│   │   └── dashboards/             # Dashboard configurations
+│   └── dashboards/
+│       └── mcp-observability.json  # MCP-specific dashboard
+├── prometheus/
+│   └── prometheus.yml              # Prometheus configuration (localhost targets)
+├── tempo/
+│   └── tempo.yaml                  # Tempo configuration
+├── pyroscope/
+│   └── pyroscope.yaml              # Pyroscope configuration
+└── otel/
+    └── otel-collector.yaml         # OTLP collector configuration
+```
 
-- **HTTP Requests:** `http_requests_total`, `http_request_duration_seconds`
-- **MCP Tool Calls:** `mcp_tool_calls_total`, `mcp_tool_duration_seconds`
-- **OpenTelemetry:** `otelcol_*` metrics from collector
-- **System:** Standard Prometheus metrics
+## 📈 Available Metrics
+
+### MCP Server Metrics
+- `mcp_tool_calls_total` - Total tool invocations by server and tool
+- `mcp_tool_duration_seconds` - Tool execution duration histogram
+- `http_requests_total` - HTTP request counts
+- `http_request_duration_seconds` - HTTP request duration
+
+### Infrastructure Metrics
+- `prometheus_*` - Prometheus internal metrics
+- `otelcol_*` - OpenTelemetry collector metrics
+- `grafana_*` - Grafana internal metrics
 
 ### Pre-configured Dashboards
-
-- **MCP Overview:** `/ops/grafana/dashboards/mcp-overview.json`
-  - HTTP request rates and latency
-  - MCP tool call metrics
-  - Duration distributions
-
-- **MCP Servers Overview:** `/ops/grafana/dashboards/mcp-servers-overview.json`
-  - Server health status across all MCP servers
-  - Request rates per server
-  - Tool call rates and error rates
-  - Average tool execution duration
-  - Top tools by usage
-  - OpenTelemetry collector metrics
-
-## 🎯 Integration with MCP Servers
-
-Each MCP server can emit telemetry by:
-
-1. **Importing observability utilities:**
-   ```python
-   from mcp_oci_common.observability import init_tracing, tool_span
-   ```
-
-2. **Initializing tracing:**
-   ```python
-   tracer = init_tracing("oci-mcp-compute")
-   ```
-
-3. **Instrumenting tool functions:**
-   ```python
-   with tool_span(tracer, "list_instances", mcp_server="oci-mcp-compute"):
-       # tool implementation
-   ```
-
-## 🔄 Maintenance
-
-### Data Retention
-- **Prometheus:** 15 days (configurable)
-- **Tempo:** 1 hour compacted block retention
-- **Grafana:** Persistent dashboards and configurations
-
-### Cleanup
-```bash
-# Stop all services and remove volumes
-docker-compose down -v
-
-# Remove all observability data
-docker volume prune -f
-```
+- **MCP Observability**: Comprehensive MCP servers overview with tool metrics, success rates, and duration analysis
+- **Service Health**: Infrastructure health monitoring
+- **Request Analytics**: HTTP request patterns and performance
 
 ---
 
-For more details, see the individual configuration files in each service directory.
+For detailed configuration and advanced usage, see the main project [README.md](../README.md).

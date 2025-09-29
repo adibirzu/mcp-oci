@@ -214,13 +214,84 @@ def test_mcp_servers_metrics():
     print(f"📊 {healthy_servers}/{len(servers)} MCP servers are exposing metrics")
     return healthy_servers > 0
 
+def test_prometheus_targets():
+    """Test that Prometheus can reach all configured targets"""
+    print("\n🔍 Testing Prometheus targets...")
+
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping Prometheus targets test: requests not available")
+        return False
+
+    try:
+        response = requests.get('http://localhost:9090/api/v1/targets', timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if 'data' in data and 'activeTargets' in data['data']:
+                targets = data['data']['activeTargets']
+                up_targets = [t for t in targets if t['health'] == 'up']
+                total_targets = len(targets)
+                up_count = len(up_targets)
+
+                print(f"✅ Prometheus targets: {up_count}/{total_targets} up")
+
+                # Show status of each target
+                for target in targets:
+                    job = target.get('labels', {}).get('job', 'unknown')
+                    health = target['health']
+                    endpoint = target['discoveredLabels']['__address__']
+                    status = "✅" if health == 'up' else "❌"
+                    print(f"  {status} {job}: {endpoint} ({health})")
+
+                return up_count > 0
+            else:
+                print("❌ Invalid response format from Prometheus")
+                return False
+        else:
+            print(f"❌ Prometheus targets API returned status {response.status_code}")
+            return False
+
+    except Exception as e:
+        print(f"❌ Prometheus targets test failed: {e}")
+        return False
+
+def test_jaeger_metrics():
+    """Test that Jaeger is exposing metrics"""
+    print("\n🔍 Testing Jaeger metrics...")
+
+    if not REQUESTS_AVAILABLE:
+        print("⚠️ Skipping Jaeger metrics test: requests not available")
+        return False
+
+    try:
+        response = requests.get('http://localhost:14269/metrics', timeout=5)
+        if response.status_code == 200:
+            metrics_text = response.text
+            if 'jaeger' in metrics_text.lower():
+                print("✅ Jaeger metrics available")
+                # Count metrics
+                metric_lines = [line for line in metrics_text.split('\n') if line and not line.startswith('#')]
+                print(f"✅ Found {len(metric_lines)} metric data points")
+                return True
+            else:
+                print("⚠️ Jaeger responding but no Jaeger-specific metrics found")
+                return False
+        else:
+            print(f"❌ Jaeger metrics endpoint returned status {response.status_code}")
+            return False
+
+    except Exception as e:
+        print(f"❌ Jaeger metrics test failed: {e}")
+        return False
+
 def main():
     print("🧪 MCP-OCI Observability End-to-End Test")
     print("=" * 50)
 
     tests = [
         ("Service Health", test_service_health),
+        ("Prometheus Targets", test_prometheus_targets),
         ("MCP Server Metrics", test_mcp_servers_metrics),
+        ("Jaeger Metrics", test_jaeger_metrics),
         ("Metrics Pipeline", test_metrics_pipeline),
         ("Traces Pipeline", test_traces_pipeline),
         ("Grafana Connectivity", test_grafana_connectivity),
