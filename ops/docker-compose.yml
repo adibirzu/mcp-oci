@@ -161,6 +161,9 @@ networks:
   default:
     driver: bridge
     enable_ipv6: false
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
     ipam:
+      driver: default
       config:
         - subnet: 172.20.0.0/16

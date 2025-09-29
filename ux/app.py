@@ -198,9 +198,11 @@ async def index(request: Request):
                 relations += f"{s['name']}-- no tools --\n"
     # Use OTLP gRPC default (4317) consistent with servers (OTLPSpanExporter/MetricExporter)
     obs = {
-        "grafana_url": os.getenv("GRAFANA_URL", "http://localhost:3000"),
-        "prometheus_url": os.getenv("PROMETHEUS_URL", "http://localhost:9090"),
-        "tempo_url": os.getenv("TEMPO_URL", "http://localhost:3200"),
+        "grafana_url": os.getenv("GRAFANA_URL", "http://127.0.0.1:3000"),
+        "prometheus_url": os.getenv("PROMETHEUS_URL", "http://127.0.0.1:9090"),
+        "tempo_url": os.getenv("TEMPO_URL", "http://127.0.0.1:3200"),
+        "jaeger_url": os.getenv("JAEGER_URL", "http://127.0.0.1:16686"),
+        "pyroscope_url": os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://127.0.0.1:4040"),
         "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
     }
     payload = {
