@@ -1,9 +1,10 @@
 [tool.poetry]
-name = "mcp-oci-demo"
+name = "mcp-oci"
 version = "0.1.0"
-description = "OCI AI + Observability Demo"
+description = "Oracle Cloud Infrastructure MCP Servers for AI and Observability"
 authors = [ "Abir Zu <abirzu@example.com>" ]
-package-mode = false
+readme = "README.md"
+packages = [{include = "mcp_servers"}, {include = "mcp_oci_common"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

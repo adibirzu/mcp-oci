@@ -333,12 +333,36 @@ def execute_query(
     profile: str | None = None,
     region: str | None = None,
 ) -> str:
-    """Execute a Log Analytics query using direct REST API"""
+    """Execute a Log Analytics query using direct REST API with query enhancement"""
     with tool_span(tracer, "execute_query", mcp_server="oci-mcp-loganalytics") as span:
         if requests is None or Signer is None:
             return with_meta({"error": "Required libraries not available"}, success=False)
 
         try:
+            # Enhance the query before execution
+            from .query_enhancer import enhance_log_analytics_query
+            enhancement_result = enhance_log_analytics_query(query)
+
+            # Use enhanced query if available and valid
+            enhanced_query = enhancement_result.get('enhanced_query', query)
+            validation_issues = {
+                'errors': enhancement_result.get('errors', []),
+                'warnings': enhancement_result.get('warnings', []),
+                'suggestions': enhancement_result.get('suggestions', [])
+            }
+
+            # If there are critical errors, return them
+            if not enhancement_result.get('is_valid', True) and enhancement_result.get('errors'):
+                return with_meta({
+                    "error": "Query validation failed",
+                    "validation_errors": validation_issues['errors'],
+                    "suggestions": validation_issues['suggestions'],
+                    "original_query": query,
+                    "enhanced_query": enhanced_query
+                }, success=False, message=f"Query validation failed: {'; '.join(validation_issues['errors'])}")
+
+            # Use the enhanced query for execution
+            query_to_execute = enhanced_query
             # Load config and apply region override
             config = get_oci_config(profile_name=profile)
             if region:
@@ -364,7 +388,7 @@ def execute_query(
             # Build query details
             query_details = {
                 "subSystem": "LOG",
-                "queryString": query,
+                "queryString": query_to_execute,
                 "shouldRunAsync": False,
                 "shouldIncludeTotalCount": True,
                 "compartmentId": compartment_id,
@@ -393,15 +417,17 @@ def execute_query(
             return with_meta(
                 {
                     "query": query,
+                    "enhanced_query": query_to_execute if query_to_execute != query else None,
                     "query_name": query_name,
                     "time_range": time_range,
                     "namespace": namespace,
                     "compartment_id": compartment_id,
                     "results": results,
-                    "count": len(results)
+                    "count": len(results),
+                    "validation": validation_issues if validation_issues['warnings'] or validation_issues['suggestions'] else None
                 },
                 success=True,
-                message=f"Query executed successfully. Found {len(results)} results."
+                message=f"Query executed successfully. Found {len(results)} results." + (f" (Query was enhanced)" if query_to_execute != query else "")
             )
         except Exception as e:
             return with_meta(
@@ -425,83 +451,83 @@ def search_security_events(
 ) -> str:
     with tool_span(tracer, "search_security_events", mcp_server="oci-mcp-loganalytics") as span:
         try:
-        mapper = SecurityQueryMapper()
-        
-        # Normalize event_type and map synonyms; then infer from search_term if needed
-        synonyms = {
-            "login": "failed_logins",
-            "failed_login": "failed_logins",
-            "failed_logins": "failed_logins",
-            "network_anomaly": "suspicious_network",
-            "network": "suspicious_network",
-            "privilege_escalation": "privilege_escalation",
-            "data_exfiltration": "data_exfiltration",
-            "malware": "malware",
-            "all": "all",
-        }
-        if event_type and event_type in synonyms and event_type != "all":
-            event_type = synonyms[event_type]
+            mapper = SecurityQueryMapper()
 
-        if event_type == "all":
-            search_lower = (search_term or "").lower()
-            if any(term in search_lower for term in ["login", "auth", "signin", "failed"]):
-                event_type = "failed_logins"
-            elif any(term in search_lower for term in ["privilege", "escalation", "sudo"]):
-                event_type = "privilege_escalation"
-            elif any(term in search_lower for term in ["network", "connection", "traffic", "blocked", "deny"]):
-                event_type = "suspicious_network"
-            elif any(term in search_lower for term in ["data", "exfiltration", "theft", "download"]):
-                event_type = "data_exfiltration"
-            elif any(term in search_lower for term in ["malware", "virus", "trojan", "ransom"]):
-                event_type = "malware"
-            else:
-                event_type = "failed_logins"  # Default fallback
+            # Normalize event_type and map synonyms; then infer from search_term if needed
+            synonyms = {
+                "login": "failed_logins",
+                "failed_login": "failed_logins",
+                "failed_logins": "failed_logins",
+                "network_anomaly": "suspicious_network",
+                "network": "suspicious_network",
+                "privilege_escalation": "privilege_escalation",
+                "data_exfiltration": "data_exfiltration",
+                "malware": "malware",
+                "all": "all",
+            }
+            if event_type and event_type in synonyms and event_type != "all":
+                event_type = synonyms[event_type]
 
-        # Get security query using parsed time window
-        minutes = _minutes_from_time_range(time_range)
-        query_result = mapper.get_security_query(event_type, minutes)
-        
-        if not query_result.get("success"):
-            return with_meta(
-                {"error": query_result.get("error")},
-                success=False,
-                message=f"Security query mapping failed: {query_result.get('error')}"
+            if event_type == "all":
+                search_lower = (search_term or "").lower()
+                if any(term in search_lower for term in ["login", "auth", "signin", "failed"]):
+                    event_type = "failed_logins"
+                elif any(term in search_lower for term in ["privilege", "escalation", "sudo"]):
+                    event_type = "privilege_escalation"
+                elif any(term in search_lower for term in ["network", "connection", "traffic", "blocked", "deny"]):
+                    event_type = "suspicious_network"
+                elif any(term in search_lower for term in ["data", "exfiltration", "theft", "download"]):
+                    event_type = "data_exfiltration"
+                elif any(term in search_lower for term in ["malware", "virus", "trojan", "ransom"]):
+                    event_type = "malware"
+                else:
+                    event_type = "failed_logins"  # Default fallback
+
+            # Get security query using parsed time window
+            minutes = _minutes_from_time_range(time_range)
+            query_result = mapper.get_security_query(event_type, minutes)
+
+            if not query_result.get("success"):
+                return with_meta(
+                    {"error": query_result.get("error")},
+                    success=False,
+                    message=f"Security query mapping failed: {query_result.get('error')}"
+                )
+
+            # Execute the first query
+            query = query_result["queries"][0]
+            result = execute_query(
+                query=query,
+                compartment_id=compartment_id,
+                query_name=f"security_search_{event_type}",
+                time_range=time_range,
+                max_count=limit,
+                profile=profile,
+                region=region
             )
-        
-        # Execute the first query
-        query = query_result["queries"][0]
-        result = execute_query(
-            query=query,
-            compartment_id=compartment_id,
-            query_name=f"security_search_{event_type}",
-            time_range=time_range,
-            max_count=limit,
-            profile=profile,
-            region=region
-        )
-        
-        # Parse the result
-        result_data = json.loads(result)
-        
-        return with_meta(
-            {
-                "search_term": search_term,
-                "event_type": event_type,
-                "query_used": query,
-                "mitre_techniques": query_result.get("mitre_techniques", []),
-                "severity": query_result.get("severity", "medium"),
-                "results": result_data.get("results", []),
-                "count": result_data.get("count", 0)
-            },
-            success=result_data.get("success", False),
-            message=f"Security event search completed. Found {result_data.get('count', 0)} events."
-        )
-    except Exception as e:
-        return with_meta(
-            {"error": str(e)},
-            success=False,
-            message=f"Security event search failed: {str(e)}"
-        )
+
+            # Parse the result
+            result_data = json.loads(result)
+
+            return with_meta(
+                {
+                    "search_term": search_term,
+                    "event_type": event_type,
+                    "query_used": query,
+                    "mitre_techniques": query_result.get("mitre_techniques", []),
+                    "severity": query_result.get("severity", "medium"),
+                    "results": result_data.get("results", []),
+                    "count": result_data.get("count", 0)
+                },
+                success=result_data.get("success", False),
+                message=f"Security event search completed. Found {result_data.get('count', 0)} events."
+            )
+        except Exception as e:
+            return with_meta(
+                {"error": str(e)},
+                success=False,
+                message=f"Security event search failed: {str(e)}"
+            )
 
 def get_mitre_techniques(
     compartment_id: str,
@@ -826,6 +852,49 @@ def validate_query(
         )
 
 
+def validate_query(query: str) -> dict:
+    """Validate and enhance a Log Analytics query for syntax and field mapping issues
+
+    Args:
+        query: The Log Analytics query to validate and enhance
+
+    Returns:
+        Dict containing validation results, suggestions, and enhanced query
+    """
+    try:
+        from .query_enhancer import enhance_log_analytics_query
+
+        result = enhance_log_analytics_query(query)
+
+        return {
+            "success": True,
+            "validation_result": {
+                "original_query": result['original_query'],
+                "enhanced_query": result['enhanced_query'],
+                "is_valid": result['is_valid'],
+                "errors": result['errors'],
+                "warnings": result['warnings'],
+                "suggestions": result['suggestions'],
+                "timestamp": result['timestamp']
+            }
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Query validation failed: {str(e)}",
+            "validation_result": {
+                "original_query": query,
+                "enhanced_query": query,
+                "is_valid": False,
+                "errors": [f"Validation error: {str(e)}"],
+                "warnings": [],
+                "suggestions": ["Please check query syntax"],
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        }
+
+
 def get_documentation(
     topic: str = "query_syntax",
     search_term: str | None = None,
@@ -977,6 +1046,224 @@ def check_oci_connection(
             success=False,
             message=f"OCI Log Analytics connection failed: {str(e)}"
         )
+
+
+def exadata_cost_drilldown_logan(
+    analysis_type: str = "basic_cost_monitoring",
+    compartment_id: str = "",
+    time_range: str = "30d",
+    query_name: str = "",
+    profile: str | None = None,
+    region: str | None = None,
+) -> dict:
+    """Exadata cost drilldown using Logan queries (alternative to Usage API)
+
+    Args:
+        analysis_type: Type of analysis (basic_cost_monitoring, optimization, anomaly_detection, regional_analysis)
+        compartment_id: OCI compartment ID
+        time_range: Time range for analysis
+        query_name: Specific Logan query to run (optional)
+        profile: OCI profile name
+        region: OCI region
+
+    Returns:
+        Dict containing Logan query results and analysis
+    """
+    try:
+        from .exadata_logan_queries import get_query_recommendations, ExadataLoganQueries
+
+        with tool_span(tracer, "exadata_cost_drilldown_logan", mcp_server="oci-mcp-loganalytics") as span:
+            span.set_attribute("analysis_type", analysis_type)
+            span.set_attribute("compartment_id", compartment_id)
+            span.set_attribute("time_range", time_range)
+
+            catalog = ExadataLoganQueries()
+
+            if query_name:
+                # Run specific query
+                logan_query = catalog.get_query(query_name)
+                if not logan_query:
+                    return {
+                        "success": False,
+                        "error": f"Query '{query_name}' not found",
+                        "available_queries": list(catalog.get_all_queries().keys())
+                    }
+
+                query_result = execute_query(
+                    query=logan_query.query,
+                    time_range=time_range,
+                    compartment_id=compartment_id,
+                    profile=profile,
+                    region=region
+                )
+
+                if query_result.get("success"):
+                    return {
+                        "success": True,
+                        "analysis_type": "specific_logan_query",
+                        "query_name": logan_query.name,
+                        "query_description": logan_query.description,
+                        "use_case": logan_query.use_case,
+                        "results": query_result.get("results", []),
+                        "result_count": len(query_result.get("results", [])),
+                        "query_used": logan_query.query
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Logan query execution failed: {query_result.get('error', 'Unknown error')}",
+                        "query_name": logan_query.name
+                    }
+
+            else:
+                # Run recommended queries for analysis type
+                recommendations = get_query_recommendations(analysis_type)
+                if not recommendations:
+                    return {
+                        "success": False,
+                        "error": f"No queries found for analysis type: {analysis_type}",
+                        "available_types": ["basic_cost_monitoring", "optimization", "anomaly_detection", "regional_analysis"]
+                    }
+
+                results = {}
+                total_records = 0
+
+                for rec in recommendations:
+                    query_result = execute_query(
+                        query=rec["query"],
+                        time_range=time_range,
+                        compartment_id=compartment_id,
+                        profile=profile,
+                        region=region
+                    )
+
+                    if query_result.get("success"):
+                        query_results = query_result.get("results", [])
+                        results[rec["name"]] = {
+                            "description": rec["description"],
+                            "use_case": rec["use_case"],
+                            "results": query_results,
+                            "record_count": len(query_results),
+                            "query": rec["query"]
+                        }
+                        total_records += len(query_results)
+                    else:
+                        results[rec["name"]] = {
+                            "description": rec["description"],
+                            "error": query_result.get("error", "Query failed"),
+                            "record_count": 0
+                        }
+
+                span.set_attribute("queries_executed", len(recommendations))
+                span.set_attribute("total_records", total_records)
+
+                return {
+                    "success": True,
+                    "analysis_type": analysis_type,
+                    "logan_queries_executed": len(recommendations),
+                    "total_records": total_records,
+                    "time_range": time_range,
+                    "compartment_id": compartment_id,
+                    "query_results": results,
+                    "note": "Using Logan (Log Analytics) queries instead of Usage API for Exadata cost analysis"
+                }
+
+    except Exception as e:
+        error_msg = f"Logan Exadata cost drilldown failed: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            "success": False,
+            "error": error_msg,
+            "analysis_type": analysis_type,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+def analyze_exadata_costs(
+    query: str,
+    time_range: str = "30d",
+    compartment_id: str = "",
+    max_count: int = 2000,
+    profile: str | None = None,
+    region: str | None = None,
+) -> dict:
+    """Comprehensive Exadata cost analysis with optimization recommendations
+
+    Args:
+        query: Base Exadata cost query to analyze
+        time_range: Time range for analysis (default: 30d)
+        compartment_id: OCI compartment ID
+        max_count: Maximum number of results to analyze
+        profile: OCI profile name
+        region: OCI region
+
+    Returns:
+        Dict containing comprehensive analysis report with optimizations, insights, and visualizations
+    """
+    try:
+        from .exadata_optimizer import analyze_exadata_costs as run_exadata_analysis
+        import time
+
+        with tool_span(tracer, "analyze_exadata_costs", mcp_server="oci-mcp-loganalytics") as span:
+            span.set_attribute("query", query)
+            span.set_attribute("time_range", time_range)
+            span.set_attribute("compartment_id", compartment_id)
+
+            # Execute the original query to get baseline results
+            start_time = time.time()
+            base_results = execute_query(
+                query=query,
+                time_range=time_range,
+                compartment_id=compartment_id,
+                max_count=max_count,
+                profile=profile,
+                region=region
+            )
+            query_time = time.time() - start_time
+
+            if not base_results.get("success", False):
+                return {
+                    "success": False,
+                    "error": f"Base query execution failed: {base_results.get('error', 'Unknown error')}",
+                    "analysis_type": "exadata_cost_optimization"
+                }
+
+            # Extract results for analysis
+            query_results = base_results.get("results", [])
+
+            # Generate comprehensive analysis
+            analysis_report = run_exadata_analysis(
+                query=query,
+                results=query_results,
+                query_time=query_time,
+                time_range=time_range
+            )
+
+            # Add execution metadata
+            analysis_report.update({
+                "success": True,
+                "base_query_results": {
+                    "record_count": len(query_results),
+                    "execution_time": round(query_time, 2),
+                    "time_range": time_range,
+                    "compartment_id": compartment_id
+                }
+            })
+
+            span.set_attribute("analysis_generated", True)
+            span.set_attribute("records_analyzed", len(query_results))
+
+            return analysis_report
+
+    except Exception as e:
+        error_msg = f"Exadata cost analysis failed: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            "success": False,
+            "error": error_msg,
+            "analysis_type": "exadata_cost_optimization",
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 
 def register_tools() -> list[dict[str, Any]]:
@@ -1151,5 +1438,95 @@ def register_tools() -> list[dict[str, Any]]:
                 "required": ["namespace_name", "query_string", "time_start", "time_end"],
             },
             "handler": run_query_legacy,
+        },
+        {
+            "name": "oci_loganalytics_validate_query",
+            "description": "Validate and enhance a Log Analytics query for syntax and field mapping issues",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The Log Analytics query to validate and enhance"
+                    }
+                },
+                "required": ["query"],
+            },
+            "handler": validate_query,
+        },
+        {
+            "name": "oci_loganalytics_exadata_cost_drilldown",
+            "description": "Exadata cost drilldown using Logan queries (alternative to Usage API service_cost_drilldown)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "analysis_type": {
+                        "type": "string",
+                        "enum": ["basic_cost_monitoring", "optimization", "anomaly_detection", "regional_analysis", "cost_drilldown"],
+                        "description": "Type of analysis to perform",
+                        "default": "basic_cost_monitoring"
+                    },
+                    "compartment_id": {
+                        "type": "string",
+                        "description": "OCI compartment ID"
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "Time range for analysis (1h, 6h, 12h, 24h, 1d, 7d, 30d, 1w, 1m)",
+                        "default": "30d"
+                    },
+                    "query_name": {
+                        "type": "string",
+                        "description": "Specific Logan query to run (optional): basic_exadata_costs, high_cost_databases, daily_cost_trends, etc."
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "OCI profile name"
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "OCI region"
+                    }
+                },
+                "required": ["compartment_id"],
+            },
+            "handler": exadata_cost_drilldown_logan,
+        },
+        {
+            "name": "oci_loganalytics_analyze_exadata_costs",
+            "description": "Comprehensive Exadata cost analysis with optimization recommendations, performance insights, and visualization data",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Base Exadata cost query to analyze (e.g., your working query)"
+                    },
+                    "time_range": {
+                        "type": "string",
+                        "description": "Time range for analysis (1h, 6h, 12h, 24h, 1d, 7d, 30d, 1w, 1m)",
+                        "default": "30d"
+                    },
+                    "compartment_id": {
+                        "type": "string",
+                        "description": "OCI compartment ID"
+                    },
+                    "max_count": {
+                        "type": "integer",
+                        "description": "Maximum number of results to analyze",
+                        "default": 2000
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "OCI profile name"
+                    },
+                    "region": {
+                        "type": "string",
+                        "description": "OCI region"
+                    }
+                },
+                "required": ["query", "compartment_id"],
+            },
+            "handler": analyze_exadata_costs,
         },
     ]

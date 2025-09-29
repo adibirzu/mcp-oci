@@ -62,11 +62,8 @@ services:
       - ./tempo/tempo.yaml:/etc/tempo.yaml
       - tempo-data:/tmp/tempo
     command: ["-config.file=/etc/tempo.yaml"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:3200/ready || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    # Health check disabled - Tempo doesn't have curl/wget in container
+    # Manual verification: curl http://localhost:3200/api/echo
     restart: unless-stopped
     networks:
       - default
@@ -76,14 +73,12 @@ services:
     container_name: pyroscope
     ports:
       - "4040:4040"  # Pyroscope UI
+      - "7946:7946"  # Memberlist
     volumes:
       - ./pyroscope:/var/lib/pyroscope
-    command: ["server", "--server.http-listen-address=0.0.0.0:4040"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:4040/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - ./pyroscope/pyroscope.yaml:/etc/pyroscope.yaml
+    command: ["--config.file=/etc/pyroscope.yaml"]
+    # Health check disabled - manual verification: curl http://localhost:4040
     restart: unless-stopped
     networks:
       - default
@@ -103,10 +98,8 @@ services:
       timeout: 10s
       retries: 5
     depends_on:
-      tempo:
-        condition: service_healthy
-      prometheus:
-        condition: service_healthy
+      - tempo
+      - prometheus
     restart: unless-stopped
     networks:
       - default
@@ -120,6 +113,10 @@ services:
       - "8000:8000"
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040
+      - ENABLE_PYROSCOPE=true
+      - OTEL_SERVICE_NAME=mcp-ux
+      - PYROSCOPE_APP_NAME=mcp-ux
     depends_on:
       - otel-collector
     restart: unless-stopped
