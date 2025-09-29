@@ -8,7 +8,7 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 
 ### Key Features
 
-- 🔧 **Multi-Domain Coverage**: 10+ specialized MCP servers covering compute, networking, security, cost analysis, and more
+- 🔧 **Multi-Domain Coverage**: 11+ specialized MCP servers covering compute, networking, security, cost analysis, and more
 - 📊 **Advanced Analytics**: AI-powered cost optimization, trend analysis, and anomaly detection
 - 🔍 **Comprehensive Observability**: Full-stack monitoring with Grafana, Prometheus, Tempo, and Pyroscope
 - 🛡️ **Security-First**: Built-in security scanning, vulnerability assessment, and compliance checking
@@ -85,29 +85,40 @@ cp .env.sample .env
 #### Option C: Resource Principal (for OCI Compute)
 When running on OCI compute instances, the servers automatically use Resource Principal authentication.
 
-### 3. Quick Test
+### 3. Quick Start
 
 ```bash
-# Test a single server
-python -m mcp_servers.compute.server
+# Start everything with one command
+./run-all-local.sh
 
-# Test with Claude Code or your MCP client
+# Or start components individually:
+# 1. Start observability stack
+cd ops && ./restart_observability_stack.sh
+
+# 2. Start all MCP servers
+cd .. && scripts/mcp-launchers/start-mcp-server.sh all --daemon
+
+# 3. Test that everything is working
+python test_observability_e2e.py
+
+# Access the UX dashboard at http://localhost:8010
 ```
 
 ## 📦 Available MCP Servers
 
-| Server | Description | Port | Key Features |
-|--------|-------------|------|--------------|
-| **compute** | VM and container management | 8001 | Instance lifecycle, scaling, monitoring |
-| **network** | Networking and connectivity | 8006 | VCNs, subnets, load balancers, security |
-| **security** | Security and compliance | 8004 | Vulnerability scanning, policy analysis |
-| **cost** | Financial operations | 8005 | Cost analysis, forecasting, optimization |
-| **db** | Database operations | 8002 | Autonomous DB, MySQL, PostgreSQL |
-| **blockstorage** | Storage management | 8007 | Block volumes, backups, lifecycle |
-| **observability** | Monitoring and metrics | 8003 | APM, logging, alerting integration |
-| **inventory** | Asset discovery | 8009 | Resource discovery, tagging, compliance |
-| **loadbalancer** | Load balancing | 8008 | LB configuration, SSL, health checks |
-| **agents** | AI agents integration | 8011 | OCI GenAI agents, chat proxies |
+| Server | Description | Port | Status | Key Features |
+|--------|-------------|------|--------|--------------|
+| **compute** | VM and container management | 8001 | ✅ Active | Instance lifecycle, scaling, monitoring |
+| **network** | Networking and connectivity | 8006 | ✅ Active | VCNs, subnets, load balancers, security |
+| **security** | Security and compliance | 8004 | ✅ Active | Vulnerability scanning, policy analysis |
+| **cost** | Financial operations | 8005 | ✅ Active | Cost analysis, forecasting, optimization |
+| **db** | Database operations | 8002 | ✅ Active | Autonomous DB, MySQL, PostgreSQL |
+| **blockstorage** | Storage management | 8007 | ✅ Active | Block volumes, backups, lifecycle |
+| **observability** | Monitoring and metrics | 8003 | ✅ Active | APM, logging, alerting integration |
+| **inventory** | Asset discovery | 8009 | ✅ Active | Resource discovery, tagging, compliance |
+| **loadbalancer** | Load balancing | 8008 | ✅ Active | LB configuration, SSL, health checks |
+| **loganalytics** | Log analytics & search | 8003 | ✅ Active | Log analysis, search, anomaly detection |
+| **agents** | AI agents integration | 8011 | ✅ Active | OCI GenAI agents, chat proxies |
 
 ## 🔧 Individual Server Usage
 
@@ -171,28 +182,33 @@ MCP-OCI includes a complete observability stack with metrics, tracing, and profi
 ### Setup Observability
 
 ```bash
+# Quick start - all components
+./run-all-local.sh
+
+# Or start components individually:
 cd ops
 
-# Start all observability services
-./start-observability.sh
+# Start observability stack (Grafana, Prometheus, Tempo, Pyroscope)
+./restart_observability_stack.sh
 
 # Start all MCP servers with metrics
-../scripts/mcp-launchers/start-mcp-server.sh start all
+../scripts/mcp-launchers/start-mcp-server.sh all --daemon
 
 # Start UX application
 ./run-ux-local.sh
 
 # Test the complete stack
-./test-observability.sh
+python ../test_observability_e2e.py
 ```
 
 ### Access Dashboards
 
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **Prometheus**: http://localhost:9090
-- **Tempo**: http://localhost:3200
-- **Pyroscope**: http://localhost:4040
-- **UX Overview**: http://localhost:8010
+- **Grafana**: http://localhost:3000 (admin/admin) - Dashboards and visualization
+- **Prometheus**: http://localhost:9090 - Metrics collection and querying
+- **Tempo**: http://localhost:3200 - Distributed tracing
+- **Pyroscope**: http://localhost:4040 - Continuous profiling
+- **Jaeger**: http://localhost:16686 - Trace exploration and analysis
+- **UX Overview**: http://localhost:8010 - MCP servers status and control panel
 
 ### OCI Observability Integration
 
@@ -317,45 +333,62 @@ Allow group mcp-users to read budgets in tenancy
 
 ## 🧪 Testing
 
-### Unit Tests
+### End-to-End Observability Test
 ```bash
-# Run all tests
-python -m pytest tests/
+# Test complete observability pipeline
+python test_observability_e2e.py
 
-# Run specific server tests
-python -m pytest tests/unit/test_compute.py
+# Generate test metrics and traces
+cd ops && python generate_test_data.py --mode all
+```
 
-# With coverage
-python -m pytest --cov=mcp_servers tests/
+### Individual Server Tests
+```bash
+# Test specific server functionality
+python -m mcp_servers.compute.server  # Start in test mode
+
+# Check server health and metrics
+curl http://localhost:8001/metrics    # Compute server metrics
+curl http://localhost:8004/metrics    # Security server metrics
 ```
 
 ### Integration Tests
 ```bash
-# Requires OCI credentials
-python -m pytest tests/integration/
-
-# Specific integration test
-python -m pytest tests/integration/test_compute.py -v
+# Test with OCI credentials (requires setup)
+scripts/test_integration_frankfurt.sh
 ```
 
 ## 🚀 Deployment
 
 ### Local Development
 ```bash
-# Start all servers
-./scripts/start-all-servers.sh
+# Start all components (observability + MCP servers + UX)
+./run-all-local.sh
 
-# Development mode with auto-reload
-./scripts/dev-mode.sh
+# Start individual MCP server for development
+scripts/mcp-launchers/start-mcp-server.sh compute --daemon
+
+# Stop all MCP servers
+scripts/mcp-launchers/start-mcp-server.sh stop all
+
+# Check server status
+scripts/mcp-launchers/start-mcp-server.sh status compute
 ```
 
 ### Container Deployment
 ```bash
-# Build containers
-docker-compose build
+# Start observability stack with containers
+cd ops
+docker-compose up -d
 
-# Start with observability
-docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# Check container status
+docker-compose ps
+
+# View logs
+docker-compose logs -f grafana
+
+# Stop containers
+docker-compose down
 ```
 
 ## 📚 Advanced Usage

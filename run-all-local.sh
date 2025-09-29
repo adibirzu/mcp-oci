@@ -242,7 +242,7 @@ launch_container_stack() {
 
 launch_mcp_and_ux() {
   log "Starting all MCP servers..."
-  scripts/mcp-launchers/start-mcp-server.sh all || warn "MCP server launcher reported issues."
+  scripts/mcp-launchers/start-mcp-server.sh all --daemon || warn "MCP server launcher reported issues."
 
   log "Starting UX app..."
   # Kill previous uvicorn if running on this port
@@ -251,7 +251,7 @@ launch_mcp_and_ux() {
     pkill -f "uvicorn ux.app:app" || true
     sleep 1
   fi
-  uvicorn ux.app:app --reload --port 8010 &
+  cd ops && ./run-ux-local.sh &
 }
 
 main() {
@@ -270,13 +270,19 @@ main() {
   echo
   echo "All components launched!"
   echo "Access:"
-  echo "- Grafana: http://localhost:3000"
+  echo "- Grafana: http://localhost:3000 (admin/admin)"
+  echo "- Prometheus: http://localhost:9090"
+  echo "- Tempo: http://localhost:3200"
+  echo "- Pyroscope: http://localhost:4040"
   echo "- UX App: http://localhost:8010"
-  if [[ "$NO_DOCKER" == "true" ]]; then
-    echo "To stop: pkill -f server.py && pkill -f uvicorn && (cd ops && ./run-local.sh stop)"
-  else
-    echo "To stop containers: (cd ops && $COMPOSE_CMD down) && pkill -f server.py && pkill -f uvicorn"
-  fi
+  echo ""
+  echo "MCP Servers running on ports: 8001-8011"
+  echo ""
+  echo "To stop all components:"
+  echo "  ./stop-all-local.sh"
+  echo ""
+  echo "To stop only MCP servers and UX (keep observability):"
+  echo "  ./stop-all-local.sh --keep-observability"
 }
 
 main "$@"

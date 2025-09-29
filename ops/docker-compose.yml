@@ -31,8 +31,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    ports:
-      - "9090:9090"
+    network_mode: host
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
@@ -43,14 +42,13 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
+      - '--web.listen-address=0.0.0.0:9090'
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
     restart: unless-stopped
-    networks:
-      - default
 
   tempo:
     image: grafana/tempo:latest
@@ -80,10 +78,15 @@ services:
       - "16686:16686"    # query frontend
       - "14250:14250"    # grpc
       - "14268:14268"    # jaeger thrift
+      - "14269:14269"    # admin/metrics port
+      - "14317:4317"     # OTLP gRPC receiver
+      - "14318:4318"     # OTLP HTTP receiver
       - "9411:9411"      # zipkin
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - METRICS_BACKEND=prometheus
+      - PROMETHEUS_SERVER_URL=http://localhost:9090
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:14269/ || exit 1"]
       interval: 30s
