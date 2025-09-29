@@ -1,5 +1,6 @@
 server:
   http_listen_port: 3200
+  log_level: info
 
 distributor:
   receivers:
@@ -44,8 +45,8 @@ metrics_generator:
       store: memberlist
 
 memberlist:
-  join_members:
-    - tempo:7946
+  bind_port: 7946
+  # Single-node deployment - no join_members needed
 
 querier:
   frontend_worker:
