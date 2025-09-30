@@ -74,7 +74,7 @@
   },
   {
     "name": "oci-mcp-cost",
-    "command": ["python", "mcp_servers/cost/server.py"],
+    "command": ["python", "-m", "mcp_servers.cost.server"],
     "args": [],
     "cwd": "${PWD}",
     "env": {

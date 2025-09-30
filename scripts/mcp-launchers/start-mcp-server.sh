@@ -124,7 +124,8 @@ launch_server() {
     # Enable Pyroscope profiling (non-fatal if backend unavailable)
     export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-true}"
     export PYROSCOPE_APP_NAME="mcp-oci-$server"
-    export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://localhost:4040}"
+    # Use IPv4 loopback to avoid macOS IPv6 localhost resolution issues with Docker port publishing
+    export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://127.0.0.1:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
 
     local entry="mcp_servers/$server/server.py"

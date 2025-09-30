@@ -168,7 +168,8 @@ def get_usage_breakdown(
                 time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
                 granularity="DAILY",
                 query_type="COST",
-                group_by=["service", "compartmentName"]
+                group_by=["service", "compartmentName"],
+                compartment_depth=10  # required when grouping by compartment
             )
 
             if service:
@@ -285,8 +286,17 @@ def cost_by_compartment_daily(tenancy_ocid: str, time_usage_started: str, time_u
                              scope_compartment_ocid: Optional[str] = None, include_children: bool = False) -> Dict[str, Any]:
     """Daily cost analysis by compartment with advanced scoping"""
     with tool_span(tracer, "cost_by_compartment_daily", mcp_server="oci-mcp-cost-enhanced") as span:
-        base_query = UsageQuery(granularity=granularity, time_start=time_usage_started, time_end=time_usage_ended,
-                               group_by=["compartmentName", "service"], forecast=include_forecast)
+        # Disable forecast at the query level to avoid regional Usage API validation errors
+        # (e.g., forecast.timeForecastEnded must not be null). The request wrapper also includes
+        # a forecast fallback, but this hard-disable ensures robust behavior.
+        base_query = UsageQuery(
+            granularity=granularity,
+            time_start=time_usage_started,
+            time_end=time_usage_ended,
+            group_by=["compartmentName", "service"],
+            forecast=False,
+            compartment_depth=max(int(compartment_depth or 10), 1)  # enforce when grouping by compartment
+        )
 
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
         raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base_query) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base_query)
@@ -583,9 +593,17 @@ app.add_tool(Tool.from_function(get_cost_summary, name="get_cost_summary", descr
 app.add_tool(Tool.from_function(get_usage_breakdown, name="get_usage_breakdown", description="Get detailed usage breakdown by service"))
 app.add_tool(Tool.from_function(detect_cost_anomaly, name="detect_cost_anomaly", description="Detect cost anomalies in time series data"))
 
-def main():
-    """Main entry point for running the enhanced MCP server"""
-    app.run()
-
 if __name__ == "__main__":
-    main()
+    # Start HTTP server for Prometheus metrics (non-blocking) - before app.run()
+    try:
+        from prometheus_client import start_http_server as _start_http_server
+        port = int(os.getenv("METRICS_PORT", "8005"))
+        print(f"Starting Prometheus metrics server on port {port}")
+        _start_http_server(port)
+        print(f"Prometheus metrics server started successfully on port {port}")
+    except ImportError as e:
+        print(f"prometheus_client not available: {e}")
+    except Exception as e:
+        print(f"Failed to start metrics server: {e}")
+
+    app.run()

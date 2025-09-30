@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import os, time, json, hashlib
 import oci
 from ..oci_client_adapter import OCIClients
+from datetime import datetime, timezone
+from oci.exceptions import ServiceError
 
 _TTL = int(os.getenv("FINOPSAI_CACHE_TTL_SECONDS", "300"))
 _cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
@@ -11,6 +13,49 @@ _cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 def _cache_key(tenancy_ocid: str, details: Dict[str, Any]) -> str:
     blob = json.dumps({"tenancy": tenancy_ocid, "details": details}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()
+
+def _parse_iso8601(ts: Any) -> Any:
+    """
+    Convert ISO8601 string with optional trailing 'Z' to timezone-aware datetime.
+    If ts is already a datetime, return it unchanged.
+    """
+    if isinstance(ts, datetime):
+        return ts
+    if isinstance(ts, str):
+        s = ts.strip()
+        # Normalize 'Z' to '+00:00' for fromisoformat
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            # Fallback: try naive parse and force UTC
+            try:
+                return datetime.fromisoformat(s.replace(" ", "T")).replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+    return ts  # Let SDK try if parsing fails
+
+def _to_midnight(dt: datetime, roll_to_next_if_not_midnight: bool = False) -> datetime:
+    """
+    Ensure datetime is exactly at 00:00:00.000000 UTC.
+    If roll_to_next_if_not_midnight is True and the original datetime had any time component,
+    return midnight of the next day (exclusive end bound expected by Usage API).
+    """
+    if not isinstance(dt, datetime):
+        return dt
+    # Force timezone to UTC if missing
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        # Normalize to UTC to avoid offset precision errors
+        dt = dt.astimezone(timezone.utc)
+    had_time = any([dt.hour, dt.minute, dt.second, dt.microsecond])
+    base = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    if roll_to_next_if_not_midnight and had_time:
+        from datetime import timedelta
+        return base + timedelta(days=1)
+    return base
 
 @dataclass
 class UsageQuery:
@@ -24,28 +69,49 @@ class UsageQuery:
     compartment_depth: Optional[int] = None
 
 def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQuery) -> Dict[str, Any]:
-    # Create forecast object if forecast is requested
+    # Normalize time inputs to datetime objects (some regions strictly require datetimes)
+    ts_start = _parse_iso8601(q.time_start)
+    ts_end = _parse_iso8601(q.time_end)
+    # Enforce Usage API precision: hours, minutes, seconds, fractions must be 0
+    # Start: midnight of given date
+    # End: midnight; if a time component was provided, roll to next day's midnight to create an exclusive bound
+    ts_start = _to_midnight(ts_start, roll_to_next_if_not_midnight=False)
+    ts_end = _to_midnight(ts_end, roll_to_next_if_not_midnight=True)
+
+    # Create forecast object if forecast is requested (some regions require explicit time bounds)
     forecast_obj = None
     if q.forecast:
         forecast_obj = oci.usage_api.models.Forecast(
-            forecast_type="BASIC"
-            # time_forecast_started and time_forecast_ended are optional and will be calculated by the service
+            forecast_type="BASIC",
+            time_forecast_started=ts_start,
+            time_forecast_ended=ts_end
         )
 
-    # Handle group_by vs group_by_tag conflict: API requires group_by to be null when group_by_tag is not empty
-    group_by_param = None if (q.group_by_tag and len(q.group_by_tag) > 0) else (q.group_by or [])
-    group_by_tag_param = q.group_by_tag or []
+    # Handle group_by vs group_by_tag conflict: group_by MUST be null when group_by_tag is present
+    # Also avoid sending empty arrays; pass None instead to satisfy strict validators
+    group_by_tag_param = q.group_by_tag if (q.group_by_tag and len(q.group_by_tag) > 0) else None
+    group_by_param = None if group_by_tag_param else (q.group_by if (q.group_by and len(q.group_by) > 0) else None)
+
+    # Ensure compartmentDepth is present when grouping by compartment
+    cd = q.compartment_depth
+    if cd is None and group_by_param:
+        try:
+            if any(str(g).lower().startswith("compartment") for g in group_by_param):
+                cd = 10  # safe default depth when grouping by compartment
+        except Exception:
+            pass
 
     details = oci.usage_api.models.RequestSummarizedUsagesDetails(
         tenant_id=tenancy_ocid,
-        granularity=q.granularity,
-        time_usage_started=q.time_start,
-        time_usage_ended=q.time_end,
+        granularity=(q.granularity or "DAILY").upper(),
+        time_usage_started=ts_start,
+        time_usage_ended=ts_end,
+        query_type="COST",
         group_by=group_by_param,
         group_by_tag=group_by_tag_param,
         filter=q.filter,
         forecast=forecast_obj,
-        compartment_depth=q.compartment_depth,
+        compartment_depth=cd,
     )
     # Create a hashable representation for caching
     details_dict = {
@@ -70,7 +136,51 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
         else:
             _cache.pop(key, None)
 
-    resp = clients.usage_api.request_summarized_usages(details)
+    try:
+        resp = clients.usage_api.request_summarized_usages(details)
+    except ServiceError as e:
+        # Robust fallback matrix:
+        # 1) If region complains about forecast fields (even when not sent), retry with explicit forecast window.
+        # 2) If that still fails, retry without any forecast object.
+        msg = str(getattr(e, "message", e)).lower()
+        forecast_related = ("forecast" in msg) or ("timeforecastended" in msg) or ("timeforecaststarted" in msg)
+        if e.status == 400 and forecast_related:
+            # Try explicit forecast window
+            try:
+                details_with_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                    tenant_id=tenancy_ocid,
+                    granularity=(q.granularity or "DAILY").upper(),
+                    time_usage_started=ts_start,
+                    time_usage_ended=ts_end,
+                    query_type="COST",
+                    group_by=group_by_param,
+                    group_by_tag=group_by_tag_param,
+                    filter=q.filter,
+                    forecast=oci.usage_api.models.Forecast(
+                        forecast_type="BASIC",
+                        time_forecast_started=ts_start,
+                        time_forecast_ended=ts_end
+                    ),
+                    compartment_depth=q.compartment_depth,
+                )
+                resp = clients.usage_api.request_summarized_usages(details_with_fc)
+            except ServiceError as e2:
+                # Final fallback: no forecast at all
+                details_no_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                    tenant_id=tenancy_ocid,
+                    granularity=(q.granularity or "DAILY").upper(),
+                    time_usage_started=ts_start,
+                    time_usage_ended=ts_end,
+                    query_type="COST",
+                    group_by=group_by_param,
+                    group_by_tag=group_by_tag_param,
+                    filter=q.filter,
+                    forecast=None,
+                    compartment_depth=q.compartment_depth,
+                )
+                resp = clients.usage_api.request_summarized_usages(details_no_fc)
+        else:
+            raise
 
     # Convert response data to dict format
     if hasattr(resp.data, 'to_dict'):
