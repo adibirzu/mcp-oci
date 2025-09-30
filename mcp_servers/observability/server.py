@@ -826,33 +826,32 @@ def quick_checks(
 def create_traced_operation(operation_name: str, trace_token: Optional[str] = None, attributes: Optional[Dict] = None) -> Dict:
     """Create a traced MCP operation with OpenTelemetry enhancement"""
     try:
-        with mcp_otel_enhancer.traced_operation(operation_name, trace_token, attributes):
-            span = mcp_otel_enhancer.create_trace_span(
-                name=operation_name,
-                trace_token=trace_token,
-                attributes=attributes or {}
-            )
+        # traced_operation() returns a decorator, not a context manager.
+        # For programmatic usage, create a span directly and send a notification.
+        span = mcp_otel_enhancer.create_trace_span(
+            name=operation_name,
+            trace_token=trace_token,
+            attributes=attributes or {}
+        )
 
-            # Simulate operation work
-            span.set_attribute("mcp.operation.type", "demo")
-            span.set_attribute("mcp.server.version", "1.0.0")
+        # Simulate operation work
+        span.set_attribute("mcp.operation.type", "demo")
+        span.set_attribute("mcp.server.version", "1.0.0")
+        if trace_token:
+            span.set_attribute("mcp.trace.token", trace_token)
 
-            if trace_token:
-                span.set_attribute("mcp.trace.token", trace_token)
+        # Finish span and emit notification
+        span.end()
+        mcp_otel_enhancer.send_trace_notification(span, trace_token)
 
-            span.end()
-
-            # Generate notification
-            mcp_otel_enhancer.send_trace_notification(span, trace_token)
-
-            return {
-                "success": True,
-                "operation_name": operation_name,
-                "trace_token": trace_token,
-                "span_id": f"{span.get_span_context().span_id:016x}",
-                "trace_id": f"{span.get_span_context().trace_id:032x}",
-                "message": "Traced operation completed with OpenTelemetry MCP enhancement"
-            }
+        return {
+            "success": True,
+            "operation_name": operation_name,
+            "trace_token": trace_token,
+            "span_id": f"{span.get_span_context().span_id:016x}",
+            "trace_id": f"{span.get_span_context().trace_id:032x}",
+            "message": "Traced operation completed with OpenTelemetry MCP enhancement"
+        }
 
     except Exception as e:
         return {

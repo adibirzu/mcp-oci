@@ -7,7 +7,7 @@ try:
     import pyroscope
     pyroscope.configure(
         application_name="test-mcp-profiling",
-        server_address="http://localhost:4040",
+        server_address="http://127.0.0.1:4040",
         sample_rate=100,  # 100 Hz
         detect_subprocesses=False,
         enable_logging=True,
