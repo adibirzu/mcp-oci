@@ -476,6 +476,8 @@ def delete_data_source(data_source_id: str, profile: Optional[str] = None, regio
         except Exception as e:
             return {"error": str(e)}
 tools = [
+    Tool.from_function(fn=lambda: {"status": "ok", "server": "oci-mcp-agents", "pid": os.getpid()}, name="healthcheck", description="Liveness check for agents server"),
+    Tool.from_function(fn=lambda: (lambda _cfg=get_oci_config(): {"server": "oci-mcp-agents", "ok": True, "region": _cfg.get("region"), "profile": os.getenv("OCI_PROFILE") or "DEFAULT", "tools": [t.name for t in tools]})(), name="doctor", description="Return server health, config summary, and masking status"),
     Tool.from_function(fn=list_agents,        name="list_agents",        description="List Generative AI Agents (OCI/proxy)"),
     Tool.from_function(fn=create_agent,       name="create_agent",       description="Create a Generative AI Agent (OCI/proxy)"),
     Tool.from_function(fn=get_agent,          name="get_agent",          description="Get agent details by id"),
@@ -517,6 +519,28 @@ if __name__ == "__main__":
                 detect_subprocesses=True,
                 enable_logging=True,
             )
+    except Exception:
+        pass
+
+    # Apply privacy masking to all tools (wrapper)
+    try:
+        from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp
+        from fastmcp.tools import Tool as _Tool
+        _wrapped = []
+        for _t in tools:
+            _f = getattr(_t, "func", None) or getattr(_t, "handler", None)
+            if not _f:
+                _wrapped.append(_t)
+                continue
+            def _mk(f):
+                def _w(*a, **k):
+                    out = f(*a, **k)
+                    return _rp(out) if _pe() else out
+                _w.__name__ = getattr(f, "__name__", "tool")
+                _w.__doc__ = getattr(f, "__doc__", "")
+                return _w
+            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+        tools = _wrapped
     except Exception:
         pass
 

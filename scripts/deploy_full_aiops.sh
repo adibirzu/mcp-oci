@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Full AIOps deploy: venv, install, provision AJD (optional), create tables, populate data,
-# start Observability MCP server and Web3 AIOps agent.
+# ARCHIVED: This script is deprecated and no longer maintained.
+# Please use the unified Linux installation and launcher:
+#   1) python -m venv .venv && source .venv/bin/activate && pip install -e .[oci]
+#   2) scripts/mcp-launchers/start-mcp-server.sh all --daemon
+#   3) python scripts/smoke_check.py
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-cd "$ROOT_DIR"
-export PYTHONPATH="$ROOT_DIR/src:$ROOT_DIR"
+echo "[ARCHIVED] deploy_full_aiops.sh is deprecated. See README for Linux installation and launcher." >&2
+exit 1
 
 # --- Bootstrap .env and OCI CLI/config if missing ---
 if [ ! -f .env ]; then

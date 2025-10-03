@@ -9,6 +9,7 @@ from typing import Dict, Optional, List
 
 # ----- Observability bootstrap -----
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
+from mcp_oci_common.privacy import privacy_enabled, redact_payload
 from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer, MCPObservabilityEnhancer
 
 # ----- OCI SDK -----
@@ -228,12 +229,13 @@ def list_la_namespaces() -> Dict:
     try:
         cfg = get_oci_config()
         namespaces = _list_la_namespaces(cfg)
-        return {
+        result = {
             "tenancy": _la_tenancy,
             "namespaces": namespaces,
             "selected": _la_namespace,
             "selected_source": _la_namespace_source,
         }
+        return redact_payload(result) if privacy_enabled() else result
     except Exception as e:
         return {"error": str(e), "tenancy": _la_tenancy, "selected": _la_namespace}
 
@@ -248,10 +250,12 @@ def set_la_namespace(namespace_name: str) -> Dict:
             _la_namespaces = _list_la_namespaces(cfg)
         names = {n["name"] for n in _la_namespaces}
         if namespace_name not in names:
-            return {"error": f"Namespace '{namespace_name}' not found. Available: {sorted(list(names))}"}
+            out = {"error": f"Namespace '{namespace_name}' not found. Available: {sorted(list(names))}"}
+            return redact_payload(out) if privacy_enabled() else out
         _la_namespace = namespace_name
         _la_namespace_source = "manual"
-        return {"selected": _la_namespace, "source": _la_namespace_source}
+        out = {"selected": _la_namespace, "source": _la_namespace_source}
+        return redact_payload(out) if privacy_enabled() else out
     except Exception as e:
         return {"error": str(e)}
 
@@ -260,8 +264,10 @@ def get_la_namespace() -> Dict:
     Return the currently selected namespace (or error if not set).
     """
     if _la_namespace:
-        return {"selected": _la_namespace, "source": _la_namespace_source, "tenancy": _la_tenancy}
-    return {"error": "No namespace selected. Use set_la_namespace or define LA_NAMESPACE env, or ensure only one namespace exists."}
+        out = {"selected": _la_namespace, "source": _la_namespace_source, "tenancy": _la_tenancy}
+        return redact_payload(out) if privacy_enabled() else out
+    out = {"error": "No namespace selected. Use set_la_namespace or define LA_NAMESPACE env, or ensure only one namespace exists."}
+    return redact_payload(out) if privacy_enabled() else out
 
 def run_log_analytics_query(
     query: str,
@@ -484,9 +490,11 @@ def _ensure_compartment_id(cid: Optional[str]) -> str:
 
 def _parse_result(result):
     try:
-        return json.loads(result) if isinstance(result, str) else result
+        parsed = json.loads(result) if isinstance(result, str) else result
+        return redact_payload(parsed) if privacy_enabled() else parsed
     except Exception:
-        return {"raw": result}
+        out = {"raw": result}
+        return redact_payload(out) if privacy_enabled() else out
 
 def execute_logan_query(
     query: str,
@@ -798,12 +806,26 @@ def quick_checks(
 
         head_q = f"* | head {max(1, int(sample_size))}"
         fields_q = f"* | fields Time, 'Log Source' | head {max(1, int(sample_size))}"
-        # Use LA-compliant COUNT syntax for this tenancy (COUNT without arg is rejected)
-        stats_q = f"* | fields 'Log Source' | head 100 | stats COUNT as logrecords by 'Log Source' | sort -logrecords | head {max(1, int(sample_size))}"
+        # Try multiple variants for COUNT to handle parser differences across tenancies
+        stats_queries = [
+            "* | stats count as logrecords by 'Log Source' | sort -logrecords",
+            "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords",
+            "* | stats COUNT() as logrecords by 'Log Source' | sort -logrecords",
+        ]
 
         checks.append(_run("head", head_q))
         checks.append(_run("fields", fields_q))
-        checks.append(_run("stats_by_source", stats_q))
+        # Try stats variations until one returns results
+        stats_attempts = []
+        for q in stats_queries:
+            r = _run("stats_by_source", q)
+            stats_attempts.append({"query": q, "count": r.get("count"), "success": r.get("success")})
+            checks.append(r)
+            try:
+                if (r.get("count") or 0) > 0:
+                    break
+            except Exception:
+                pass
 
         overall = any(c.get("success") for c in checks)
         return {
@@ -816,6 +838,7 @@ def quick_checks(
                 "ok": overall,
                 "passed": sum(1 for c in checks if c.get("success")),
                 "total": len(checks),
+                "tried_stats_variants": stats_attempts,
             },
         }
 
@@ -1060,6 +1083,129 @@ tools = [
     Tool.from_function(fn=get_observability_metrics_summary, name="get_observability_metrics_summary", description="Get comprehensive observability metrics and server status"),
 ]
 
+def doctor() -> Dict:
+    try:
+        from mcp_oci_common.privacy import privacy_enabled
+        cfg = get_oci_config()
+        return {
+            "server": "oci-mcp-observability",
+            "ok": True,
+            "privacy": bool(privacy_enabled()),
+            "region": cfg.get("region"),
+            "profile": os.getenv("OCI_PROFILE") or "DEFAULT",
+            "tools": [t.name for t in tools],
+        }
+    except Exception as e:
+        return {"server": "oci-mcp-observability", "ok": False, "error": str(e)}
+
+# --- Diagnostics: Log Analytics stats variants ---
+def diagnostics_loganalytics_stats(
+    compartment_id: Optional[str] = None,
+    time_range: str = "60m",
+    profile: Optional[str] = None,
+    region: Optional[str] = None,
+) -> Dict:
+    """Try multiple 'stats by Log Source' query variants and report which works.
+
+    Returns counts and success flags per variant to guide LLMs.
+    """
+    cid = _ensure_compartment_id(compartment_id)
+    variants = [
+        "* | stats count as logrecords by 'Log Source' | sort -logrecords",
+        "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords",
+        "* | stats COUNT() as logrecords by 'Log Source' | sort -logrecords",
+    ]
+    attempts: List[Dict] = []
+    for q in variants:
+        try:
+            res = la_execute_query_impl(
+                query=q,
+                compartment_id=cid,
+                query_name="diag_stats_by_source",
+                time_range=time_range,
+                profile=profile,
+                region=region,
+            )
+            data = _parse_result(res)
+            attempts.append({
+                "query": q,
+                "success": bool(data.get("_meta", {}).get("success")),
+                "count": int(data.get("count", 0)) if isinstance(data.get("count", 0), (int, float, str)) else 0,
+                "message": data.get("_meta", {}).get("message"),
+            })
+        except Exception as e:
+            attempts.append({"query": q, "success": False, "error": str(e)})
+    chosen = next((a for a in attempts if (a.get("count") or 0) > 0), None)
+    return {
+        "compartment_id": cid,
+        "time_range": time_range,
+        "attempts": attempts,
+        "selected": chosen,
+        "ok": bool(chosen),
+    }
+
+# Register diagnostics tool
+tools.append(Tool.from_function(fn=diagnostics_loganalytics_stats, name="diagnostics_loganalytics_stats", description="Run multiple 'stats by Log Source' variants and report which works"))
+tools.append(Tool.from_function(fn=doctor, name="doctor", description="Return server health, config summary, and masking status"))
+
+def doctor_all() -> Dict:
+    """Aggregate doctor/healthcheck across all MCP-OCI servers.
+
+    Mirrors scripts/smoke_check.py but as an MCP tool.
+    """
+    import importlib
+    services = [
+        ("compute", "mcp_servers.compute.server"),
+        ("db", "mcp_servers.db.server"),
+        ("network", "mcp_servers.network.server"),
+        ("security", "mcp_servers.security.server"),
+        ("observability", "mcp_servers.observability.server"),
+        ("cost", "mcp_servers.cost.server"),
+        ("inventory", "mcp_servers.inventory.server"),
+        ("blockstorage", "mcp_servers.blockstorage.server"),
+        ("loadbalancer", "mcp_servers.loadbalancer.server"),
+        ("agents", "mcp_servers.agents.server"),
+    ]
+    out: Dict[str, Dict] = {}
+    for name, modpath in services:
+        try:
+            mod = importlib.import_module(modpath)
+        except Exception as e:
+            out[name] = {"ok": False, "error": f"import failed: {e}"}
+            continue
+        # prefer 'doctor' direct function, then FunctionTool.fn, then tools/healthcheck
+        attr = getattr(mod, "doctor", None)
+        handler = None
+        if callable(attr):
+            handler = attr
+        elif attr is not None:
+            handler = getattr(attr, "fn", None) or getattr(attr, "func", None) or getattr(attr, "handler", None)
+        if callable(handler):
+            try:
+                out[name] = {"ok": True, "result": handler()}
+                continue
+            except Exception as e:
+                out[name] = {"ok": False, "error": f"doctor failed: {e}"}
+                continue
+        tools_list = getattr(mod, "tools", None)
+        if isinstance(tools_list, list):
+            hc = None
+            for t in tools_list:
+                if getattr(t, "name", None) == "healthcheck":
+                    hc = getattr(t, "func", None) or getattr(t, "handler", None) or getattr(t, "fn", None)
+                    break
+            if callable(hc):
+                try:
+                    out[name] = {"ok": True, "result": hc()}
+                    continue
+                except Exception as e:
+                    out[name] = {"ok": False, "error": f"healthcheck failed: {e}"}
+                    continue
+        out[name] = {"ok": False, "error": "no doctor or healthcheck"}
+    return {"ok": all(v.get("ok") for v in out.values()), "servers": out}
+
+tools.append(Tool.from_function(fn=doctor_all, name="doctor_all", description="Aggregate doctor/healthcheck across all MCP-OCI servers"))
+
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
     try:
@@ -1077,6 +1223,28 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8003")))
         except Exception:
             pass
+
+    # Apply privacy masking to all tools (wrapper) before constructing FastMCP
+    try:
+        from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp
+        from fastmcp.tools import Tool as _Tool
+        _wrapped: list[Tool] = []
+        for _t in tools:
+            _f = getattr(_t, "func", None) or getattr(_t, "handler", None)
+            if not _f:
+                _wrapped.append(_t)
+                continue
+            def _mk(f):
+                def _w(*a, **k):
+                    out = f(*a, **k)
+                    return _rp(out) if _pe() else out
+                _w.__name__ = getattr(f, "__name__", "tool")
+                _w.__doc__ = getattr(f, "__doc__", "")
+                return _w
+            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+        tools = _wrapped
+    except Exception:
+        pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-observability")
 

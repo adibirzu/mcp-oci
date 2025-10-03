@@ -2,6 +2,16 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+# Optional privacy masking for responses
+try:
+    from .privacy import privacy_enabled, redact_payload
+except Exception:  # pragma: no cover - defensive import
+    def privacy_enabled() -> bool:  # type: ignore
+        return False
+
+    def redact_payload(obj: Any) -> Any:  # type: ignore
+        return obj
+
 
 def _now_iso() -> str:
     try:
@@ -75,6 +85,10 @@ def with_meta(payload: Dict[str, Any] | Any, *args, **kwargs) -> str:
 
     if meta:
         out["_meta"] = meta
+
+    # Apply privacy masking if enabled
+    if privacy_enabled():
+        out = redact_payload(out)
 
     # Serialize safely
     try:

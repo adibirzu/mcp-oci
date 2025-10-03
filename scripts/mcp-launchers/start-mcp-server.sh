@@ -111,6 +111,13 @@ launch_server() {
     export FASTMCP_SERVER_NAME="oci-mcp-$server"
     export OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=local,service.namespace=mcp-oci,service.version=dev}"
 
+    # Enable privacy masking by default (can be overridden by env)
+    export MCP_OCI_PRIVACY="${MCP_OCI_PRIVACY:-true}"
+
+    # If tenant has a single Log Analytics namespace, pin it for fast startup
+    # Override by exporting LA_NAMESPACE in the environment
+    export LA_NAMESPACE="${LA_NAMESPACE:-frxfz3gch4zb}"
+
     # Enable controlled mutations for specific servers
     case "$server" in
         compute|db|network|blockstorage|loadbalancer)
@@ -128,6 +135,21 @@ launch_server() {
     export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://127.0.0.1:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
 
+    # Ensure metrics port aligns with UX expectations
+    case "$server" in
+      compute)      export METRICS_PORT="${METRICS_PORT:-8001}" ;;
+      db)           export METRICS_PORT="${METRICS_PORT:-8002}" ;;
+      observability)export METRICS_PORT="${METRICS_PORT:-8003}" ;;
+      security)     export METRICS_PORT="${METRICS_PORT:-8004}" ;;
+      cost)         export METRICS_PORT="${METRICS_PORT:-8005}" ;;
+      network)      export METRICS_PORT="${METRICS_PORT:-8006}" ;;
+      blockstorage) export METRICS_PORT="${METRICS_PORT:-8007}" ;;
+      loadbalancer) export METRICS_PORT="${METRICS_PORT:-8008}" ;;
+      inventory)    export METRICS_PORT="${METRICS_PORT:-8009}" ;;
+      agents)       export METRICS_PORT="${METRICS_PORT:-8011}" ;;
+      *)            : ;;
+    esac
+
     local entry="mcp_servers/$server/server.py"
     if [[ ! -f "$entry" ]]; then
       echo "Unknown server or missing entrypoint: $server ($entry not found)"
@@ -141,14 +163,16 @@ launch_server() {
       fi
       echo "Launching $server in daemon mode..."
       # Use poetry run if available, otherwise fallback to python
+      mkdir -p logs
+      local logfile="logs/mcp-${server}.log"
       if command -v poetry >/dev/null 2>&1; then
-        poetry run python "$entry" >/dev/null 2>&1 &
+        nohup poetry run python "$entry" >>"$logfile" 2>&1 &
       else
-        python "$entry" >/dev/null 2>&1 &
+        nohup python "$entry" >>"$logfile" 2>&1 &
       fi
       local pid=$!
       echo "$pid" > "$(pid_file "$server")"
-      echo "$server server launched with PID $pid"
+      echo "$server server launched with PID $pid (logs: $logfile)"
     else
       echo "Launching $server in foreground..."
       if command -v poetry >/dev/null 2>&1; then

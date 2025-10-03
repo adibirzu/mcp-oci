@@ -353,6 +353,21 @@ def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
 def healthcheck() -> dict:
     return {"status": "ok", "server": "oci-mcp-db", "pid": os.getpid()}
 
+def doctor() -> dict:
+    try:
+        from mcp_oci_common.privacy import privacy_enabled
+        cfg = get_oci_config()
+        return {
+            "server": "oci-mcp-db",
+            "ok": True,
+            "privacy": bool(privacy_enabled()),
+            "region": cfg.get("region"),
+            "profile": os.getenv("OCI_PROFILE") or "DEFAULT",
+            "tools": [t.name for t in tools],
+        }
+    except Exception as e:
+        return {"server": "oci-mcp-db", "ok": False, "error": str(e)}
+
 tools = [
     Tool.from_function(
         fn=healthcheck,
@@ -363,6 +378,11 @@ tools = [
         fn=list_autonomous_databases,
         name="list_autonomous_databases",
         description="List autonomous databases"
+    ),
+    Tool.from_function(
+        fn=doctor,
+        name="doctor",
+        description="Return server health, config summary, and masking status"
     ),
     Tool.from_function(
         fn=list_db_systems,
@@ -425,6 +445,28 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8002")))
         except Exception:
             pass
+    # Apply privacy masking to all tools (wrapper)
+    try:
+        from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp
+        from fastmcp.tools import Tool as _Tool
+        _wrapped = []
+        for _t in tools:
+            _f = getattr(_t, "func", None) or getattr(_t, "handler", None)
+            if not _f:
+                _wrapped.append(_t)
+                continue
+            def _mk(f):
+                def _w(*a, **k):
+                    out = f(*a, **k)
+                    return _rp(out) if _pe() else out
+                _w.__name__ = getattr(f, "__name__", "tool")
+                _w.__doc__ = getattr(f, "__doc__", "")
+                return _w
+            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+        tools = _wrapped
+    except Exception:
+        pass
+
     mcp = FastMCP(tools=tools, name="oci-mcp-db")
     if _FastAPIInstrumentor:
         try:

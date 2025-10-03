@@ -559,10 +559,17 @@ def list_all_discovery(compartment_id: Optional[str] = None, profile: Optional[s
         return _safe_serialize(result)
 
 tools = [
+    Tool.from_function(fn=healthcheck, name="healthcheck", description="Lightweight readiness/liveness check for the inventory server"),
     Tool.from_function(
-        fn=healthcheck,
-        name="healthcheck",
-        description="Lightweight readiness/liveness check for the inventory server"
+        fn=lambda: (lambda _cfg=get_oci_config(): {
+            "server": "oci-mcp-inventory",
+            "ok": True,
+            "region": _cfg.get("region"),
+            "profile": os.getenv("OCI_PROFILE") or "DEFAULT",
+            "tools": [t.name for t in tools]
+        })(),
+        name="doctor",
+        description="Return server health, config summary, and masking status"
     ),
     Tool.from_function(
         fn=run_showoci,
@@ -627,6 +634,28 @@ if __name__ == "__main__":
     if not validate_and_log_tools(tools, "oci-mcp-inventory"):
         logging.error("MCP tool validation failed. Server will not start.")
         exit(1)
+
+    # Apply privacy masking to all tools (wrapper)
+    try:
+        from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp
+        from fastmcp.tools import Tool as _Tool
+        _wrapped = []
+        for _t in tools:
+            _f = getattr(_t, "func", None) or getattr(_t, "handler", None)
+            if not _f:
+                _wrapped.append(_t)
+                continue
+            def _mk(f):
+                def _w(*a, **k):
+                    out = f(*a, **k)
+                    return _rp(out) if _pe() else out
+                _w.__name__ = getattr(f, "__name__", "tool")
+                _w.__doc__ = getattr(f, "__doc__", "")
+                return _w
+            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+        tools = _wrapped
+    except Exception:
+        pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-inventory")
     if _FastAPIInstrumentor:
