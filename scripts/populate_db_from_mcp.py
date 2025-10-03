@@ -1,24 +1,6 @@
 #!/usr/bin/env python3
-"""
-Populate Autonomous DB tables with MCP-extracted data.
-
-Supports two connection modes:
-1) Wallet-based TCPS (recommended for Autonomous DB):
-   - ORACLE_DB_USER (e.g., ADMIN)
-   - ORACLE_DB_PASSWORD (e.g., 'Welcome2024!')
-   - ORACLE_DB_SERVICE (e.g., umqgro5jk76l1xz_aiopsagentdb_high)
-   - ORACLE_DB_WALLET_ZIP (/path/to/wallet.zip) and ORACLE_DB_WALLET_PASSWORD
-
-2) DSN direct (if already configured):
-   - ORACLE_DB_USER, ORACLE_DB_PASSWORD, ORACLE_DB_DSN
-
-Optionally: COMPARTMENT_OCID to scope discovery.
-"""
-from __future__ import annotations
-
-import os
-import sys
-import json
+print("[ARCHIVED] populate_db_from_mcp.py is deprecated and not part of MCP deployment.")
+raise SystemExit(0)
 
 def main() -> None:
     user = os.getenv("ORACLE_DB_USER")

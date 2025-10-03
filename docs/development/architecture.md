@@ -1,44 +1,43 @@
-# MCP Server Architecture (OCI)
+# MCP-OCI Architecture (Updated)
 
-This repo implements a consistent MCP server pattern across OCI services.
+Overview
+- Production MCP servers now live under `mcp_servers/` (FastMCP). Legacy `src/mcp_oci_*` packages remain for compatibility wrappers.
+- All servers conform to common patterns for auth, observability, privacy, and tool naming.
 
-Core runtime
-- Transport: JSON-RPC over stdio (Content-Length framing) in `mcp_oci_runtime/stdio.py`.
-- Methods implemented: `initialize`, `tools/list`, `tools/call`, `shutdown`.
-- Safety: confirmation gate for mutating tools (`--require-confirm` or `confirm=true`), default profile/region injection, stderr logging.
+Runtime
+- Transport: JSON-RPC over stdio (via FastMCP). Each server exposes a set of tools.
+- Observability: OTLP traces/metrics with optional `/metrics` Prometheus exporter when started directly.
+- Privacy: Optional masking enabled by `MCP_OCI_PRIVACY=true` (default via launcher/mcp.json) redacts OCIDs, namespaces, and sensitive IDs across outputs.
 
-Server modules
-- One package per service under `src/mcp_oci_<service>/` with:
-  - `server.py` exporting `register_tools()` and optional `create_client()`.
-  - `__main__.py` calling `run_with_tools(register_tools())` for stdio.
-  - `README.md` with Overview/Tools/Usage.
-- Common auth/client factory: `mcp_oci_common.make_client` and `get_config`.
+Structure
+- `mcp_servers/<service>/server.py` — tools for each OCI service (compute, db, network, security, cost, observability, etc.)
+- `mcp_oci_common/` — shared config, privacy, observability, caching, validation
+- `scripts/mcp-launchers/start-mcp-server.sh` — unified start/stop/status launcher
+- `scripts/smoke_check.py` — imports modules and calls a `doctor` tool to verify health
 
-Tool shape
-- Each tool spec includes:
-  - `name`: `oci:<service>:<action>` (stable identifier)
-  - `description`: clear, concise
-  - `parameters`: JSON Schema (type=object, properties, required)
-  - `handler`: callable (keyword args match schema)
-  - `mutating` (optional): true for actions that change state
+Tool conventions
+- Names: `oci:<service>:<action>` where applicable; FastMCP Tool names are human-friendly in local servers
+- All servers expose `doctor` for health/config and often `healthcheck` for liveness
+- Mutating operations require explicit enable via `ALLOW_MUTATIONS=true`
 
-Naming & files
-- Packages: `mcp_oci_<service>` (e.g., `mcp_oci_iam`)
-- Tools: `oci:<service>:<action>` (e.g., `oci:iam:list-users`)
-- README per server follows MCP best practices and OCI service patterns.
+Log Analytics improvements
+- Handles 201 Accepted by polling `get_query_result`
+- Parses results from `results` (preferred) or `items`
+- Adds `diagnostics_loganalytics_stats` to try multiple `stats by 'Log Source'` variants; default first matches Console
 
-Entry points
-- Generic: `mcp-oci-serve <service>`
-- Convenience: `mcp-oci-serve-<service>` (e.g., `mcp-oci-serve-iam`)
+Cost server hardening
+- Startup logging no longer prints to STDOUT to avoid MCP parse errors
+- Doctor tool reports masking status and tool names
 
-Testing
-- Minimal integration tests under `tests/integration/` with direct OCI calls.
-- Auto-discovery when possible; configurable via environment variables.
+Client configuration
+- `mcp.json` provides ready-to-use server commands for MCP clients (e.g., Claude Desktop). Each entry sets `MCP_OCI_PRIVACY=true` by default.
 
-Extensibility
-- Introspection server (`mcp_oci_introspect`) lists SDK methods to help track new features.
-- Monitoring namespace discovery prefers direct SDK methods when available.
+Deployment summary
+- Linux quick start:
+  1. `python3 -m venv .venv && source .venv/bin/activate && pip install -e .[oci]`
+  2. `scripts/mcp-launchers/start-mcp-server.sh all --daemon`
+  3. `python scripts/smoke_check.py`
 
-Response and error conventions
-- Handlers attach `opc_request_id` when available (from SDK response headers)
-- Error responses include `service_code` and `opc_request_id` (when provided by the SDK)
+Testing and validation
+- Use `scripts/smoke_check.py` for a fast end-to-end server readiness check
+- Unit/integration tests under `tests/` for selected services

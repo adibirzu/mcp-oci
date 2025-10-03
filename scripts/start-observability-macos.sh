@@ -1,4 +1,7 @@
 #!/bin/bash
+# ARCHIVED: macOS-only helper; use the unified launcher for all platforms.
+echo "[ARCHIVED] start-observability-macos.sh is deprecated. Use scripts/mcp-launchers/start-mcp-server.sh and ops stack if needed." >&2
+exit 1
 #
 # macOS Observability Stack Launcher using Colima
 #

@@ -47,7 +47,42 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 - Docker (for observability stack)
 - Git
 
-### 1. Installation
+### 1. Linux Installation (recommended)
+
+Prerequisites
+- A Linux host with internet access
+- Python 3.11+ and Git installed
+- OCI credentials configured (either ~/.oci/config or Instance Principal)
+
+Steps
+```bash
+# 1) Clone and enter repo
+git clone https://github.com/your-org/mcp-oci.git
+cd mcp-oci
+
+# 2) Create venv and install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .[oci]
+
+# 3) Set OCI defaults (or rely on ~/.oci/config profile DEFAULT)
+export OCI_PROFILE=DEFAULT
+export OCI_REGION=eu-frankfurt-1
+
+# 4) Start all MCP servers (daemon mode)
+scripts/mcp-launchers/start-mcp-server.sh all --daemon
+
+# 5) Verify
+python scripts/smoke_check.py
+```
+
+Notes
+- Privacy masking is enabled by default: `MCP_OCI_PRIVACY=true`. Disable via `export MCP_OCI_PRIVACY=false` if needed.
+- To stop servers: `scripts/mcp-launchers/start-mcp-server.sh stop all`
+- To check status: `scripts/mcp-launchers/start-mcp-server.sh status <server>`
+
+### 2. Installation (macOS/other)
 
 ```bash
 # Clone the repository
@@ -62,7 +97,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-### 2. OCI Configuration
+### OCI Configuration
 
 Set up your OCI credentials using one of these methods:
 
@@ -85,21 +120,14 @@ cp .env.sample .env
 #### Option C: Resource Principal (for OCI Compute)
 When running on OCI compute instances, the servers automatically use Resource Principal authentication.
 
-### 3. Quick Start
+### Quick Start (manual)
 
 ```bash
-# Start everything with one command
-./run-all-local.sh
+# Start all MCP servers
+scripts/mcp-launchers/start-mcp-server.sh all --daemon
 
-# Or start components individually:
-# 1. Start observability stack
-cd ops && ./restart_observability_stack.sh
-
-# 2. Start all MCP servers
-cd .. && scripts/mcp-launchers/start-mcp-server.sh all --daemon
-
-# 3. Test that everything is working
-python test_observability_e2e.py
+# Test that everything is working
+python scripts/smoke_check.py
 
 # Access the UX dashboard at http://localhost:8010
 ```
@@ -174,6 +202,11 @@ export METRICS_PORT=8001
 export FINOPSAI_CACHE_TTL_SECONDS=600
 export TENANCY_OCID=ocid1.tenancy.oc1..example
 ```
+
+## 📊 Observability & Privacy
+
+- All servers include observability hooks (OTLP traces/metrics) and a `/metrics` Prometheus exporter when started directly.
+- Privacy masking: enable with `MCP_OCI_PRIVACY=true` (default via launcher and mcp.json). Masks OCIDs/namespaces across outputs.
 
 ## 📊 Observability Stack
 
@@ -272,6 +305,7 @@ curl http://localhost:8889/metrics  # OTEL Collector
 | `ALLOW_MUTATIONS` | Enable write operations | `false` | `true` |
 | `METRICS_PORT` | Prometheus metrics port | Server-specific | `8001` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry endpoint | `localhost:4317` | Custom endpoint |
+| `MCP_OCI_PRIVACY` | Redact OCIDs/namespaces in outputs | `false` | `true` |
 
 ### Advanced Configuration
 

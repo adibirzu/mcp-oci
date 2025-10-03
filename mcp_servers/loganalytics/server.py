@@ -260,7 +260,10 @@ def run_query_legacy(
             pass_phrase=cfg.get("pass_phrase"),
         )
 
-        api_region = cfg.get("region", "us-ashburn-1")
+        # Determine region strictly: prefer explicit cfg, then env; no silent fallback
+        api_region = cfg.get("region") or os.getenv("OCI_REGION")
+        if not api_region:
+            return with_meta({"error": "OCI region not set for Log Analytics. Set OCI_REGION or pass region param."}, success=False)
         url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace_name}/search/actions/query"
 
         body = {
@@ -382,7 +385,9 @@ def execute_query(
             )
 
             # Build URL
-            api_region = region or config.get("region", "us-ashburn-1")
+            api_region = region or config.get("region") or os.getenv("OCI_REGION")
+            if not api_region:
+                return with_meta({"error": "OCI region not set for Log Analytics. Set OCI_REGION or pass region param."}, success=False)
             url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace}/search/actions/query"
 
             # Build query details
@@ -403,14 +408,54 @@ def execute_query(
 
             params = {"limit": max_count}
 
-            response = requests.post(url, json=query_details, auth=signer, params=params)
+            response = requests.post(url, json=query_details, auth=signer, params=params, timeout=60)
 
+            # Synchronous completion
             if response.status_code == 200:
                 data = response.json()
-                results = data.get("items", [])
+                results = data.get("results") or data.get("items") or []
+                total_count = data.get("totalCount") or data.get("total_count")
+            # Accepted → server may have started an async work request. Try to poll.
             elif response.status_code == 201:
-                data = response.json()
+                data = response.json() if response.content else {}
+                # Try to obtain work request id from headers or payload
+                wr_id = (
+                    response.headers.get("opc-work-request-id")
+                    or data.get("workRequestId")
+                    or data.get("work_request_id")
+                )
                 results = []
+                total_count = None
+                if wr_id:
+                    try:
+                        # Use SDK to poll get_query_result for completion
+                        la_client = oci.log_analytics.LogAnalyticsClient(config)
+                        poll_resp = la_client.get_query_result(
+                            namespace_name=namespace,
+                            work_request_id=wr_id,
+                            should_include_columns=True,
+                            should_include_fields=True,
+                        )
+                        pdata = getattr(poll_resp, "data", None)
+                        if pdata and getattr(pdata, "rows", None):
+                            # Normalize to list of row dicts with columns
+                            cols = []
+                            if getattr(pdata, "columns", None):
+                                for i, c in enumerate(pdata.columns):
+                                    cols.append(
+                                        getattr(c, "column_name", None)
+                                        or getattr(c, "name", None)
+                                        or getattr(c, "display_name", None)
+                                        or f"col_{i}"
+                                    )
+                            results = []
+                            for r in (getattr(pdata, "rows", None) or []):
+                                vals = getattr(r, "values", None) or getattr(r, "data", None) or []
+                                results.append(dict(zip(cols, vals)) if cols and len(vals) == len(cols) else {"values": vals})
+                            total_count = len(results)
+                    except Exception:
+                        # If polling fails, fall back to empty results with info below
+                        pass
             else:
                 raise Exception(f"HTTP Error {response.status_code}: {response.text}")
 
@@ -423,7 +468,7 @@ def execute_query(
                     "namespace": namespace,
                     "compartment_id": compartment_id,
                     "results": results,
-                    "count": len(results),
+                    "count": int(total_count) if isinstance(total_count, (int, float)) else len(results),
                     "validation": validation_issues if validation_issues['warnings'] or validation_issues['suggestions'] else None
                 },
                 success=True,
@@ -1028,7 +1073,12 @@ def check_oci_connection(
             )
             
             test_data = json.loads(test_result)
-            connection_info["test_query_success"] = test_data.get("success", False)
+            count = int(test_data.get("count", 0)) if isinstance(test_data.get("count", 0), (int, float, str)) else 0
+            has_logs = count > 0
+            connection_info["records_found"] = count
+            connection_info["has_logs"] = has_logs
+            # Treat success as having connectivity; include has_logs to drive UX messaging
+            connection_info["test_query_success"] = bool(test_data.get("_meta", {}).get("success", False))
             connection_info["test_query_message"] = test_data.get("message", "")
         
         return with_meta(

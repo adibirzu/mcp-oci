@@ -19,6 +19,35 @@ class OCIClients:
     config: dict
 
 
+def _home_region(identity: oci.identity.IdentityClient, tenancy_id: str) -> str:
+    """Discover tenancy home region for Usage API calls.
+
+    Strategy:
+    1) get_tenancy() -> home_region_key
+    2) list_regions() to map key -> region_name
+    3) fallback: list_region_subscriptions() and pick is_home_region
+    """
+    try:
+        ten = identity.get_tenancy(tenancy_id).data
+        hr_key = getattr(ten, 'home_region_key', None)
+        if hr_key:
+            regs = identity.list_regions().data or []
+            for r in regs:
+                if getattr(r, 'key', None) == hr_key:
+                    return getattr(r, 'name', None)
+    except Exception:
+        pass
+    # Fallback
+    try:
+        subs = identity.list_region_subscriptions(tenancy_id)
+        for s in getattr(subs, 'data', []) or []:
+            if getattr(s, 'is_home_region', False):
+                return getattr(s, 'region_name', None) or getattr(s, 'region', None)
+    except Exception:
+        pass
+    return None
+
+
 def make_clients() -> OCIClients:
     """
     Create FinOpsAI-compatible clients using mcp_oci_common configuration
@@ -26,10 +55,21 @@ def make_clients() -> OCIClients:
     config = get_oci_config()
 
     # Create clients using the shared OCI config
-    usage_api = oci.usage_api.UsageapiClient(config)
+    # Identity first (for home-region discovery)
+    identity = oci.identity.IdentityClient(config)
+
+    # Usage API must be called in the tenancy's home region; override if needed
+    usage_cfg = dict(config)
+    try:
+        ten = usage_cfg.get('tenancy')
+        hr = _home_region(identity, ten) if ten else None
+        if hr:
+            usage_cfg['region'] = hr
+    except Exception:
+        pass
+    usage_api = oci.usage_api.UsageapiClient(usage_cfg)
     budgets = oci.budget.BudgetClient(config)
     object_storage = oci.object_storage.ObjectStorageClient(config)
-    identity = oci.identity.IdentityClient(config)
 
     # Add tenancy information to config for FinOpsAI compatibility
     enhanced_config = dict(config)
@@ -72,7 +112,8 @@ def list_compartments_recursive(identity_client: oci.identity.IdentityClient,
             })
 
     except Exception as e:
-        # Log error but continue - graceful degradation
-        print(f"Warning: Could not list compartments: {e}")
+        # Log to stderr only; never corrupt MCP stdio
+        import sys
+        print(f"Warning: Could not list compartments: {e}", file=sys.stderr)
 
     return compartments

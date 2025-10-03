@@ -78,13 +78,14 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
     ts_start = _to_midnight(ts_start, roll_to_next_if_not_midnight=False)
     ts_end = _to_midnight(ts_end, roll_to_next_if_not_midnight=True)
 
-    # Create forecast object if forecast is requested (some regions require explicit time bounds)
+    # Create forecast object if requested: strict tenants require
+    # time_forecast_started == time_usage_ended
     forecast_obj = None
     if q.forecast:
         forecast_obj = oci.usage_api.models.Forecast(
             forecast_type="BASIC",
-            time_forecast_started=ts_start,
-            time_forecast_ended=ts_end
+            time_forecast_started=ts_end,
+            time_forecast_ended=ts_end,
         )
 
     # Handle group_by vs group_by_tag conflict: group_by MUST be null when group_by_tag is present
@@ -97,7 +98,7 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
     if cd is None and group_by_param:
         try:
             if any(str(g).lower().startswith("compartment") for g in group_by_param):
-                cd = 10  # safe default depth when grouping by compartment
+                cd = 7  # Usage API requires compartmentDepth <= 7
         except Exception:
             pass
 
@@ -112,6 +113,7 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
         filter=q.filter,
         forecast=forecast_obj,
         compartment_depth=cd,
+        is_aggregate_by_time=True,
     )
     # Create a hashable representation for caching
     details_dict = {
@@ -136,51 +138,109 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
         else:
             _cache.pop(key, None)
 
-    try:
-        resp = clients.usage_api.request_summarized_usages(details)
-    except ServiceError as e:
-        # Robust fallback matrix:
-        # 1) If region complains about forecast fields (even when not sent), retry with explicit forecast window.
-        # 2) If that still fails, retry without any forecast object.
-        msg = str(getattr(e, "message", e)).lower()
-        forecast_related = ("forecast" in msg) or ("timeforecastended" in msg) or ("timeforecaststarted" in msg)
-        if e.status == 400 and forecast_related:
-            # Try explicit forecast window
-            try:
-                details_with_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
-                    tenant_id=tenancy_ocid,
-                    granularity=(q.granularity or "DAILY").upper(),
-                    time_usage_started=ts_start,
-                    time_usage_ended=ts_end,
-                    query_type="COST",
-                    group_by=group_by_param,
-                    group_by_tag=group_by_tag_param,
-                    filter=q.filter,
-                    forecast=oci.usage_api.models.Forecast(
-                        forecast_type="BASIC",
-                        time_forecast_started=ts_start,
-                        time_forecast_ended=ts_end
-                    ),
-                    compartment_depth=q.compartment_depth,
-                )
-                resp = clients.usage_api.request_summarized_usages(details_with_fc)
-            except ServiceError as e2:
-                # Final fallback: no forecast at all
-                details_no_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
-                    tenant_id=tenancy_ocid,
-                    granularity=(q.granularity or "DAILY").upper(),
-                    time_usage_started=ts_start,
-                    time_usage_ended=ts_end,
-                    query_type="COST",
-                    group_by=group_by_param,
-                    group_by_tag=group_by_tag_param,
-                    filter=q.filter,
-                    forecast=None,
-                    compartment_depth=q.compartment_depth,
-                )
-                resp = clients.usage_api.request_summarized_usages(details_no_fc)
-        else:
-            raise
+    # Simple retry/backoff loop to absorb Usage API 429s
+    import random
+    max_retries = int(os.getenv("FINOPSAI_USAGEAPI_MAX_RETRIES", "4"))
+    base_delay = float(os.getenv("FINOPSAI_USAGEAPI_BACKOFF_SECONDS", "1.5"))
+    attempt = 0
+    while True:
+        try:
+            resp = clients.usage_api.request_summarized_usages(details)
+            break
+        except ServiceError as e:
+            status = getattr(e, "status", None)
+            code = str(getattr(e, "code", "") or "").lower()
+            msg = str(getattr(e, "message", e) or "").lower()
+            # Retry on 429 TooManyRequests with exponential backoff and jitter
+            if status == 429 or code == "toomanyrequests" or "too many" in msg:
+                if attempt >= max_retries:
+                    raise
+                retry_after = None
+                try:
+                    hdrs = getattr(e, "headers", None) or {}
+                    retry_after = hdrs.get("retry-after") or hdrs.get("Retry-After")
+                    if retry_after:
+                        retry_after = float(retry_after)
+                except Exception:
+                    retry_after = None
+                delay = retry_after or (base_delay * (2 ** attempt) + random.uniform(0, 0.5))
+                time.sleep(delay)
+                attempt += 1
+                continue
+            # Robust fallback matrix:
+            # 1) forecast validation → align forecast at end
+            # 2) final retry without forecast
+            # Robust fallback matrix:
+            # 1) If region complains about forecast fields (even when not sent), retry with explicit forecast window.
+            # 2) If that still fails, retry without any forecast object.
+            forecast_related = ("forecast" in msg) or ("timeforecastended" in msg) or ("timeforecaststarted" in msg)
+            if e.status == 400 and forecast_related:
+                # Try explicit forecast window
+                try:
+                    details_with_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                        tenant_id=tenancy_ocid,
+                        granularity=(q.granularity or "DAILY").upper(),
+                        time_usage_started=ts_start,
+                        time_usage_ended=ts_end,
+                        query_type="COST",
+                        group_by=group_by_param,
+                        group_by_tag=group_by_tag_param,
+                        filter=q.filter,
+                        forecast=oci.usage_api.models.Forecast(
+                            forecast_type="BASIC",
+                            time_forecast_started=ts_end,
+                            time_forecast_ended=ts_end
+                        ),
+                        compartment_depth=q.compartment_depth,
+                        is_aggregate_by_time=True,
+                    )
+                    resp = clients.usage_api.request_summarized_usages(details_with_fc)
+                    break
+                except ServiceError:
+                    # Final fallback: no forecast at all
+                    details_no_fc = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                        tenant_id=tenancy_ocid,
+                        granularity=(q.granularity or "DAILY").upper(),
+                        time_usage_started=ts_start,
+                        time_usage_ended=ts_end,
+                        query_type="COST",
+                        group_by=group_by_param,
+                        group_by_tag=group_by_tag_param,
+                        filter=q.filter,
+                        forecast=None,
+                        compartment_depth=q.compartment_depth,
+                        is_aggregate_by_time=True,
+                    )
+                    resp = clients.usage_api.request_summarized_usages(details_no_fc)
+                    break
+            else:
+            # 404 NotAuthorizedOrNotFound can also indicate a wrong tenantId was used.
+            # Retry once with the config tenancy OCID to rule out a caller-provided mismatch.
+                if e.status == 404:
+                    try:
+                        cfg_ten = clients.config.get('tenancy')
+                        if cfg_ten and cfg_ten != tenancy_ocid:
+                            details_retry = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                                tenant_id=cfg_ten,
+                                granularity=(q.granularity or "DAILY").upper(),
+                                time_usage_started=ts_start,
+                                time_usage_ended=ts_end,
+                                query_type="COST",
+                                group_by=group_by_param,
+                                group_by_tag=group_by_tag_param,
+                                filter=q.filter,
+                                forecast=forecast_obj,
+                                compartment_depth=cd,
+                                is_aggregate_by_time=True,
+                            )
+                            resp = clients.usage_api.request_summarized_usages(details_retry)
+                            break
+                        else:
+                            raise
+                    except ServiceError:
+                        raise
+                else:
+                    raise
 
     # Convert response data to dict format
     if hasattr(resp.data, 'to_dict'):
@@ -203,18 +263,19 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
                     'product_sku': item.product_sku if hasattr(item, 'product_sku') else None,
                     'time_usage_started': str(item.time_usage_started) if hasattr(item, 'time_usage_started') else None,
                     'time_usage_ended': str(item.time_usage_ended) if hasattr(item, 'time_usage_ended') else None,
-                    'computed_amount': float(item.computed_amount) if hasattr(item, 'computed_amount') else 0.0,
-                    'computed_quantity': float(item.computed_quantity) if hasattr(item, 'computed_quantity') else 0.0,
-                    'unit_price': float(item.unit_price) if hasattr(item, 'unit_price') else 0.0,
+                    'computed_amount': float(getattr(item, 'computed_amount', 0) or 0.0),
+                    'computed_quantity': float(getattr(item, 'computed_quantity', 0) or 0.0),
+                    'unit_price': float(getattr(item, 'unit_price', 0) or 0.0),
                     'currency': item.currency if hasattr(item, 'currency') else 'USD',
-                    'discount': float(item.discount) if hasattr(item, 'discount') else 0.0,
+                    'discount': float(getattr(item, 'discount', 0) or 0.0),
                     'overage': item.overage if hasattr(item, 'overage') else None,
                     'is_forecast': bool(item.is_forecast) if hasattr(item, 'is_forecast') else False,
                     'tags': item.tags if hasattr(item, 'tags') else None
                 }
                 for item in (resp.data.items if hasattr(resp.data, 'items') else [])
             ],
-            'currency': getattr(resp.data, 'currency', 'USD') if hasattr(resp.data, 'currency') else 'USD',
+            # Preserve tenancy currency without forcing USD; caller may format or convert later
+            'currency': getattr(resp.data, 'currency', None) if hasattr(resp.data, 'currency') else None,
             'group_by': getattr(resp.data, 'group_by', None) if hasattr(resp.data, 'group_by') else None
         }
 
@@ -224,7 +285,7 @@ def request_summarized_usages(clients: OCIClients, tenancy_ocid: str, q: UsageQu
                 {
                     'time_usage_started': str(item.time_usage_started) if hasattr(item, 'time_usage_started') else None,
                     'time_usage_ended': str(item.time_usage_ended) if hasattr(item, 'time_usage_ended') else None,
-                    'computed_amount': float(item.computed_amount) if hasattr(item, 'computed_amount') else 0.0,
+                    'computed_amount': float(getattr(item, 'computed_amount', 0) or 0.0),
                     'currency': item.currency if hasattr(item, 'currency') else 'USD'
                 }
                 for item in resp.data.forecast_items
