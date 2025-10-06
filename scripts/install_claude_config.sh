@@ -21,24 +21,24 @@ cmd() {
 CONFIG_JSON='{
   "mcpServers": {
     "oci-iam": {
-      "command": "'"$(cmd mcp-oci-serve-iam)"'",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1", "--log-level", "INFO"]
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["iam", "--profile", "DEFAULT", "--region", "eu-frankfurt-1", "--log-level", "INFO"]
     },
     "oci-compute": {
-      "command": "'"$(cmd mcp-oci-serve-compute)"'",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["compute", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
     "oci-objectstorage": {
-      "command": "'"$(cmd mcp-oci-serve-objectstorage)"'",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["objectstorage", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
     "oci-usageapi": {
-      "command": "'"$(cmd mcp-oci-serve-usageapi)"'",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["usageapi", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
     "oci-monitoring": {
-      "command": "'"$(cmd mcp-oci-serve-monitoring)"'",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["monitoring", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
     "oci-cost": {
       "command": "'"$(cmd python)"'",
@@ -51,8 +51,8 @@ CONFIG_JSON='{
       }
     },
     "oci-blockstorage": {
-      "command": "'"$(cmd python)"'",
-      "args": ["-m", "mcp_servers.blockstorage.server"],
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["blockstorage", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"],
       "env": {
         "OCI_PROFILE": "DEFAULT",
         "OCI_REGION": "eu-frankfurt-1",
@@ -61,8 +61,8 @@ CONFIG_JSON='{
       }
     },
     "oci-loadbalancer": {
-      "command": "'"$(cmd python)"'",
-      "args": ["-m", "mcp_servers.loadbalancer.server"],
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["loadbalancer", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"],
       "env": {
         "OCI_PROFILE": "DEFAULT",
         "OCI_REGION": "eu-frankfurt-1",
@@ -71,8 +71,8 @@ CONFIG_JSON='{
       }
     },
     "oci-observability": {
-      "command": "'"$(cmd python)"'",
-      "args": ["-m", "mcp_servers.observability.server"],
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["loganalytics", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"],
       "env": {
         "OCI_PROFILE": "DEFAULT",
         "OCI_REGION": "eu-frankfurt-1",
@@ -82,8 +82,8 @@ CONFIG_JSON='{
       }
     },
     "oci-inventory": {
-      "command": "'"$(cmd python)"'",
-      "args": ["-m", "mcp_servers.inventory.server"],
+      "command": "'"$(cmd mcp-oci-serve)"'",
+      "args": ["inventory", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"],
       "env": {
         "OCI_PROFILE": "DEFAULT",
         "OCI_REGION": "eu-frankfurt-1",

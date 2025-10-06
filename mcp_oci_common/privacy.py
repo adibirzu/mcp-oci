@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 
 _OCID_RE = re.compile(r"ocid1\.[A-Za-z0-9_.-]+")

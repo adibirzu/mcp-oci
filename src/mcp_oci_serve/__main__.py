@@ -27,6 +27,37 @@ def main() -> None:
     if args.region:
         defaults["region"] = args.region
     tools = register_tools()
+
+    # Add colon-form aliases for tools named like oci_<service>_<action>
+    # This keeps backward-compatible snake_case names while exposing
+    # guideline-compliant identifiers: oci:<service>:<action>
+    def _alias_name(n: str) -> str | None:
+        if ":" in n:
+            return None
+        if not n.startswith("oci_"):
+            return None
+        try:
+            rest = n[len("oci_"):]
+            svc, action = rest.split("_", 1)
+            return f"oci:{svc}:{action.replace('_', '-')}"
+        except Exception:
+            return None
+
+    existing = {t["name"] for t in tools}
+    alias_entries: list[dict[str, Any]] = []
+    for t in tools:
+        alias = _alias_name(t.get("name", ""))
+        if alias and alias not in existing:
+            alias_entries.append({
+                "name": alias,
+                "description": t.get("description", ""),
+                "parameters": t.get("parameters", {"type": "object"}),
+                "handler": t.get("handler"),
+                "mutating": t.get("mutating", False),
+            })
+            existing.add(alias)
+    if alias_entries:
+        tools.extend(alias_entries)
     # Add generic server info and ping tools to help hosts probe
     def _server_info() -> dict[str, Any]:  # type: ignore
         return {"service": args.service, "defaults": defaults, "runtime": "stdio"}

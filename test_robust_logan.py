@@ -5,10 +5,7 @@ Demonstrates fast connection and reliable query execution
 """
 
 import sys
-import os
-import json
 import sys as _sys
-from datetime import datetime
 
 # Add src to path
 sys.path.append('src')
@@ -19,7 +16,7 @@ def test_robust_logan():
     print("=" * 50)
     
     try:
-        from mcp_oci_loganalytics_robust.server import create_client, RobustLogAnalyticsClient
+        from mcp_oci_loganalytics_robust.server import create_client
         
         # Create client
         print("1. Creating robust client...")
@@ -99,7 +96,9 @@ if __name__ == "__main__":
     # If this script is accidentally used as an MCP server launcher (as seen in external launch logs),
     # proxy to the canonical cost server entrypoint so Cline/Claude can connect successfully.
     # To run this diagnostic test instead, set RUN_LOGAN_TEST=1 in the environment.
-    import os as _os, sys as _sys, runpy as _runpy
+    import os as _os
+    import sys as _sys
+    import runpy as _runpy
     if _os.getenv("RUN_LOGAN_TEST", "0").lower() in ("1", "true", "yes", "on"):
         test_robust_logan()
     else:

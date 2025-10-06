@@ -71,7 +71,7 @@ def list_load_balancers(compartment_id: str, limit: int | None = None, page: str
     if cached:
         return cached
     resp = client.list_load_balancers(compartment_id=compartment_id, **kwargs)
-    items = [l.__dict__ for l in getattr(resp, "data", [])]
+    items = [item.__dict__ for item in getattr(resp, "data", [])]
     # Record LB names in the registry (reuse streams/application map as generic store)
     if items:
         try:

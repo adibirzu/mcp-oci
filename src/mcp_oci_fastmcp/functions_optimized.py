@@ -20,7 +20,6 @@ from .shared_architecture import (
     handle_oci_error,
     format_for_llm,
     validate_compartment_id,
-    create_fastmcp_tool,
     create_common_tools
 )
 

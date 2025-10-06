@@ -10,6 +10,7 @@ from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.name_registry import get_registry
+from mcp_oci_common.observability import init_tracing, tool_span, add_oci_call_attributes
 
 try:
     import oci  # type: ignore
@@ -212,7 +213,9 @@ def register_tools() -> list[dict[str, Any]]:
 
 def list_users(compartment_id: str, name: str | None = None, limit: int | None = None, page: str | None = None,
                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
-    client = create_client(profile=profile, region=region)
+    tracer = init_tracing("mcp-oci-iam")
+    with tool_span(tracer, "oci_iam_list_users", mcp_server="oci-mcp-iam") as span:
+        client = create_client(profile=profile, region=region)
     cache = get_cache()
     registry = get_registry()
     kwargs: dict[str, Any] = {}
@@ -227,6 +230,17 @@ def list_users(compartment_id: str, name: str | None = None, limit: int | None =
     if cached:
         return cached
     resp = client.list_users(compartment_id=compartment_id, **kwargs)
+    try:
+        add_oci_call_attributes(
+            span,
+            oci_service="identity",
+            oci_operation="ListUsers",
+            region=region,
+            endpoint=getattr(client, "base_client", None).endpoint if hasattr(client, "base_client") else None,
+            request_id=(getattr(resp, "headers", {}) or {}).get("opc-request-id") if hasattr(resp, "headers") else None,
+        )
+    except Exception:
+        pass
     users = [u.data.__dict__ if hasattr(u, "data") else u.__dict__ for u in resp.data] if hasattr(resp, "data") else []
     if users:
         try:

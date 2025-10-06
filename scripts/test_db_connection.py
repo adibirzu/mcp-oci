@@ -30,7 +30,8 @@ def main() -> None:
 
     try:
         if wallet_zip and svc and user and pwd:
-            import zipfile, tempfile
+            import zipfile
+            import tempfile
             tmp = tempfile.mkdtemp(prefix="mcp_wallet_")
             with zipfile.ZipFile(wallet_zip, 'r') as z:
                 z.extractall(tmp)

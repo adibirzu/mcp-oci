@@ -9,20 +9,20 @@ make setup
 ```
 
 ## Tools / Resources
-- `oci:limits:list-services` — List services with limits in a compartment.
-- `oci:limits:list-limit-values` — List limit values for a service.
-- `oci:quotas:list-quotas` — List quotas in a compartment.
-- `oci:quotas:get-quota` — Get quota by OCID.
+- `oci_limits_list_services` — List services with limits in a compartment.
+- `oci_limits_list_limit_values` — List limit values for a service.
+- `oci_quotas_list_quotas` — List quotas in a compartment.
+- `oci_quotas_get_quota` — Get quota by OCID.
 
 ## Usage
 Serve:
 ```
-mcp-oci-serve-limits --profile DEFAULT --region us-phoenix-1
+mcp-oci-serve limits --profile DEFAULT --region us-phoenix-1
 ```
 Dev calls:
 ```
-mcp-oci call limits oci:limits:list-services --params '{"compartment_id":"ocid1.compartment..."}'
-mcp-oci call limits oci:limits:list-limit-values --params '{"compartment_id":"ocid1.compartment...","service_name":"compute","scope_type":"REGION"}'
+mcp-oci call limits oci_limits_list_services --params '{"compartment_id":"ocid1.compartment..."}'
+mcp-oci call limits oci_limits_list_limit_values --params '{"compartment_id":"ocid1.compartment...","service_name":"compute","scope_type":"REGION"}'
 ```
 
 ## Next

@@ -4,10 +4,6 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app, Counter, Histogram
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 try:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 except Exception:
@@ -85,7 +81,6 @@ try:
 except Exception:
     templates = None
 
-import importlib
 
 def get_server_tools(server_name, status):
     """Get tool information for each MCP server type"""

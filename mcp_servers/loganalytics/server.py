@@ -8,12 +8,12 @@ Includes security analysis, MITRE ATT&CK integration, and advanced analytics.
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from dataclasses import dataclass
 
 from mcp_oci_common import get_oci_config
 from mcp_oci_common.response import with_meta
-from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 from opentelemetry import trace
 
 import oci  # type: ignore
@@ -472,7 +472,7 @@ def execute_query(
                     "validation": validation_issues if validation_issues['warnings'] or validation_issues['suggestions'] else None
                 },
                 success=True,
-                message=f"Query executed successfully. Found {len(results)} results." + (f" (Query was enhanced)" if query_to_execute != query else "")
+                message=f"Query executed successfully. Found {len(results)} results." + (" (Query was enhanced)" if query_to_execute != query else "")
             )
         except Exception as e:
             return with_meta(

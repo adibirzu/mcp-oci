@@ -12,24 +12,24 @@ make setup
 Use `~/.oci/config` or env vars; pass defaults via serve flags.
 
 ## Tools / Resources
-- `oci:networking:list-vcns` — List VCNs in a compartment.
-- `oci:networking:list-vcns-by-dns` — Filter VCNs by `dns_label` (client-side filter).
-- `oci:networking:list-subnets` — List subnets; optional VCN filter.
-- `oci:networking:list-route-tables` — List route tables; optional VCN filter.
-- `oci:networking:list-security-lists` — List security lists; optional VCN filter.
-- `oci:networking:create-vcn` — Mutating. Create VCN (confirm/dry_run supported).
+- `oci_networking_list_vcns` — List VCNs in a compartment.
+- `oci_networking_list_vcns_by_dns` — Filter VCNs by `dns_label` (client-side filter).
+- `oci_networking_list_subnets` — List subnets; optional VCN filter.
+- `oci_networking_list_route_tables` — List route tables; optional VCN filter.
+- `oci_networking_list_security_lists` — List security lists; optional VCN filter.
+- `oci_networking_create_vcn` — Mutating. Create VCN (confirm/dry_run supported).
 
 ## Usage
 Serve:
 ```
-mcp-oci-serve-networking --profile DEFAULT --region us-phoenix-1
+mcp-oci-serve networking --profile DEFAULT --region us-phoenix-1
 ```
 Dev calls:
 ```
-mcp-oci call networking oci:networking:list-vcns --params '{"compartment_id":"ocid1.compartment..."}'
-mcp-oci call networking oci:networking:list-vcns-by-dns --params '{"compartment_id":"ocid1.compartment...","dns_label":"demo"}'
+mcp-oci call networking oci_networking_list_vcns --params '{"compartment_id":"ocid1.compartment..."}'
+mcp-oci call networking oci_networking_list_vcns_by_dns --params '{"compartment_id":"ocid1.compartment...","dns_label":"demo"}'
 \# Dry run then confirm a mutating call
-mcp-oci call networking oci:networking:create-vcn --params '{"compartment_id":"ocid1.compartment...","cidr_block":"10.0.0.0/16","display_name":"demo","dry_run":true}'
+mcp-oci call networking oci_networking_create_vcn --params '{"compartment_id":"ocid1.compartment...","cidr_block":"10.0.0.0/16","display_name":"demo","dry_run":true}'
 ```
 
 ## Next

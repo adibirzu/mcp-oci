@@ -1,7 +1,6 @@
 # oci_mcp_observability_server.py
 
 import os
-import sys
 import json
 import logging
 from datetime import datetime, timezone, timedelta
@@ -10,7 +9,7 @@ from typing import Dict, Optional, List
 # ----- Observability bootstrap -----
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 from mcp_oci_common.privacy import privacy_enabled, redact_payload
-from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer, MCPObservabilityEnhancer
+from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer
 
 # ----- OCI SDK -----
 import oci
