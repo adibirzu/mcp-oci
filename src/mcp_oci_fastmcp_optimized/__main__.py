@@ -4,11 +4,9 @@ Clear, Claude-friendly responses with auto-discovery
 """
 
 import argparse
-import sys
-from typing import Optional
 
-from .loganalytics import run_loganalytics_optimized
 from .iam import run_iam_optimized
+from .loganalytics import run_loganalytics_optimized
 
 
 def main():

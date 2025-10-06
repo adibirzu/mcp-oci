@@ -32,6 +32,7 @@ mcp-oci call networking oci:networking:create-vcn --params '{"compartment_id":"o
 - list-route-tables: `compartment_id` (required), `vcn_id?`, `limit?`, `page?`.
 - list-security-lists: `compartment_id` (required), `vcn_id?`, `limit?`, `page?`.
 - create-vcn: `compartment_id`, `cidr_block`, `display_name` (required); `dns_label?`, `dry_run?`, `confirm?`.
+  - Performance: list-vcns/list-subnets/list-security-lists cache results and update name→OCID mappings to reduce repeated calls. Subsequent lookups by name (e.g., filtering flows) can be resolved without extra API requests.
 
 ## Responses
 - Responses include `opc_request_id` and pagination tokens where available.

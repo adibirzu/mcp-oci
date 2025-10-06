@@ -12,22 +12,20 @@ Key Features:
 - Comprehensive error handling
 """
 
-import os
-import sys
 import json
+import os
 import time
-import traceback
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
-from functools import wraps, lru_cache
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 # OCI SDK
 try:
     import oci
-    from oci.config import from_file as oci_from_file, DEFAULT_LOCATION as OCI_CFG_DEFAULT
-    from oci.exceptions import ServiceError, ConfigFileNotFound, InvalidConfig
+    from oci.config import DEFAULT_LOCATION as OCI_CFG_DEFAULT
+    from oci.config import from_file as oci_from_file
+    from oci.exceptions import ConfigFileNotFound, InvalidConfig, ServiceError
 except ImportError:
     raise SystemExit("OCI Python SDK not installed. Install with: pip install oci")
 
@@ -58,10 +56,10 @@ class CacheEntry:
 
 class ResponseCache:
     def __init__(self, default_ttl: float = CACHE_TTL):
-        self.cache: Dict[str, CacheEntry] = {}
+        self.cache: dict[str, CacheEntry] = {}
         self.default_ttl = default_ttl
     
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         if key not in self.cache:
             return None
         
@@ -72,7 +70,7 @@ class ResponseCache:
         
         return entry.data
     
-    def set(self, key: str, data: Any, ttl: Optional[float] = None) -> None:
+    def set(self, key: str, data: Any, ttl: float | None = None) -> None:
         self.cache[key] = CacheEntry(
             data=data,
             timestamp=time.time(),
@@ -145,7 +143,7 @@ def _shrink_for_context(data: Any, max_items: int = MAX_ITEMS, max_string: int =
     
     return data, False
 
-def _ok(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _ok(payload: dict[str, Any]) -> dict[str, Any]:
     """Create success response with context shrinking."""
     payload.setdefault("success", True)
     payload.setdefault("timestamp", datetime.now().isoformat())
@@ -155,7 +153,7 @@ def _ok(payload: Dict[str, Any]) -> Dict[str, Any]:
         shrunk.setdefault("_truncation_limits", {"max_items": MAX_ITEMS, "max_string": MAX_STRING, "max_depth": MAX_DEPTH})
     return shrunk
 
-def _err(error: Exception, operation: str, service: str = None) -> Dict[str, Any]:
+def _err(error: Exception, operation: str, service: str = None) -> dict[str, Any]:
     """Create error response with enhanced context."""
     return {
         "success": False,
@@ -276,7 +274,7 @@ def get_clients() -> OptimizedClients:
 
 # ================================ COMPARTMENT DISCOVERY ================================
 
-def get_available_compartments(limit: int = 100) -> List[Dict[str, Any]]:
+def get_available_compartments(limit: int = 100) -> list[dict[str, Any]]:
     """Get available compartments starting from root tenancy."""
     try:
         identity_client = clients.identity
@@ -308,7 +306,7 @@ def validate_compartment_id(compartment_id: str) -> bool:
     """Validate compartment ID format."""
     return compartment_id and (compartment_id.startswith("ocid1.compartment.") or compartment_id.startswith("ocid1.tenancy."))
 
-def _get_compartment_guidance() -> Dict[str, Any]:
+def _get_compartment_guidance() -> dict[str, Any]:
     """Get helpful guidance for compartment selection."""
     try:
         compartments = get_available_compartments(20)  # Get first 20 compartments

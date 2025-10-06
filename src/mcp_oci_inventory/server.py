@@ -3,13 +3,13 @@
 Wraps Oracle's showoci example to provide inventory reports via MCP tools.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:inventory:showoci-scan",
+            "name": "oci_inventory_showoci_scan",
             "description": "Run showoci to gather inventory; returns stdout (requires local clone).",
             "parameters": {
                 "type": "object",
@@ -27,11 +27,12 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def showoci_scan(regions: Optional[str] = None, profile: Optional[str] = None, tenancy: Optional[str] = None,
-                 path: Optional[str] = None, extra_args: Optional[str] = None, expect_json: bool = False) -> Dict[str, Any]:
+def showoci_scan(regions: str | None = None, profile: str | None = None, tenancy: str | None = None,
+                 path: str | None = None, extra_args: str | None = None, expect_json: bool = False) -> dict[str, Any]:
     import os
     import shlex
     import subprocess
+
     from mcp_oci_common.parsing import parse_json_loose, parse_kv_lines
 
     script = path or os.environ.get("SHOWOCI_PATH") or "third_party/oci-python-sdk/examples/showoci/showoci.py"
@@ -46,10 +47,10 @@ def showoci_scan(regions: Optional[str] = None, profile: Optional[str] = None, t
         cmd += ["-t", tenancy]
     if extra_args:
         cmd += shlex.split(extra_args)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"showoci failed: {proc.stderr.strip()}")
-    out: Dict[str, Any] = {"stdout": proc.stdout}
+    out: dict[str, Any] = {"stdout": proc.stdout}
     if expect_json:
         parsed = parse_json_loose(proc.stdout)
         if parsed is None:

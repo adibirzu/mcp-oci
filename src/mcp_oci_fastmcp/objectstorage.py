@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Optimized Objectstorage MCP Server
+Based on official OCI Python SDK patterns and shared architecture
+"""
+
 from __future__ import annotations
 
 try:
@@ -8,71 +14,160 @@ except Exception as e:  # pragma: no cover
 else:
     _import_error = None
 
+from .shared_architecture import (
+    OCIResponse,
+    clients,
+    create_common_tools,
+    format_for_llm,
+    handle_oci_error,
+    validate_compartment_id,
+)
 
-def run_objectstorage(*, profile: str | None = None, region: str | None = None, server_name: str = "oci-objectstorage-fast") -> None:
+
+def run_objectstorage(*, profile: str | None = None, region: str | None = None, server_name: str = "mcp_oci_objectstorage") -> None:
+    """Serve an optimized FastMCP app for objectstorage operations."""
     if FastMCP is None:
         raise SystemExit(
             f"fastmcp is not installed. Install with: pip install fastmcp\nOriginal import error: {_import_error}"
         )
-    from mcp_oci_objectstorage.server import (
-        list_buckets,
-        get_bucket,
-        list_objects,
-        head_object,
-        get_namespace,
-        list_preauth_requests,
-        create_preauth_request,
-    )
+
+    # Set environment variables if provided
+    if profile:
+        import os
+        os.environ["OCI_PROFILE"] = profile
+    if region:
+        import os
+        os.environ["OCI_REGION"] = region
 
     app = FastMCP(server_name)
 
-    def _with_defaults(kwargs):
-        if profile and "profile" not in kwargs:
-            kwargs["profile"] = profile
-        if region and "region" not in kwargs:
-            kwargs["region"] = region
-        # Remove the _with_defaults key if it exists
-        kwargs.pop("_with_defaults", None)
-        return kwargs
+    # Create common tools
+    create_common_tools(app, server_name)
+
+    # Object Storage-specific tools
+    @app.tool()
+    async def get_namespace() -> str:
+        """Get the Object Storage namespace for the tenancy."""
+        try:
+            object_storage_client = clients.object_storage
+            response = object_storage_client.get_namespace()
+            
+            namespace = response.data
+            
+            result = OCIResponse(
+                success=True,
+                message="Object Storage namespace retrieved successfully",
+                data={"namespace": namespace},
+                namespace=namespace
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "get_namespace", "object_storage")
+            return result.to_dict()
 
     @app.tool()
-    async def oci_objectstorage_list_buckets(namespace_name: str, compartment_id: str, limit: int = None, page: str = None,
-                                             profile: str = None, region: str = None):
-        return list_buckets(**_with_defaults(locals()))
+    async def list_buckets(
+        namespace_name: str,
+        compartment_id: str | None = None,
+        name: str | None = None,
+        name_starts_with: str | None = None,
+        limit: int = 50
+    ) -> str:
+        """List Object Storage buckets using official OCI SDK patterns."""
+        try:
+            # Use root compartment if not specified
+            if compartment_id is None:
+                compartment_id = clients.root_compartment_id
+            elif not validate_compartment_id(compartment_id):
+                raise ValueError("Invalid compartment ID format")
+            
+            object_storage_client = clients.object_storage
+            
+            # Use official OCI SDK method pattern
+            response = object_storage_client.list_buckets(
+                namespace_name=namespace_name,
+                compartment_id=compartment_id,
+                name=name,
+                name_starts_with=name_starts_with,
+                limit=limit
+            )
+            
+            buckets = []
+            for bucket in response.data.items:
+                buckets.append({
+                    "name": bucket.name,
+                    "compartment_id": bucket.compartment_id,
+                    "time_created": bucket.time_created.isoformat() if bucket.time_created else None,
+                    "created_by": bucket.created_by,
+                    "namespace": bucket.namespace,
+                    "approx_num_objects": bucket.approx_num_objects,
+                    "approx_total_size": bucket.approx_total_size,
+                    "public_access_type": bucket.public_access_type,
+                    "storage_tier": bucket.storage_tier,
+                    "etag": bucket.etag
+                })
+            
+            formatted_buckets = format_for_llm(buckets, limit)
+            
+            result = OCIResponse(
+                success=True,
+                message=f"Found {len(formatted_buckets)} Object Storage buckets",
+                data=formatted_buckets,
+                count=len(formatted_buckets),
+                compartment_id=compartment_id,
+                namespace=namespace_name
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "list_buckets", "object_storage")
+            return result.to_dict()
 
     @app.tool()
-    async def oci_objectstorage_get_bucket(namespace_name: str, bucket_name: str, profile: str = None, region: str = None):
-        return get_bucket(**_with_defaults(locals()))
-
-    @app.tool()
-    async def oci_objectstorage_list_objects(namespace_name: str, bucket_name: str, prefix: str = None,
-                                             limit: int = None, page: str = None,
-                                             profile: str = None, region: str = None):
-        return list_objects(**_with_defaults(locals()))
-
-    @app.tool()
-    async def oci_objectstorage_head_object(namespace_name: str, bucket_name: str, object_name: str,
-                                            profile: str = None, region: str = None):
-        return head_object(**_with_defaults(locals()))
-
-    @app.tool()
-    async def oci_objectstorage_get_namespace(compartment_id: str = None, profile: str = None, region: str = None):
-        return get_namespace(**_with_defaults(locals()))
-
-    @app.tool()
-    async def oci_objectstorage_list_preauth_requests(namespace_name: str, bucket_name: str, object_name: str = None,
-                                                      limit: int = None, page: str = None,
-                                                      profile: str = None, region: str = None):
-        return list_preauth_requests(**_with_defaults(locals()))
-
-    @app.tool()
-    async def oci_objectstorage_create_preauth_request(namespace_name: str, bucket_name: str, name: str, access_type: str,
-                                                       time_expires: str, object_name: str = None,
-                                                       profile: str = None, region: str = None):
-        return create_preauth_request(**_with_defaults(locals()))
-
-    @app.tool()
-    async def get_server_info():
-        return {"name": server_name, "framework": "fastmcp", "service": "objectstorage", "defaults": {"profile": profile, "region": region}}
+    async def list_objects(
+        namespace_name: str,
+        bucket_name: str,
+        prefix: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 50
+    ) -> str:
+        """List objects in an Object Storage bucket using official OCI SDK patterns."""
+        try:
+            object_storage_client = clients.object_storage
+            
+            # Use official OCI SDK method pattern
+            response = object_storage_client.list_objects(
+                namespace_name=namespace_name,
+                bucket_name=bucket_name,
+                prefix=prefix,
+                start=start,
+                end=end,
+                limit=limit
+            )
+            
+            objects = []
+            for obj in response.data.objects:
+                objects.append({
+                    "name": obj.name,
+                    "size": obj.size,
+                    "md5": obj.md5,
+                    "time_created": obj.time_created.isoformat() if obj.time_created else None,
+                    "etag": obj.etag,
+                    "storage_tier": obj.storage_tier
+                })
+            
+            formatted_objects = format_for_llm(objects, limit)
+            
+            result = OCIResponse(
+                success=True,
+                message=f"Found {len(formatted_objects)} objects in bucket {bucket_name}",
+                data=formatted_objects,
+                count=len(formatted_objects),
+                namespace=namespace_name
+            )
+            return result.to_dict()
+        except Exception as e:
+            result = handle_oci_error(e, "list_objects", "object_storage")
+            return result.to_dict()
 
     app.run()

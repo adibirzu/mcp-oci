@@ -4,9 +4,12 @@ Exposes tools as `oci:iam:<action>` following AWS MCP best practices.
 Focus: read/list operations first; add write ops with explicit confirmation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -14,20 +17,20 @@ except Exception:  # pragma: no cover - SDK may not be installed locally
     oci = None  # fallback for docs/tests without SDK
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.identity.IdentityClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     """Register MCP tools for IAM.
 
     Returns a list of tool specs; wire these into your MCP framework adapter.
     """
-    tools: List[Dict[str, Any]] = [
+    tools: list[dict[str, Any]] = [
         {
-            "name": "oci:iam:list-users",
+            "name": "oci_iam_list_users",
             "description": "List IAM users in a compartment; optional exact name filter.",
             "parameters": {
                 "type": "object",
@@ -44,7 +47,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_users,  # to be wired by the MCP runtime
         },
         {
-            "name": "oci:iam:list-policy-statements",
+            "name": "oci_iam_list_policy_statements",
             "description": "List policy statements (strings) in a compartment.",
             "parameters": {
                 "type": "object",
@@ -60,7 +63,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_policy_statements,
         },
         {
-            "name": "oci:iam:list-api-keys",
+            "name": "oci_iam_list_api_keys",
             "description": "List API keys for a user.",
             "parameters": {
                 "type": "object",
@@ -74,7 +77,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_api_keys,
         },
         {
-            "name": "oci:iam:add-user-to-group",
+            "name": "oci_iam_add_user_to_group",
             "description": "Add a user to a group (confirm=true required; supports dry_run).",
             "parameters": {
                 "type": "object",
@@ -92,7 +95,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:iam:get-user",
+            "name": "oci_iam_get_user",
             "description": "Get a user by OCID.",
             "parameters": {
                 "type": "object",
@@ -106,7 +109,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": get_user,
         },
         {
-            "name": "oci:iam:list-compartments",
+            "name": "oci_iam_list_compartments",
             "description": "List compartments with optional subtree traversal.",
             "parameters": {
                 "type": "object",
@@ -124,7 +127,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_compartments,
         },
         {
-            "name": "oci:iam:list-groups",
+            "name": "oci_iam_list_groups",
             "description": "List groups in a compartment.",
             "parameters": {
                 "type": "object",
@@ -140,7 +143,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_groups,
         },
         {
-            "name": "oci:iam:list-policies",
+            "name": "oci_iam_list_policies",
             "description": "List policies in a compartment.",
             "parameters": {
                 "type": "object",
@@ -156,7 +159,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_policies,
         },
         {
-            "name": "oci:iam:list-user-groups",
+            "name": "oci_iam_list_user_groups",
             "description": "List group memberships for a user; optionally expand group details.",
             "parameters": {
                 "type": "object",
@@ -174,7 +177,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_user_groups,
         },
         {
-            "name": "oci:iam:list-dynamic-groups",
+            "name": "oci_iam_list_dynamic_groups",
             "description": "List dynamic groups in a compartment.",
             "parameters": {
                 "type": "object",
@@ -190,7 +193,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_dynamic_groups,
         },
         {
-            "name": "oci:iam:list-auth-tokens",
+            "name": "oci_iam_list_auth_tokens",
             "description": "List auth tokens for a user.",
             "parameters": {
                 "type": "object",
@@ -207,23 +210,37 @@ def register_tools() -> List[Dict[str, Any]]:
     return tools
 
 
-def list_users(compartment_id: str, name: Optional[str] = None, limit: Optional[int] = None, page: Optional[str] = None,
-               profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_users(compartment_id: str, name: str | None = None, limit: int | None = None, page: str | None = None,
+               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    registry = get_registry()
+    kwargs: dict[str, Any] = {}
     if name:
         kwargs["name"] = name
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "name": name, "limit": limit, "page": page}
+    cached = cache.get("iam", "list_users", cache_params)
+    if cached:
+        return cached
     resp = client.list_users(compartment_id=compartment_id, **kwargs)
     users = [u.data.__dict__ if hasattr(u, "data") else u.__dict__ for u in resp.data] if hasattr(resp, "data") else []
+    if users:
+        try:
+            registry.update_users(users)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": users}, next_page=next_page)
+    out = with_meta(resp, {"items": users}, next_page=next_page)
+    # IAM data is stable; cache for 6h
+    cache.set("iam", "list_users", cache_params, out, ttl_seconds=21600)
+    return out
 
 
-def get_user(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_user(user_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_user(user_id)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
@@ -231,12 +248,12 @@ def get_user(user_id: str, profile: Optional[str] = None, region: Optional[str] 
 
 
 def list_compartments(compartment_id: str, include_subtree: bool = True, access_level: str = "ANY",
-                      limit: Optional[int] = None, page: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                      limit: int | None = None, page: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     """List compartments with enhanced error handling and helpful hints"""
     try:
         client = create_client(profile=profile, region=region)
-        kwargs: Dict[str, Any] = {"compartment_id_in_subtree": include_subtree, "access_level": access_level}
+        kwargs: dict[str, Any] = {"compartment_id_in_subtree": include_subtree, "access_level": access_level}
         if limit:
             kwargs["limit"] = limit
         if page:
@@ -246,6 +263,12 @@ def list_compartments(compartment_id: str, include_subtree: bool = True, access_
         items = [c.__dict__ for c in getattr(resp, "data", [])]
         next_page = getattr(resp, "opc_next_page", None)
         
+        # Update registry for name→OCID
+        try:
+            from mcp_oci_common.name_registry import get_registry as _get_reg
+            _get_reg().update_compartments(items)
+        except Exception:
+            pass
         result = with_meta(resp, {"items": items}, next_page=next_page)
         
         # Add helpful hints for common issues
@@ -288,10 +311,10 @@ def list_compartments(compartment_id: str, include_subtree: bool = True, access_
         }
 
 
-def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_groups(compartment_id: str, limit: int | None = None, page: str | None = None,
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -302,10 +325,10 @@ def list_groups(compartment_id: str, limit: Optional[int] = None, page: Optional
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_policies(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                  profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_policies(compartment_id: str, limit: int | None = None, page: str | None = None,
+                  profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -316,10 +339,10 @@ def list_policies(compartment_id: str, limit: Optional[int] = None, page: Option
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_dynamic_groups(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_dynamic_groups(compartment_id: str, limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -330,7 +353,7 @@ def list_dynamic_groups(compartment_id: str, limit: Optional[int] = None, page: 
     return {"items": items, "next_page": next_page}
 
 
-def list_auth_tokens(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_auth_tokens(user_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.list_auth_tokens(user_id=user_id)
     items = [t.__dict__ for t in getattr(resp, "data", [])]
@@ -338,10 +361,10 @@ def list_auth_tokens(user_id: str, profile: Optional[str] = None, region: Option
 
 
 def list_user_groups(compartment_id: str, user_id: str, include_groups: bool = False,
-                     limit: Optional[int] = None, page: Optional[str] = None,
-                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                     limit: int | None = None, page: str | None = None,
+                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {"user_id": user_id}
+    kwargs: dict[str, Any] = {"user_id": user_id}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -349,9 +372,9 @@ def list_user_groups(compartment_id: str, user_id: str, include_groups: bool = F
     resp = client.list_user_group_memberships(compartment_id=compartment_id, **kwargs)
     memberships = [m.__dict__ for m in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    result: Dict[str, Any] = with_meta(resp, {"items": memberships}, next_page=next_page)
+    result: dict[str, Any] = with_meta(resp, {"items": memberships}, next_page=next_page)
     if include_groups:
-        groups: List[Dict[str, Any]] = []
+        groups: list[dict[str, Any]] = []
         for m in getattr(resp, "data", []) or []:
             gid = getattr(m, "group_id", None) or (m.get("group_id") if isinstance(m, dict) else None)
             if gid:
@@ -364,16 +387,16 @@ def list_user_groups(compartment_id: str, user_id: str, include_groups: bool = F
     return result
 
 
-def list_policy_statements(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-                           profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_policy_statements(compartment_id: str, limit: int | None = None, page: str | None = None,
+                           profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
     resp = client.list_policies(compartment_id=compartment_id, **kwargs)
-    statements: List[str] = []
+    statements: list[str] = []
     for p in getattr(resp, "data", []) or []:
         stmts = getattr(p, "statements", None) or (p.get("statements") if isinstance(p, dict) else None)
         if stmts:
@@ -383,7 +406,7 @@ def list_policy_statements(compartment_id: str, limit: Optional[int] = None, pag
 
 
 def add_user_to_group(user_id: str, group_id: str, dry_run: bool = False, confirm: bool = False,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     details = {"user_id": user_id, "group_id": group_id}
@@ -396,7 +419,7 @@ def add_user_to_group(user_id: str, group_id: str, dry_run: bool = False, confir
     return with_meta(resp, {"item": data})
 
 
-def list_api_keys(user_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_api_keys(user_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.list_api_keys(user_id=user_id)
     items = [k.__dict__ for k in getattr(resp, "data", [])]

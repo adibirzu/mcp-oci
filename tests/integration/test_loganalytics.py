@@ -1,5 +1,7 @@
 import datetime as dt
+
 import pytest
+
 from mcp_oci_loganalytics.server import run_query
 
 

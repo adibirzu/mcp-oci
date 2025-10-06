@@ -1,0 +1,62 @@
+# Grafana Alloy configuration to act as the local OTEL collector replacement.
+# - Receives OTLP metrics/traces on 4317 (gRPC) and 4318 (HTTP)
+# - Exposes Prometheus scrape endpoint on 8889 (matching Prometheus config)
+# - Forwards traces to local Tempo listening on 4318 HTTP (see ops/tempo/tempo.yaml)
+# - Adds a batch processor for better export performance
+
+otelcol.receiver.otlp "ingest" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+}
+
+# Batch processor for traces/metrics
+otelcol.processor.batch "default" {}
+
+# Prometheus exporter (Alloy exposes a scrape endpoint)
+otelcol.exporter.prometheus "export" {
+  endpoint = "0.0.0.0:8889"
+  # Optional: add_metric_suffixes = true
+}
+
+# Export traces to Tempo via OTLP HTTP at localhost:4318 (Tempo OTLP HTTP receiver)
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "http://localhost:4318"
+  }
+}
+
+# Optionally translate internal resource attributes, or attach environment defaults.
+# These can also be applied at the application layer; included here for reference.
+# otelcol.processor.resource "attrs" {
+#   attributes {
+#     action = "upsert"
+#     key    = "service.namespace"
+#     value  = "mcp-oci"
+#   }
+#   attributes {
+#     action = "upsert"
+#     key    = "deployment.environment"
+#     value  = "local"
+#   }
+# }
+
+otelcol.service "pipelines" {
+  # Metrics pipeline: OTLP receiver -> batch -> Prometheus exporter
+  pipelines {
+    metrics {
+      receivers  = [otelcol.receiver.otlp.ingest]
+      processors = [otelcol.processor.batch.default]
+      exporters  = [otelcol.exporter.prometheus.export]
+    }
+    # Traces pipeline: OTLP receiver -> batch -> Tempo
+    traces {
+      receivers  = [otelcol.receiver.otlp.ingest]
+      processors = [otelcol.processor.batch.default]
+      exporters  = [otelcol.exporter.otlp.tempo]
+    }
+  }
+}

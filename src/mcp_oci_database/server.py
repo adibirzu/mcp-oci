@@ -1,7 +1,8 @@
 """MCP Server: OCI Database (Autonomous)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,16 +12,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.database.DatabaseClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:database:list-autonomous-databases",
+            "name": "oci_database_list_autonomous_databases",
             "description": "List Autonomous Databases in a compartment.",
             "parameters": {
                 "type": "object",
@@ -37,7 +38,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_autonomous_databases,
         },
         {
-            "name": "oci:database:list-db-systems",
+            "name": "oci_database_list_db_systems",
             "description": "List DB Systems in a compartment.",
             "parameters": {
                 "type": "object",
@@ -54,7 +55,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_db_systems,
         },
         {
-            "name": "oci:database:list-backups",
+            "name": "oci_database_list_backups",
             "description": "List database backups in a compartment.",
             "parameters": {
                 "type": "object",
@@ -75,11 +76,11 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_autonomous_databases(compartment_id: str, lifecycle_state: Optional[str] = None,
-                              limit: Optional[int] = None, page: Optional[str] = None,
-                              profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_autonomous_databases(compartment_id: str, lifecycle_state: str | None = None,
+                              limit: int | None = None, page: str | None = None,
+                              profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if lifecycle_state:
         kwargs["lifecycle_state"] = lifecycle_state
     if limit:
@@ -92,10 +93,10 @@ def list_autonomous_databases(compartment_id: str, lifecycle_state: Optional[str
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_db_systems(compartment_id: str, lifecycle_state: Optional[str] = None, limit: Optional[int] = None,
-                    page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_db_systems(compartment_id: str, lifecycle_state: str | None = None, limit: int | None = None,
+                    page: str | None = None, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if lifecycle_state:
         kwargs["lifecycle_state"] = lifecycle_state
     if limit:
@@ -108,11 +109,11 @@ def list_db_systems(compartment_id: str, lifecycle_state: Optional[str] = None, 
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_backups(compartment_id: str, db_system_id: Optional[str] = None, database_id: Optional[str] = None,
-                 lifecycle_state: Optional[str] = None, limit: Optional[int] = None, page: Optional[str] = None,
-                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_backups(compartment_id: str, db_system_id: str | None = None, database_id: str | None = None,
+                 lifecycle_state: str | None = None, limit: int | None = None, page: str | None = None,
+                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if db_system_id:
         kwargs["db_system_id"] = db_system_id
     if database_id:

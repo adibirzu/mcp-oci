@@ -1,0 +1,107 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Observability infrastructure
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['localhost:8889']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['localhost:14269']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'tempo'
+    static_configs:
+      - targets: ['localhost:3200']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'pyroscope'
+    static_configs:
+      - targets: ['localhost:4040']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # MCP applications (containerized)
+  - job_name: 'obs-app'
+    static_configs:
+      - targets: ['localhost:8000']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # MCP servers (host services) - using localhost
+  - job_name: 'ux-app-host'
+    static_configs:
+      - targets: ['localhost:8010']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-compute'
+    static_configs:
+      - targets: ['localhost:8001']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-db'
+    static_configs:
+      - targets: ['localhost:8002']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-observability'
+    static_configs:
+      - targets: ['localhost:8003']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-security'
+    static_configs:
+      - targets: ['localhost:8004']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-cost'
+    static_configs:
+      - targets: ['localhost:8005']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-network'
+    static_configs:
+      - targets: ['localhost:8006']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-blockstorage'
+    static_configs:
+      - targets: ['localhost:8007']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-loadbalancer'
+    static_configs:
+      - targets: ['localhost:8008']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-inventory'
+    static_configs:
+      - targets: ['localhost:8009']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'mcp-agents'
+    static_configs:
+      - targets: ['localhost:8011']
+    scrape_interval: 30s
+    metrics_path: /metrics

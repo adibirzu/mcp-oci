@@ -1,0 +1,169 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=grafana-pyroscope-datasource
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - tempo
+      - pyroscope
+      - jaeger
+    networks:
+      - default
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    network_mode: host
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.listen-address=0.0.0.0:9090'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    user: "0:0"  # Run as root to avoid permission issues
+    ports:
+      - "3200:3200"  # HTTP
+      - "4318:4318"  # OTLP HTTP
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    # Health check disabled - Tempo doesn't have curl/wget in container
+    # Manual verification: curl http://localhost:3200/api/echo
+    restart: unless-stopped
+    networks:
+      - default
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"  # agent zipkin thrift
+      - "6831:6831/udp"  # agent jaeger thrift compact
+      - "6832:6832/udp"  # agent jaeger thrift binary
+      - "5778:5778"      # agent config
+      - "16686:16686"    # query frontend
+      - "14250:14250"    # grpc
+      - "14268:14268"    # jaeger thrift
+      - "14269:14269"    # admin/metrics port
+      - "14317:4317"     # OTLP gRPC receiver
+      - "14318:4318"     # OTLP HTTP receiver
+      - "9411:9411"      # zipkin
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - METRICS_BACKEND=prometheus
+      - PROMETHEUS_SERVER_URL=http://localhost:9090
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:14269/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - default
+
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    ports:
+      - "4040:4040"  # Pyroscope UI
+      - "7946:7946"  # Memberlist
+    volumes:
+      - ./pyroscope:/var/lib/pyroscope
+      - ./pyroscope/pyroscope.yaml:/etc/pyroscope.yaml
+    command: ["--config.file=/etc/pyroscope.yaml"]
+    # Health check disabled - manual verification: curl http://localhost:4040
+    restart: unless-stopped
+    networks:
+      - default
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "8889:8889"  # Prometheus exporter
+    volumes:
+      - ./otel/otel-collector.yaml:/etc/otel-collector.yaml
+    command: ["--config=/etc/otel-collector.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:8889/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      - tempo
+      - prometheus
+      - jaeger
+    restart: unless-stopped
+    networks:
+      - default
+
+  obs-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: obs-app
+    ports:
+      - "8000:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040
+      - ENABLE_PYROSCOPE=true
+      - OTEL_SERVICE_NAME=mcp-ux
+      - PYROSCOPE_APP_NAME=mcp-ux
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  tempo-data:
+
+networks:
+  default:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

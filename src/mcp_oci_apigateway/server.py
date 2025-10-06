@@ -1,7 +1,8 @@
 """MCP Server: OCI API Gateway
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,16 +12,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.apigateway.GatewayClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:apigateway:list-gateways",
+            "name": "oci_apigateway_list_gateways",
             "description": "List API Gateways in a compartment.",
             "parameters": {
                 "type": "object",
@@ -37,7 +38,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_gateways,
         },
         {
-            "name": "oci:apigateway:get-gateway",
+            "name": "oci_apigateway_get_gateway",
             "description": "Get an API Gateway by OCID.",
             "parameters": {
                 "type": "object",
@@ -53,10 +54,10 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_gateways(compartment_id: str, display_name: Optional[str] = None, limit: Optional[int] = None,
-                  page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_gateways(compartment_id: str, display_name: str | None = None, limit: int | None = None,
+                  page: str | None = None, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if display_name:
         kwargs["display_name"] = display_name
     if limit:
@@ -69,7 +70,7 @@ def list_gateways(compartment_id: str, display_name: Optional[str] = None, limit
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_gateway(gateway_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_gateway(gateway_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_gateway(gateway_id)
     data = getattr(resp, "data", None)

@@ -1,0 +1,160 @@
+[
+  {
+    "name": "oci-mcp-compute",
+    "command": ["python", "mcp_servers/compute/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-db",
+    "command": ["python", "mcp_servers/db/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-network",
+    "command": ["python", "mcp_servers/network/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-security",
+    "command": ["python", "mcp_servers/security/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-observability",
+    "command": ["python", "mcp_servers/observability/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "LA_NAMESPACE": "${LA_NAMESPACE}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-cost",
+    "command": ["python", "-m", "mcp_servers.cost.server"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-inventory",
+    "command": ["python", "mcp_servers/inventory/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-blockstorage",
+    "command": ["python", "mcp_servers/blockstorage/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-loadbalancer",
+    "command": ["python", "mcp_servers/loadbalancer/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-agents",
+    "command": ["python", "mcp_servers/agents/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "GAI_ADMIN_ENDPOINT": "${GAI_ADMIN_ENDPOINT}",
+      "GAI_AGENT_ENDPOINT": "${GAI_AGENT_ENDPOINT}",
+      "GAI_AGENT_API_KEY": "${GAI_AGENT_API_KEY}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "MCP_OCI_PRIVACY": "true"
+    },
+    "transport": "stdio"
+  }
+]

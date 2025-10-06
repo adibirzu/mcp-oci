@@ -3,9 +3,12 @@
 Tools as `oci:objectstorage:<action>`.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -13,16 +16,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.object_storage.ObjectStorageClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:objectstorage:list-buckets",
+            "name": "oci_objectstorage_list_buckets",
             "description": "List buckets in a namespace/compartment.",
             "parameters": {
                 "type": "object",
@@ -39,7 +42,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_buckets,
         },
         {
-            "name": "oci:objectstorage:get-namespace",
+            "name": "oci_objectstorage_get_namespace",
             "description": "Get object storage namespace.",
             "parameters": {
                 "type": "object",
@@ -52,7 +55,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": get_namespace,
         },
         {
-            "name": "oci:objectstorage:list-objects",
+            "name": "oci_objectstorage_list_objects",
             "description": "List objects in a bucket.",
             "parameters": {
                 "type": "object",
@@ -70,7 +73,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_objects,
         },
         {
-            "name": "oci:objectstorage:get-bucket",
+            "name": "oci_objectstorage_get_bucket",
             "description": "Get bucket details.",
             "parameters": {
                 "type": "object",
@@ -85,7 +88,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": get_bucket,
         },
         {
-            "name": "oci:objectstorage:list-preauth-requests",
+            "name": "oci_objectstorage_list_preauth_requests",
             "description": "List preauthenticated requests for a bucket.",
             "parameters": {
                 "type": "object",
@@ -103,7 +106,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_preauth_requests,
         },
         {
-            "name": "oci:objectstorage:create-preauth-request",
+            "name": "oci_objectstorage_create_preauth_request",
             "description": "Create a preauthenticated request (requires confirm=true; supports dry_run).",
             "parameters": {
                 "type": "object",
@@ -125,7 +128,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:objectstorage:head-object",
+            "name": "oci_objectstorage_head_object",
             "description": "Get object metadata (HEAD).",
             "parameters": {
                 "type": "object",
@@ -143,23 +146,40 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_buckets(namespace_name: str, compartment_id: str, limit: Optional[int] = None,
-                 page: Optional[str] = None, profile: Optional[str] = None,
-                 region: Optional[str] = None) -> Dict[str, Any]:
+def list_buckets(namespace_name: str, compartment_id: str, limit: int | None = None,
+                 page: str | None = None, profile: str | None = None,
+                 region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    registry = get_registry()
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"namespace_name": namespace_name, "compartment_id": compartment_id, "limit": limit, "page": page}
+    cached = cache.get("objectstorage", "list_buckets", cache_params)
+    if cached:
+        return cached
     resp = client.list_buckets(namespace_name=namespace_name, compartment_id=compartment_id, **kwargs)
     items = [b.__dict__ for b in getattr(resp, "data", [])]
+    # Optional: record bucket names under applications_by_name map keyed by compartment
+    if items:
+        try:
+            # Reuse applications_by_name as a generic name store for bucket names
+            registry.update_applications(compartment_id, [{"id": f"bucket://{namespace_name}/{b.get('name')}", "display_name": b.get('name')} for b in items])
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_OBJECTSTORAGE", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("objectstorage", "list_buckets", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
-def get_namespace(compartment_id: Optional[str] = None, profile: Optional[str] = None,
-                  region: Optional[str] = None) -> Dict[str, Any]:
+def get_namespace(compartment_id: str | None = None, profile: str | None = None,
+                  region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     if compartment_id:
         resp = client.get_namespace(compartment_id=compartment_id)
@@ -169,11 +189,11 @@ def get_namespace(compartment_id: Optional[str] = None, profile: Optional[str] =
     return with_meta(resp, {"namespace": ns})
 
 
-def list_objects(namespace_name: str, bucket_name: str, prefix: Optional[str] = None,
-                 start: Optional[str] = None, limit: Optional[int] = None,
-                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_objects(namespace_name: str, bucket_name: str, prefix: str | None = None,
+                 start: str | None = None, limit: int | None = None,
+                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if prefix:
         kwargs["prefix"] = prefix
     if start:
@@ -189,8 +209,8 @@ def list_objects(namespace_name: str, bucket_name: str, prefix: Optional[str] = 
     return with_meta(resp, {"items": []})
 
 
-def get_bucket(namespace_name: str, bucket_name: str, profile: Optional[str] = None,
-               region: Optional[str] = None) -> Dict[str, Any]:
+def get_bucket(namespace_name: str, bucket_name: str, profile: str | None = None,
+               region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_bucket(namespace_name=namespace_name, bucket_name=bucket_name)
     data = resp.data.__dict__ if hasattr(resp, "data") else getattr(resp, "__dict__", {})
@@ -198,18 +218,18 @@ def get_bucket(namespace_name: str, bucket_name: str, profile: Optional[str] = N
 
 
 def head_object(namespace_name: str, bucket_name: str, object_name: str,
-                profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.head_object(namespace_name=namespace_name, bucket_name=bucket_name, object_name=object_name)
     headers = getattr(resp, "headers", {})
     return with_meta(resp, {"item": dict(headers)})
 
 
-def list_preauth_requests(namespace_name: str, bucket_name: str, object_name: Optional[str] = None,
-                          limit: Optional[int] = None, page: Optional[str] = None,
-                          profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_preauth_requests(namespace_name: str, bucket_name: str, object_name: str | None = None,
+                          limit: int | None = None, page: str | None = None,
+                          profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if object_name:
         kwargs["object_name"] = object_name
     if limit:
@@ -223,9 +243,9 @@ def list_preauth_requests(namespace_name: str, bucket_name: str, object_name: Op
 
 
 def create_preauth_request(namespace_name: str, bucket_name: str, name: str, access_type: str,
-                           time_expires: str, object_name: Optional[str] = None,
+                           time_expires: str, object_name: str | None = None,
                            dry_run: bool = False, confirm: bool = False,
-                           profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+                           profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     details = {
