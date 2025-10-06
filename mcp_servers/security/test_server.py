@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from .server import list_iam_users, list_groups, list_policies, list_cloud_guard_problems, list_data_safe_findings
 

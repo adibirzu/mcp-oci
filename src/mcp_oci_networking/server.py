@@ -9,6 +9,7 @@ from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.name_registry import get_registry
+from mcp_oci_common.observability import init_tracing, tool_span, add_oci_call_attributes
 
 try:
     import oci  # type: ignore
@@ -199,7 +200,9 @@ def list_nsgs(compartment_id: str, vcn_id: str | None = None, limit: int | None 
 
 def list_vcns(compartment_id: str, limit: int | None = None, page: str | None = None,
               profile: str | None = None, region: str | None = None) -> dict[str, Any]:
-    client = create_client(profile=profile, region=region)
+    tracer = init_tracing("mcp-oci-networking")
+    with tool_span(tracer, "oci_networking_list_vcns", mcp_server="oci-mcp-networking") as span:
+        client = create_client(profile=profile, region=region)
     cache = get_cache()
     registry = get_registry()
     kwargs: dict[str, Any] = {}
@@ -212,6 +215,17 @@ def list_vcns(compartment_id: str, limit: int | None = None, page: str | None = 
     if cached:
         return cached
     resp = client.list_vcns(compartment_id=compartment_id, **kwargs)
+    try:
+        add_oci_call_attributes(
+            span,
+            oci_service="core.networking",
+            oci_operation="ListVcns",
+            region=region,
+            endpoint=getattr(client, "base_client", None).endpoint if hasattr(client, "base_client") else None,
+            request_id=(getattr(resp, "headers", {}) or {}).get("opc-request-id") if hasattr(resp, "headers") else None,
+        )
+    except Exception:
+        pass
     items = [v.__dict__ for v in getattr(resp, "data", [])]
     if items:
         try:

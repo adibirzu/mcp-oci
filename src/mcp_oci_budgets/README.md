@@ -9,21 +9,21 @@ make setup
 ```
 
 ## Tools / Resources
-- `oci:budgets:list-budgets` — List budgets in a compartment.
-- `oci:budgets:get-budget` — Get a budget by OCID.
-- `oci:budgets:list-alert-rules` — List alert rules for a budget.
-- `oci:budgets:create-budget` — Mutating. Create budget (confirm/dry_run supported).
+- `oci_budgets_list_budgets` — List budgets in a compartment.
+- `oci_budgets_get_budget` — Get a budget by OCID.
+- `oci_budgets_list_alert_rules` — List alert rules for a budget.
+- `oci_budgets_create_budget` — Mutating. Create budget (confirm/dry_run supported).
 
 ## Usage
 Serve:
 ```
-mcp-oci-serve-budgets --profile DEFAULT --region us-phoenix-1
+mcp-oci-serve budgets --profile DEFAULT --region us-phoenix-1
 ```
 Dev calls:
 ```
-mcp-oci call budgets oci:budgets:list-budgets --params '{"compartment_id":"ocid1.compartment..."}'
+mcp-oci call budgets oci_budgets_list_budgets --params '{"compartment_id":"ocid1.compartment..."}'
 \# Mutating example
-mcp-oci call budgets oci:budgets:create-budget --params '{"compartment_id":"ocid1.compartment...","amount":100.0,"display_name":"demo","dry_run":true}'
+mcp-oci call budgets oci_budgets_create_budget --params '{"compartment_id":"ocid1.compartment...","amount":100.0,"display_name":"demo","dry_run":true}'
 ```
 
 ## Next

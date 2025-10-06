@@ -13,17 +13,12 @@ Features:
 - Client-controlled trace routing
 """
 
-import json
 import time
-import uuid
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-from datetime import datetime
+from dataclasses import dataclass
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace import TracerProvider, Span
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.util.types import Attributes
 
 
 @dataclass

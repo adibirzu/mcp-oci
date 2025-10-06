@@ -10,6 +10,7 @@ from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.name_registry import get_registry
+from mcp_oci_common.observability import init_tracing, tool_span, add_oci_call_attributes
 
 try:
     import oci  # type: ignore
@@ -261,7 +262,9 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
                    limit: int | None = None, page: str | None = None,
                    max_items: int | None = None,
                    profile: str | None = None, region: str | None = None) -> dict[str, Any]:
-    client = create_client(profile=profile, region=region)
+    tracer = init_tracing("mcp-oci-compute")
+    with tool_span(tracer, "oci_compute_list_instances", mcp_server="oci-mcp-compute") as span:
+        client = create_client(profile=profile, region=region)
     cache = get_cache()
     registry = get_registry()
     # Resolve root compartment (tenancy) if not provided
@@ -352,6 +355,17 @@ def list_instances(compartment_id: str | None = None, compartment_name: str | No
             if next_token:
                 kwargs_req["page"] = next_token
             resp = client.list_instances(compartment_id=comp_id, **kwargs_req)
+            try:
+                add_oci_call_attributes(
+                    span,
+                    oci_service="core.compute",
+                    oci_operation="ListInstances",
+                    region=region,
+                    endpoint=getattr(client, "base_client", None).endpoint if hasattr(client, "base_client") else None,
+                    request_id=(getattr(resp, "headers", {}) or {}).get("opc-request-id") if hasattr(resp, "headers") else None,
+                )
+            except Exception:
+                pass
             items = [i.data.__dict__ if hasattr(i, "data") else i.__dict__ for i in getattr(resp, "data", [])]
             if items:
                 items = [i for i in items if _instance_matches_filters(

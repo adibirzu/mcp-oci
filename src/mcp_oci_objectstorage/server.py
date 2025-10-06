@@ -9,6 +9,7 @@ from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.name_registry import get_registry
+from mcp_oci_common.observability import init_tracing, tool_span, add_oci_call_attributes
 
 try:
     import oci  # type: ignore
@@ -149,7 +150,9 @@ def register_tools() -> list[dict[str, Any]]:
 def list_buckets(namespace_name: str, compartment_id: str, limit: int | None = None,
                  page: str | None = None, profile: str | None = None,
                  region: str | None = None) -> dict[str, Any]:
-    client = create_client(profile=profile, region=region)
+    tracer = init_tracing("mcp-oci-objectstorage")
+    with tool_span(tracer, "oci_objectstorage_list_buckets", mcp_server="oci-mcp-objectstorage") as span:
+        client = create_client(profile=profile, region=region)
     cache = get_cache()
     registry = get_registry()
     kwargs: dict[str, Any] = {}
@@ -162,6 +165,17 @@ def list_buckets(namespace_name: str, compartment_id: str, limit: int | None = N
     if cached:
         return cached
     resp = client.list_buckets(namespace_name=namespace_name, compartment_id=compartment_id, **kwargs)
+    try:
+        add_oci_call_attributes(
+            span,
+            oci_service="objectstorage",
+            oci_operation="ListBuckets",
+            region=region,
+            endpoint=getattr(client, "base_client", None).endpoint if hasattr(client, "base_client") else None,
+            request_id=(getattr(resp, "headers", {}) or {}).get("opc-request-id") if hasattr(resp, "headers") else None,
+        )
+    except Exception:
+        pass
     items = [b.__dict__ for b in getattr(resp, "data", [])]
     # Optional: record bucket names under applications_by_name map keyed by compartment
     if items:
@@ -180,12 +194,25 @@ def list_buckets(namespace_name: str, compartment_id: str, limit: int | None = N
 
 def get_namespace(compartment_id: str | None = None, profile: str | None = None,
                   region: str | None = None) -> dict[str, Any]:
-    client = create_client(profile=profile, region=region)
+    tracer = init_tracing("mcp-oci-objectstorage")
+    with tool_span(tracer, "oci_objectstorage_get_namespace", mcp_server="oci-mcp-objectstorage") as span:
+        client = create_client(profile=profile, region=region)
     if compartment_id:
         resp = client.get_namespace(compartment_id=compartment_id)
     else:
         resp = client.get_namespace()
     ns = resp.data if hasattr(resp, "data") else resp
+    try:
+        add_oci_call_attributes(
+            span,
+            oci_service="objectstorage",
+            oci_operation="GetNamespace",
+            region=region,
+            endpoint=getattr(client, "base_client", None).endpoint if hasattr(client, "base_client") else None,
+            request_id=(getattr(resp, "headers", {}) or {}).get("opc-request-id") if hasattr(resp, "headers") else None,
+        )
+    except Exception:
+        pass
     return with_meta(resp, {"namespace": ns})
 
 

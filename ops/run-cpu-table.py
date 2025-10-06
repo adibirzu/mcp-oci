@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import List, Dict
 
 # Ensure repo src path is available if not executed via poetry
@@ -9,7 +9,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from mcp_oci_common.config import get_oci_config, get_compartment_id  # noqa: E402
+from mcp_oci_common.config import get_oci_config  # noqa: E402
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -47,7 +47,7 @@ def main():
     try:
         import oci
         from oci.pagination import list_call_get_all_results
-    except Exception as e:
+    except Exception:
         print("ERROR: OCI SDK not installed. Please install 'oci' (pip install oci).", file=sys.stderr)
         sys.exit(2)
 

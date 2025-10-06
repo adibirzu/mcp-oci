@@ -267,7 +267,7 @@ def generate_compute_capacity_report(
         try:
             from mcp_oci_common import get_oci_config
             import oci
-            from datetime import datetime, timedelta
+            from datetime import datetime
 
             config = get_oci_config()
             if profile:

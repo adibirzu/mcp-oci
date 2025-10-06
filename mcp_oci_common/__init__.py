@@ -1,6 +1,10 @@
-from .config import get_oci_config, get_compartment_id, allow_mutations
-from .observability import add_oci_call_attributes
-from .validation import validate_and_log_tools
+from .config import (
+    get_oci_config,
+    get_compartment_id as get_compartment_id,
+    allow_mutations as allow_mutations,
+)
+from .observability import add_oci_call_attributes as add_oci_call_attributes
+from .validation import validate_and_log_tools as validate_and_log_tools
 
 # Placeholder for with_oci_errors if needed
 def with_oci_errors(func):
@@ -15,11 +19,10 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
         from mcp_oci_common import make_client
         client = make_client(oci.log_analytics.LogAnalyticsClient, profile="DEFAULT", region="eu-frankfurt-1")
     """
-    # Lazy import to avoid hard dependency at import time
-    try:
-        import oci as _oci  # type: ignore
-    except Exception as _e:
-        raise RuntimeError("OCI SDK not available. Please install 'oci' package.") from _e
+    # Lazy availability check to avoid hard dependency at import time
+    import importlib.util as _importlib
+    if _importlib.find_spec("oci") is None:
+        raise RuntimeError("OCI SDK not available. Please install 'oci' package.")
 
     # Load config; supports instance principal fallback via get_oci_config()
     cfg = get_oci_config(profile_name=profile)
