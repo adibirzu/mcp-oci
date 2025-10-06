@@ -3,15 +3,15 @@ OCI REST API Client - Optimized for minimal token usage
 Based on Oracle's Postman collection patterns
 """
 
-import os
-import json
 import base64
 import hashlib
-import hmac
-import requests
+import json
+import os
 from datetime import datetime
-from typing import Dict, Any, Optional
-from urllib.parse import urlparse, quote
+from typing import Any
+from urllib.parse import urlparse
+
+import requests
 
 
 class OCIRestClient:
@@ -23,7 +23,7 @@ class OCIRestClient:
         self.config = self._load_oci_config()
         self.base_url = f"https://{self._get_service_endpoint()}"
         
-    def _load_oci_config(self) -> Dict[str, str]:
+    def _load_oci_config(self) -> dict[str, str]:
         """Load OCI configuration from ~/.oci/config file"""
         config_path = os.path.expanduser("~/.oci/config")
         if not os.path.exists(config_path):
@@ -32,7 +32,7 @@ class OCIRestClient:
         config = {}
         current_profile = None
         
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             for line in f:
                 line = line.strip()
                 if line.startswith('[') and line.endswith(']'):
@@ -48,7 +48,7 @@ class OCIRestClient:
             
         # Load private key
         key_path = os.path.expanduser(config['key_file'])
-        with open(key_path, 'r') as f:
+        with open(key_path) as f:
             config['private_key'] = f.read()
             
         return config
@@ -68,7 +68,7 @@ class OCIRestClient:
         }
         return region_map.get(self.region, f"iaas.{self.region}.oraclecloud.com")
     
-    def _sign_request(self, method: str, url: str, headers: Dict[str, str], body: str = None) -> Dict[str, str]:
+    def _sign_request(self, method: str, url: str, headers: dict[str, str], body: str = None) -> dict[str, str]:
         """Sign request using OCI signature algorithm"""
         # Parse URL
         parsed = urlparse(url)
@@ -91,8 +91,8 @@ class OCIRestClient:
             'opc-request-id': f"mcp-oci-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         }
     
-    def request(self, method: str, path: str, params: Dict[str, Any] = None, 
-                data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    def request(self, method: str, path: str, params: dict[str, Any] = None, 
+                data: dict[str, Any] = None, headers: dict[str, str] = None) -> dict[str, Any]:
         """Make authenticated OCI REST API request"""
         url = f"{self.base_url}{path}"
         
@@ -138,19 +138,19 @@ class OCIRestClient:
         
         return result
     
-    def get(self, path: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+    def get(self, path: str, params: dict[str, Any] = None) -> dict[str, Any]:
         """Make GET request"""
         return self.request("GET", path, params=params)
     
-    def post(self, path: str, data: Dict[str, Any] = None) -> Dict[str, Any]:
+    def post(self, path: str, data: dict[str, Any] = None) -> dict[str, Any]:
         """Make POST request"""
         return self.request("POST", path, data=data)
     
-    def put(self, path: str, data: Dict[str, Any] = None) -> Dict[str, Any]:
+    def put(self, path: str, data: dict[str, Any] = None) -> dict[str, Any]:
         """Make PUT request"""
         return self.request("PUT", path, data=data)
     
-    def delete(self, path: str) -> Dict[str, Any]:
+    def delete(self, path: str) -> dict[str, Any]:
         """Make DELETE request"""
         return self.request("DELETE", path)
 

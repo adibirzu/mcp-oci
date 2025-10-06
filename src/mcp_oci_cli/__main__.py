@@ -1,7 +1,7 @@
 import argparse
 import importlib
 import json
-from typing import Any, Dict
+from typing import Any
 
 SERVICES = [
     "iam","compute","objectstorage","networking","blockstorage","loadbalancer",
@@ -17,20 +17,20 @@ def load_service(service: str):
 
 def cmd_list_tools(args: argparse.Namespace) -> None:
     mod = load_service(args.service)
-    tools = getattr(mod, "register_tools")()
+    tools = mod.register_tools()
     print(json.dumps([{"name": t["name"], "description": t.get("description", "")} for t in tools], indent=2))
 
 
 def cmd_call(args: argparse.Namespace) -> None:
     mod = load_service(args.service)
-    tools = {t["name"]: t for t in getattr(mod, "register_tools")()}
+    tools = {t["name"]: t for t in mod.register_tools()}
     tool = tools.get(args.name)
     if not tool:
         raise SystemExit(f"Tool not found: {args.name}")
     handler = tool.get("handler")
     if not handler:
         raise SystemExit("Tool has no handler bound.")
-    params: Dict[str, Any] = json.loads(args.params) if args.params else {}
+    params: dict[str, Any] = json.loads(args.params) if args.params else {}
     result = handler(**params)
     print(json.dumps(result, indent=2, default=str))
 

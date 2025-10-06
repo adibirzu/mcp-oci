@@ -5,18 +5,19 @@ Minimal token usage with direct REST API calls
 
 from __future__ import annotations
 
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastmcp.server import FastMCP
 
 from mcp_oci_rest.iam import (
-    list_users,
+    get_compartment,
     get_user,
     list_compartments,
-    get_compartment,
     list_groups,
     list_policies,
+    list_users,
+)
+from mcp_oci_rest.iam import (
     get_server_info as rest_get_server_info,
 )
 

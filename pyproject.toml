@@ -1,85 +1,74 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "mcp-oci"
 version = "0.1.0"
-description = "MCP servers for Oracle Cloud Infrastructure (OCI), following AWS MCP best practices."
-authors = [{ name = "MCP OCI Maintainers" }]
+description = "Oracle Cloud Infrastructure MCP Servers for AI and Observability"
+authors = [ "Abir Zu <abirzu@example.com>" ]
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "Proprietary" }
-dependencies = [
-  "oci>=2",
-  "fastmcp>=2.10.0",
+packages = [{include = "mcp_servers"}, {include = "mcp_oci_common"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastmcp = "*"  # For MCP/STDIO
+typer = "*"    # For CLI
+pydantic = "*"
+tenacity = "*"
+jinja2 = "*"
+numpy = "^2.1.1"
+pandas = "^2.2.3"
+scipy = "^1.14.1"
+
+# Optional dependencies for different features
+oci = { version = "*", optional = true }  # Official OCI SDK
+fastapi = { version = "*", optional = true }
+uvicorn = { version = "*", optional = true }
+streamlit = { version = "*", optional = true }
+prometheus-client = { version = "*", optional = true }
+opentelemetry-sdk = { version = "*", optional = true }
+opentelemetry-api = { version = "*", optional = true }
+opentelemetry-exporter-otlp = { version = "*", optional = true }
+opentelemetry-instrumentation-fastapi = { version = "^0.58b0", optional = true }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-mock = "^3.10.0"
+pytest-asyncio = "^0.21.0"
+pytest-cov = "^4.0.0"
+requests = "*"  # For testing observability endpoints
+black = "^23.0.0"
+isort = "^5.12.0"
+flake8 = "^6.0.0"
+mypy = "^1.5.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.0.0"
+pytest-mock = "^3.10.0"
+pytest-asyncio = "^0.21.0"
+pytest-cov = "^4.0.0"
+requests = "*"  # Required for observability pipeline tests
+
+[tool.poetry.extras]
+oci = ["oci"]
+web = ["fastapi", "uvicorn"]
+ui = ["streamlit"]
+observability = [
+    "prometheus-client",
+    "opentelemetry-sdk",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi"
+]
+all = [
+    "oci",
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+    "prometheus-client",
+    "opentelemetry-sdk",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi"
 ]
 
-[project.optional-dependencies]
-dev = [
-  "pytest>=7",
-  "pytest-cov>=4",
-  "black>=24.3.0",
-  "ruff>=0.4.0",
-  "mypy>=1.8.0",
-  "vcrpy>=4.3.1",
-]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[project.scripts]
-mcp-oci = "mcp_oci_cli.__main__:main"
-mcp-oci-serve = "mcp_oci_serve.__main__:main"
-mcp-oci-serve-iam = "mcp_oci_iam.__main__:main"
-mcp-oci-serve-compute = "mcp_oci_compute.__main__:main"
-mcp-oci-serve-objectstorage = "mcp_oci_objectstorage.__main__:main"
-mcp-oci-serve-networking = "mcp_oci_networking.__main__:main"
-mcp-oci-serve-blockstorage = "mcp_oci_blockstorage.__main__:main"
-mcp-oci-serve-loadbalancer = "mcp_oci_loadbalancer.__main__:main"
-mcp-oci-serve-filestorage = "mcp_oci_filestorage.__main__:main"
-mcp-oci-serve-dns = "mcp_oci_dns.__main__:main"
-mcp-oci-serve-apigateway = "mcp_oci_apigateway.__main__:main"
-mcp-oci-serve-database = "mcp_oci_database.__main__:main"
-mcp-oci-serve-oke = "mcp_oci_oke.__main__:main"
-mcp-oci-serve-functions = "mcp_oci_functions.__main__:main"
-mcp-oci-serve-logging = "mcp_oci_logging.__main__:main"
-mcp-oci-serve-monitoring = "mcp_oci_monitoring.__main__:main"
-mcp-oci-serve-events = "mcp_oci_events.__main__:main"
-mcp-oci-serve-streaming = "mcp_oci_streaming.__main__:main"
-mcp-oci-serve-ons = "mcp_oci_ons.__main__:main"
-mcp-oci-serve-vault = "mcp_oci_vault.__main__:main"
-mcp-oci-serve-kms = "mcp_oci_kms.__main__:main"
-mcp-oci-serve-resourcemanager = "mcp_oci_resourcemanager.__main__:main"
-mcp-oci-serve-usageapi = "mcp_oci_usageapi.__main__:main"
-mcp-oci-serve-budgets = "mcp_oci_budgets.__main__:main"
-mcp-oci-serve-limits = "mcp_oci_limits.__main__:main"
-mcp-oci-serve-inventory = "mcp_oci_inventory.__main__:main"
-mcp-oci-serve-loganalytics = "mcp_oci_loganalytics.__main__:main"
-mcp-oci-serve-osub = "mcp_oci_osub.__main__:main"
-mcp-oci-serve-introspect = "mcp_oci_introspect.__main__:main"
-mcp-oci-serve-security = "mcp_oci_security.__main__:main"
-mcp-oci-serve-fast = "mcp_oci_fastmcp.__main__:main"
-
-[tool.black]
-line-length = 100
-target-version = ["py311"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-lint.select = ["E", "F", "I", "UP", "B", "SIM", "PL"]
-lint.ignore = ["E203", "E501"]
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unreachable = true
-disallow_any_unimported = false
-ignore_missing_imports = true
-pretty = true
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

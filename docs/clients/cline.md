@@ -26,9 +26,9 @@ Standard MCP servers:
       "command": "mcp-oci-serve-monitoring",
       "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
-    "oci-loganalytics": {
-      "command": "mcp-oci-serve-loganalytics",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    "oci-mcp-observability": {
+      "command": "python",
+      "args": ["mcp_servers/observability/server.py"]
     },
     "oci-introspect": {
       "command": "mcp-oci-serve-introspect",

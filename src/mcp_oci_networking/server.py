@@ -3,9 +3,12 @@
 Exposes tools as `oci:networking:<action>`.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
+from mcp_oci_common.cache import get_cache
+from mcp_oci_common.name_registry import get_registry
 
 try:
     import oci  # type: ignore
@@ -13,16 +16,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.core.VirtualNetworkClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:networking:list-subnets",
+            "name": "oci_networking_list_subnets",
             "description": "List subnets in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -39,7 +42,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_subnets,
         },
         {
-            "name": "oci:networking:list-vcns",
+            "name": "oci_networking_list_vcns",
             "description": "List VCNs in a compartment.",
             "parameters": {
                 "type": "object",
@@ -55,7 +58,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_vcns,
         },
         {
-            "name": "oci:networking:list-vcns-by-dns",
+            "name": "oci_networking_list_vcns_by_dns",
             "description": "List VCNs filtered by dns_label (client-side filter).",
             "parameters": {
                 "type": "object",
@@ -72,7 +75,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_vcns_by_dns,
         },
         {
-            "name": "oci:networking:list-route-tables",
+            "name": "oci_networking_list_route_tables",
             "description": "List route tables in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -89,7 +92,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_route_tables,
         },
         {
-            "name": "oci:networking:list-security-lists",
+            "name": "oci_networking_list_security_lists",
             "description": "List security lists in a compartment; optionally filter by VCN.",
             "parameters": {
                 "type": "object",
@@ -106,7 +109,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_security_lists,
         },
         {
-            "name": "oci:networking:create-vcn",
+            "name": "oci_networking_create_vcn",
             "description": "Create a VCN (confirm=true supports required; dry_run available).",
             "parameters": {
                 "type": "object",
@@ -126,7 +129,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "mutating": True,
         },
         {
-            "name": "oci:networking:list-network-security-groups",
+            "name": "oci_networking_list_network_security_groups",
             "description": "List Network Security Groups (NSGs) in a compartment; optional VCN filter.",
             "parameters": {
                 "type": "object",
@@ -145,27 +148,43 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_subnets(compartment_id: str, vcn_id: Optional[str] = None,
-                 limit: Optional[int] = None, page: Optional[str] = None,
-                 profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_subnets(compartment_id: str, vcn_id: str | None = None,
+                 limit: int | None = None, page: str | None = None,
+                 profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    registry = get_registry()
+    kwargs: dict[str, Any] = {}
     if vcn_id:
         kwargs["vcn_id"] = vcn_id
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    # Check cache
+    cache_params = {"compartment_id": compartment_id, "vcn_id": vcn_id, "limit": limit, "page": page}
+    cached = cache.get("networking", "list_subnets", cache_params)
+    if cached:
+        return cached
     resp = client.list_subnets(compartment_id=compartment_id, **kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
+    if items:
+        try:
+            registry.update_subnets(compartment_id, items)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_NETWORKING", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("networking", "list_subnets", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
-def list_nsgs(compartment_id: str, vcn_id: Optional[str] = None, limit: Optional[int] = None,
-              page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_nsgs(compartment_id: str, vcn_id: str | None = None, limit: int | None = None,
+              page: str | None = None, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if vcn_id:
         kwargs["vcn_id"] = vcn_id
     if limit:
@@ -178,64 +197,103 @@ def list_nsgs(compartment_id: str, vcn_id: Optional[str] = None, limit: Optional
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_vcns(compartment_id: str, limit: Optional[int] = None, page: Optional[str] = None,
-              profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_vcns(compartment_id: str, limit: int | None = None, page: str | None = None,
+              profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    registry = get_registry()
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "limit": limit, "page": page}
+    cached = cache.get("networking", "list_vcns", cache_params)
+    if cached:
+        return cached
     resp = client.list_vcns(compartment_id=compartment_id, **kwargs)
     items = [v.__dict__ for v in getattr(resp, "data", [])]
+    if items:
+        try:
+            registry.update_vcns(compartment_id, items)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_NETWORKING", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("networking", "list_vcns", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
-def list_vcns_by_dns(compartment_id: str, dns_label: str, limit: Optional[int] = None, page: Optional[str] = None,
-                     profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_vcns_by_dns(compartment_id: str, dns_label: str, limit: int | None = None, page: str | None = None,
+                     profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     out = list_vcns(compartment_id=compartment_id, limit=limit, page=page, profile=profile, region=region)
     items = [v for v in out.get("items", []) if (v.get("dns_label") if isinstance(v, dict) else getattr(v, "dns_label", None)) == dns_label]
     return {"items": items, "next_page": out.get("next_page")}
 
 
-def list_route_tables(compartment_id: str, vcn_id: Optional[str] = None,
-                      limit: Optional[int] = None, page: Optional[str] = None,
-                      profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_route_tables(compartment_id: str, vcn_id: str | None = None,
+                      limit: int | None = None, page: str | None = None,
+                      profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    kwargs: dict[str, Any] = {}
     if vcn_id:
         kwargs["vcn_id"] = vcn_id
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "vcn_id": vcn_id, "limit": limit, "page": page}
+    cached = cache.get("networking", "list_route_tables", cache_params)
+    if cached:
+        return cached
     resp = client.list_route_tables(compartment_id=compartment_id, **kwargs)
     items = [r.__dict__ for r in getattr(resp, "data", [])]
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_NETWORKING", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("networking", "list_route_tables", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
-def list_security_lists(compartment_id: str, vcn_id: Optional[str] = None,
-                        limit: Optional[int] = None, page: Optional[str] = None,
-                        profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_security_lists(compartment_id: str, vcn_id: str | None = None,
+                        limit: int | None = None, page: str | None = None,
+                        profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    cache = get_cache()
+    registry = get_registry()
+    kwargs: dict[str, Any] = {}
     if vcn_id:
         kwargs["vcn_id"] = vcn_id
     if limit:
         kwargs["limit"] = limit
     if page:
         kwargs["page"] = page
+    cache_params = {"compartment_id": compartment_id, "vcn_id": vcn_id, "limit": limit, "page": page}
+    cached = cache.get("networking", "list_security_lists", cache_params)
+    if cached:
+        return cached
     resp = client.list_security_lists(compartment_id=compartment_id, **kwargs)
     items = [s.__dict__ for s in getattr(resp, "data", [])]
+    if items:
+        try:
+            registry.update_nsgs(compartment_id, items)
+        except Exception:
+            pass
     next_page = getattr(resp, "opc_next_page", None)
-    return with_meta(resp, {"items": items}, next_page=next_page)
+    out = with_meta(resp, {"items": items}, next_page=next_page)
+    import os
+    ttl = int(os.getenv("MCP_CACHE_TTL_NETWORKING", os.getenv("MCP_CACHE_TTL", "1800")))
+    cache.set("networking", "list_security_lists", cache_params, out, ttl_seconds=ttl)
+    return out
 
 
-def create_vcn(compartment_id: str, cidr_block: str, display_name: str, dns_label: Optional[str] = None,
-               dry_run: bool = False, confirm: bool = False, profile: Optional[str] = None,
-               region: Optional[str] = None) -> Dict[str, Any]:
+def create_vcn(compartment_id: str, cidr_block: str, display_name: str, dns_label: str | None = None,
+               dry_run: bool = False, confirm: bool = False, profile: str | None = None,
+               region: str | None = None) -> dict[str, Any]:
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     details = {

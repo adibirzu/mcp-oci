@@ -39,6 +39,7 @@ mcp-oci call compute oci:compute:list-stopped-instances --params '{"compartment_
 
 ## Parameters
 - list-instances: `compartment_id?` (defaults to tenancy), `compartment_name?` (resolve to id), `availability_domain?`, `lifecycle_state?` (e.g., STOPPED), `include_subtree?` (default true), `display_name?`, `display_name_contains?`, `shape?`, `time_created_after?`, `time_created_before?`, `freeform_tags?` (map), `defined_tags?` (map of `namespace.key` -> value), `limit?`, `page?`, `max_items?` (cap aggregated results).
+  - Performance: results and name→OCID mappings are cached in‑process. Subsequent calls reuse cached compartments and instance lists (within TTL) to minimize backend/API calls.
 - search-instances: `query?` (structured), `lifecycle_state?`, `display_name?`, `compartment_id?`, `include_subtree?` (default true), `limit?`, `page?`.
 - list-stopped-instances: same filters as `list-instances` (without `lifecycle_state` which is forced to STOPPED); returns `hints` suggesting `compartment_name/time_created_after/before` when results are large or empty.
 - list-images: `compartment_id` (required), `operating_system?`, `operating_system_version?`, `limit?`, `page?`, `image_id?`.

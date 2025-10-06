@@ -1,7 +1,8 @@
 """MCP Server: OCI Events
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,16 +12,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.events.EventsClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:events:list-rules",
+            "name": "oci_events_list_rules",
             "description": "List Event Rules in a compartment.",
             "parameters": {
                 "type": "object",
@@ -37,7 +38,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_rules,
         },
         {
-            "name": "oci:events:get-rule",
+            "name": "oci_events_get_rule",
             "description": "Get Event Rule by OCID.",
             "parameters": {
                 "type": "object",
@@ -53,10 +54,10 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_rules(compartment_id: str, lifecycle_state: Optional[str] = None, limit: Optional[int] = None,
-               page: Optional[str] = None, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def list_rules(compartment_id: str, lifecycle_state: str | None = None, limit: int | None = None,
+               page: str | None = None, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if lifecycle_state:
         kwargs["lifecycle_state"] = lifecycle_state
     if limit:
@@ -69,7 +70,7 @@ def list_rules(compartment_id: str, lifecycle_state: Optional[str] = None, limit
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def get_rule(rule_id: str, profile: Optional[str] = None, region: Optional[str] = None) -> Dict[str, Any]:
+def get_rule(rule_id: str, profile: str | None = None, region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
     resp = client.get_rule(rule_id)
     data = getattr(resp, "data", None)

@@ -3,12 +3,13 @@ Optimized Log Analytics service using direct REST API calls
 Minimal token usage, based on Oracle Postman collection patterns
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from .client import create_client
-from .formatters import format_response, format_error, format_success
+from .formatters import format_error, format_response, format_success
 
 
-def get_namespace(profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+def get_namespace(profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Get Log Analytics namespace using REST API - no parameters needed!"""
     try:
         client = create_client(profile=profile, region=region)
@@ -31,9 +32,9 @@ def get_namespace(profile: str = "DEFAULT", region: str = None) -> Dict[str, Any
         return format_error(e)
 
 
-def list_entities(compartment_id: str, limit: Optional[int] = None,
-                 page: Optional[str] = None, profile: str = "DEFAULT", 
-                 region: str = None) -> Dict[str, Any]:
+def list_entities(compartment_id: str, limit: int | None = None,
+                 page: str | None = None, profile: str = "DEFAULT", 
+                 region: str = None) -> dict[str, Any]:
     """List Log Analytics entities using REST API - only compartment_id needed!"""
     try:
         client = create_client(profile=profile, region=region)
@@ -89,8 +90,8 @@ def list_entities(compartment_id: str, limit: Optional[int] = None,
 
 
 def run_query(query_string: str, time_start: str, time_end: str,
-              subsystem: Optional[str] = None, max_total_count: Optional[int] = None,
-              profile: str = "DEFAULT", region: str = None) -> Dict[str, Any]:
+              subsystem: str | None = None, max_total_count: int | None = None,
+              profile: str = "DEFAULT", region: str = None) -> dict[str, Any]:
     """Run Log Analytics query using REST API - auto-detects namespace!"""
     try:
         client = create_client(profile=profile, region=region)
@@ -104,16 +105,16 @@ def run_query(query_string: str, time_start: str, time_end: str,
         if not namespace:
             return format_error(Exception("No namespace available"))
         
-        # Build query payload
+        # Build query payload to match QueryDetails model
         query_payload = {
             "queryString": query_string,
-            "timeStart": time_start,
-            "timeEnd": time_end
+            "subSystem": subsystem or "LOG",
+            "maxTotalCount": max_total_count or 1000,
+            "timeFilter": {
+                "timeStart": time_start,
+                "timeEnd": time_end,
+            }
         }
-        if subsystem:
-            query_payload["subsystem"] = subsystem
-        if max_total_count:
-            query_payload["maxTotalCount"] = max_total_count
             
         # Make REST API call
         response = client.post(f"/20200601/namespaces/{namespace}/search/actions/query", 
@@ -123,24 +124,24 @@ def run_query(query_string: str, time_start: str, time_end: str,
             return format_error(Exception(f"API Error: {response.get('error', 'Unknown error')}"))
         
         # Extract query results
-        results = response.get("data", {})
+        results = response.get("data", {}) or {}
         
         # Format response with minimal data
         return format_success({
             "query_string": query_string,
             "time_start": time_start,
             "time_end": time_end,
-            "results": results.get("results", []),
-            "total_count": results.get("total_count", 0)
+            "results": results.get("results", []) or [],
+            "total_count": results.get("totalCount", results.get("total_count", 0))
         })
         
     except Exception as e:
         return format_error(e)
 
 
-def list_sources(compartment_id: str, limit: Optional[int] = None,
-                 page: Optional[str] = None, profile: str = "DEFAULT", 
-                 region: str = None) -> Dict[str, Any]:
+def list_sources(compartment_id: str, limit: int | None = None,
+                 page: str | None = None, profile: str = "DEFAULT", 
+                 region: str = None) -> dict[str, Any]:
     """List Log Analytics sources using REST API - only compartment_id needed!"""
     try:
         client = create_client(profile=profile, region=region)
@@ -195,7 +196,7 @@ def list_sources(compartment_id: str, limit: Optional[int] = None,
         return format_error(e)
 
 
-def get_server_info() -> Dict[str, Any]:
+def get_server_info() -> dict[str, Any]:
     """Get server information"""
     return {
         "name": "oci-loganalytics-rest",

@@ -1,16 +1,22 @@
-# Minimal Dockerfile for MCP OCI servers
+# Lightweight Python base
 FROM python:3.11-slim
 
-ENV PIP_DISABLE_PIP_VERSION_CHECK=on PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Avoid Python buffering and ensure predictable logs
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-COPY pyproject.toml README.md /app/
-COPY src /app/src
+# Install Python deps first for better layer caching
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
-RUN pip install -U pip && pip install -e .[dev]
+# Copy the rest of the app
+COPY . /app
 
-# Expect OCI config mounted at /root/.oci for root user or set OCI config env vars
-# Default command serves IAM; override with other entrypoints as needed
-ENV MCP_OCI_LOG_LEVEL=INFO
-CMD ["mcp-oci-serve-iam", "--log-level", "INFO"]
+# Expose app port
+EXPOSE 8000
+
+# Start FastAPI app with Uvicorn
+CMD ["uvicorn", "ux.app:app", "--host", "0.0.0.0", "--port", "8000"]

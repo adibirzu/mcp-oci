@@ -1,0 +1,232 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "mcp-servers-overview",
+    "title": "MCP Servers Overview",
+    "tags": ["mcp", "servers", "observability"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Server Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"mcp-.*\"}",
+            "legendFormat": "{{job}}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            },
+            "mappings": [
+              {"type": "value", "value": "0", "text": "DOWN"},
+              {"type": "value", "value": "1", "text": "UP"}
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total Requests per Server",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (job) (rate(http_requests_total{job=~\"mcp-.*\"}[5m]))",
+            "legendFormat": "{{job}}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "MCP Tool Calls by Server",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (server) (rate(mcp_tool_calls_total[5m]))",
+            "legendFormat": "{{server}}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Average Tool Duration by Server",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "avg by (server) (rate(mcp_tool_duration_seconds_sum[5m]) / rate(mcp_tool_duration_seconds_count[5m]))",
+            "legendFormat": "{{server}}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Error Rate by Server",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (server) (rate(mcp_tool_calls_total{outcome=\"error\"}[5m]))",
+            "legendFormat": "{{server}} errors",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 16
+        },
+        "yAxes": [
+          {
+            "min": 0
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Top Tools by Call Rate",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum by (server, tool) (rate(mcp_tool_calls_total[5m])))",
+            "format": "table",
+            "instant": true,
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        },
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true
+              },
+              "renameByName": {
+                "server": "Server",
+                "tool": "Tool",
+                "Value": "Calls/sec"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "OTEL Collector Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(otelcol_receiver_accepted_spans_total[5m])",
+            "legendFormat": "Spans received/sec",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          },
+          {
+            "expr": "rate(otelcol_exporter_sent_spans_total[5m])",
+            "legendFormat": "Spans sent/sec",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": [
+        {
+          "name": "server",
+          "type": "query",
+          "query": "label_values(mcp_tool_calls_total, server)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": []
+    },
+    "schemaVersion": 30,
+    "version": 1
+  }
+}

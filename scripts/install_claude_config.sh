@@ -7,6 +7,8 @@ if [ -d ".venv/bin" ]; then
   VENV_BIN="$(pwd)/.venv/bin/"
 fi
 
+ROOT_DIR="$(pwd)"
+
 cmd() {
   local name="$1"; shift
   if [ -n "$VENV_BIN" ] && [ -x "${VENV_BIN}${name}" ]; then
@@ -37,6 +39,57 @@ CONFIG_JSON='{
     "oci-monitoring": {
       "command": "'"$(cmd mcp-oci-serve-monitoring)"'",
       "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    },
+    "oci-cost": {
+      "command": "'"$(cmd python)"'",
+      "args": ["'"${ROOT_DIR}"'/scripts/mcp-launchers/launch-cost.py"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
+    },
+    "oci-blockstorage": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.blockstorage.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
+    },
+    "oci-loadbalancer": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.loadbalancer.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
+    },
+    "oci-observability": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.observability.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "LA_NAMESPACE": "${LA_NAMESPACE:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
+    },
+    "oci-inventory": {
+      "command": "'"$(cmd python)"'",
+      "args": ["-m", "mcp_servers.inventory.server"],
+      "env": {
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "COMPARTMENT_OCID": "${COMPARTMENT_OCID:-}",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"
+      }
     }
   }
 }'

@@ -11,45 +11,63 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict, List, Callable
+from collections.abc import Callable
+from typing import Any
 
-Json = Dict[str, Any]
+Json = dict[str, Any]
 
 
 class StdioServer:
-    def __init__(self, tools: List[Dict[str, Any]], *, defaults: Dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN"):
+    def __init__(self, tools: list[dict[str, Any]], *, defaults: dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN"):
         # Normalize tool entries
         self.tools = tools
-        self.tool_by_name: Dict[str, Dict[str, Any]] = {t["name"]: t for t in tools}
+        self.tool_by_name: dict[str, dict[str, Any]] = {t["name"]: t for t in tools}
         self.defaults = defaults or {}
         self.require_confirm = require_confirm
         self.log_level = (log_level or "WARN").upper()
 
     # ---------------- IO helpers -----------------
     def _read_message(self) -> Json | None:
-        # Try LSP-style framing first
-        header = ""
-        length = 0
+        # Robust reader supporting LSP framing and newline-delimited JSON
         while True:
+            # Try LSP-style framing first
+            header = ""
+            length = 0
+            while True:
+                line = sys.stdin.readline()
+                if not line:
+                    return None
+                if line.strip() == "":
+                    break
+                header += line
+                if line.lower().startswith("content-length:"):
+                    try:
+                        length = int(line.split(":", 1)[1].strip())
+                    except Exception:
+                        length = 0
+            if header:
+                body = sys.stdin.read(length) if length else ""
+                if not body:
+                    # Skip empty frames instead of disconnecting
+                    self._log("WARN", "Empty LSP frame received; skipping")
+                    continue
+                try:
+                    return json.loads(body)
+                except Exception:
+                    self._log("WARN", "Malformed JSON in LSP frame; skipping")
+                    continue
+            # Fallback: newline-delimited JSON
             line = sys.stdin.readline()
             if not line:
                 return None
-            if line.strip() == "":
-                break
-            header += line
-            if line.lower().startswith("content-length:"):
-                try:
-                    length = int(line.split(":", 1)[1].strip())
-                except Exception:
-                    length = 0
-        if header:
-            body = sys.stdin.read(length) if length else ""
-            return json.loads(body) if body else None
-        # Fallback: newline-delimited JSON
-        line = sys.stdin.readline()
-        if not line:
-            return None
-        return json.loads(line)
+            if not line.strip():
+                # skip empty lines
+                continue
+            try:
+                return json.loads(line)
+            except Exception:
+                self._log("WARN", "Malformed JSON line; skipping")
+                continue
 
     def _write(self, obj: Json) -> None:
         data = json.dumps(obj, separators=(",", ":"))
@@ -169,5 +187,5 @@ class StdioServer:
                 self._write(err_obj)
 
 
-def run_with_tools(tools: List[Dict[str, Any]], *, defaults: Dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN") -> None:
+def run_with_tools(tools: list[dict[str, Any]], *, defaults: dict[str, Any] | None = None, require_confirm: bool = False, log_level: str = "WARN") -> None:
     StdioServer(tools, defaults=defaults, require_confirm=require_confirm, log_level=log_level).serve_forever()

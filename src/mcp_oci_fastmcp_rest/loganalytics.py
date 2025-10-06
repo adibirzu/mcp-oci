@@ -6,16 +6,17 @@ Auto-discovers namespace - no manual parameters needed!
 
 from __future__ import annotations
 
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastmcp.server import FastMCP
 
 from mcp_oci_rest.loganalytics import (
     get_namespace,
     list_entities,
-    run_query,
     list_sources,
+    run_query,
+)
+from mcp_oci_rest.loganalytics import (
     get_server_info as rest_get_server_info,
 )
 

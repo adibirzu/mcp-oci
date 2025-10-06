@@ -1,7 +1,8 @@
 """MCP Server: OCI File Storage (FSS)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from mcp_oci_common import make_client
 from mcp_oci_common.response import with_meta
 
@@ -11,16 +12,16 @@ except Exception:
     oci = None
 
 
-def create_client(profile: Optional[str] = None, region: Optional[str] = None):
+def create_client(profile: str | None = None, region: str | None = None):
     if oci is None:
         raise RuntimeError("OCI SDK not available. Install oci>=2.0.0")
     return make_client(oci.file_storage.FileStorageClient, profile=profile, region=region)
 
 
-def register_tools() -> List[Dict[str, Any]]:
+def register_tools() -> list[dict[str, Any]]:
     return [
         {
-            "name": "oci:filestorage:list-file-systems",
+            "name": "oci_filestorage_list_file_systems",
             "description": "List File Systems in a compartment and availability domain.",
             "parameters": {
                 "type": "object",
@@ -37,7 +38,7 @@ def register_tools() -> List[Dict[str, Any]]:
             "handler": list_file_systems,
         },
         {
-            "name": "oci:filestorage:list-mount-targets",
+            "name": "oci_filestorage_list_mount_targets",
             "description": "List Mount Targets in a compartment and availability domain.",
             "parameters": {
                 "type": "object",
@@ -56,11 +57,11 @@ def register_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def list_file_systems(compartment_id: str, availability_domain: str, limit: Optional[int] = None,
-                      page: Optional[str] = None, profile: Optional[str] = None,
-                      region: Optional[str] = None) -> Dict[str, Any]:
+def list_file_systems(compartment_id: str, availability_domain: str, limit: int | None = None,
+                      page: str | None = None, profile: str | None = None,
+                      region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
@@ -71,11 +72,11 @@ def list_file_systems(compartment_id: str, availability_domain: str, limit: Opti
     return with_meta(resp, {"items": items}, next_page=next_page)
 
 
-def list_mount_targets(compartment_id: str, availability_domain: str, limit: Optional[int] = None,
-                       page: Optional[str] = None, profile: Optional[str] = None,
-                       region: Optional[str] = None) -> Dict[str, Any]:
+def list_mount_targets(compartment_id: str, availability_domain: str, limit: int | None = None,
+                       page: str | None = None, profile: str | None = None,
+                       region: str | None = None) -> dict[str, Any]:
     client = create_client(profile=profile, region=region)
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if limit:
         kwargs["limit"] = limit
     if page:
