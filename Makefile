@@ -51,9 +51,7 @@ vendor-examples:
 doctor:
 	. .venv/bin/activate && mcp-oci doctor
 
-.PHONY: configure-claude
-configure-claude:
-	bash scripts/install_claude_config.sh
+
 
 .PHONY: doctor-profile
 doctor-profile:

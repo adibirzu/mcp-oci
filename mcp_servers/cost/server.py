@@ -505,6 +505,7 @@ def cost_by_tag_key_value(tenancy_ocid: str, time_start: str, time_end: str, def
 def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid: Optional[str] = None) -> Dict[str, Any]:
     """Advanced monthly trend analysis with forecasting"""
     with tool_span(tracer, "monthly_trend_forecast", mcp_server="oci-mcp-cost-enhanced") as span:
+        from datetime import timedelta
         now = datetime.now()
         start_month = now.month - months_back
         start_year = now.year
@@ -512,7 +513,11 @@ def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid:
             start_year += (start_month - 1) // 12
             start_month = start_month % 12 + 12 * (start_month <= 0)
         time_start = f"{start_year:04d}-{start_month:02d}-01"
-        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=now.strftime("%Y-%m-%d"), forecast=True)
+        # For MONTHLY granularity with forecast, end date must be first day of current/next month at midnight
+        # Calculate first day of current month
+        current_month_start = datetime(now.year, now.month, 1)
+        time_end = current_month_start.strftime("%Y-%m-%d")
+        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
         raw = request_summarized_usages(clients, tenancy_ocid, q)
         series = []
         for it in raw.get("items", []):

@@ -725,6 +725,9 @@ tools = [
     ),
 ]
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
     try:
@@ -796,3 +799,78 @@ if __name__ == "__main__":
         pass
 
     mcp.run()
+
+</file_content>
+
+Now that you have the latest state of the file, try the operation again with fewer, more precise SEARCH blocks. For large files especially, it may be prudent to try to limit yourself to <5 SEARCH/REPLACE blocks at a time, then wait for the user to respond with the result of the operation before following up with another replace_in_file call to make additional edits.
+(If you run into this error 3 times in a row, you may use the write_to_file tool as a fallback.)
+</error><environment_details>
+# VSCode Visible Files
+mcp_servers/network/server.py
+
+# VSCode Open Tabs
+../mcp_oci_common/time.py
+obs_app/app.py
+src/mcp_oci_common/response.py
+mcp_oci_common/response.py
+mcp_oci_common/observability.py
+scripts/verify_oci_list_calls.sh
+../../Documents/Cline/Rules/gobal.md
+mcp_servers/blockstorage/server.py
+mcp_servers/loadbalancer/server.py
+README.md
+mcp.json
+ARCHITECTURE.md
+scripts/mcp-launchers/start-mcp-server.sh
+ux/app.py
+ux/templates/index.html
+mcp_servers/compute/server.py
+mcp_servers/db/server.py
+mcp_servers/network/server.py
+mcp_oci_common/session.py
+mcp_oci_common/cache.py
+ops/run-cpu-table.py
+ops/test-la.py
+ops/la_sources_last_month.py
+ops/la_sources_last_60m.py
+ops/la_sources_last_24h.py
+ops/la_sources_last_60m_async.py
+ops/la_sources_last_60m_scan.py
+ops/inventory_list_instances.py
+src/mcp_oci_loganalytics_enhanced/server.py
+mcp_oci_common/config.py
+docs/macos-observability-setup.md
+scripts/start-observability-macos.sh
+../../Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+src/mcp_oci_monitoring/server.py
+mcp_servers/inventory/server.py
+mcp_servers/loganalytics/server.py
+test_profiling.py
+mcp_servers/observability/server.py
+ops/grafana/provisioning/datasources/datasources.yml
+mcp_servers/cost/finopsai/tools/usage_queries.py
+mcp_servers/cost/server.py
+docs/SERVERS.md
+scripts/install_claude_config.sh
+mcp_oci_common/__init__.py
+src/mcp_oci_oke/server.py
+src/mcp_oci_vault/server.py
+src/mcp_oci_osub/server.py
+mcp_servers/security/server.py
+src/mcp_oci_introspect/server.py
+mcp_oci_common/validation.py
+docs/servers/inventory.md
+test_robust_logan.py
+scripts/mcp-launchers/launch-cost.py
+ops/run-local.sh
+ops/grafana/dashboards/mcp-monitoring.json
+
+# Current Time
+10/7/2025, 4:27:29 PM (Europe/Bucharest, UTC+3:00)
+
+# Context Window Usage
+102,738 / 128K tokens used (80%)
+
+# Current Mode
+ACT MODE
+</environment_details>

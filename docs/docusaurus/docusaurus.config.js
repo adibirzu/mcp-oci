@@ -7,9 +7,8 @@ const config = {
   title: 'MCP-OCI',
   url: 'https://your-org.github.io',
   baseUrl: '/mcp-oci/',
-  onBrokenLinks: 'warn',
+  onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
-  favicon: 'img/favicon.ico',
   organizationName: 'your-org',
   projectName: 'mcp-oci',
   trailingSlash: false,
@@ -47,4 +46,3 @@ const config = {
 };
 
 module.exports = config;
-

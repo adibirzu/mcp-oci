@@ -8,7 +8,7 @@ Key Features:
 - Auto-discovers compartments from config
 - Asks for compartment only when really needed by SDK
 - Proper OCI config file handling
-- Clear, Claude-friendly responses
+- Clear, LLM-friendly responses
 - Comprehensive error handling
 """
 
@@ -355,7 +355,7 @@ async def get_server_info() -> str:
             "features": [
                 "root_tenancy_default",
                 "compartment_auto_discovery", 
-                "claude_friendly_responses",
+                "llm_friendly_responses",
                 "comprehensive_error_handling",
                 "proper_oci_config_handling",
                 "caching_and_performance"
