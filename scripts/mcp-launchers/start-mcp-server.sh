@@ -26,7 +26,13 @@ export PYTHONPATH="$(pwd)/src:$(pwd):${PYTHONPATH:-}"
 
 PID_DIR="${PID_DIR:-/tmp}"
 
-SERVERS=("compute" "db" "network" "security" "observability" "cost" "inventory" "blockstorage" "loadbalancer" "loganalytics" "agents")
+# Dynamically discover servers from mcp_servers/ directories
+SERVERS=()
+for dir in mcp_servers/*; do
+  if [[ -f "$dir/server.py" ]]; then
+    SERVERS+=("$(basename "$dir")")
+  fi
+done
 
 usage() {
   echo "Usage:"
@@ -209,11 +215,11 @@ case "$cmd" in
     ;;
 
   all)
-    # Start all servers as daemons (no-op if already running)
+    # Start all discovered servers as daemons (no-op if already running)
     for server in "${SERVERS[@]}"; do
       launch_server "$server" "daemon"
     done
-    echo "All MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
+    echo "All discovered MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
     ;;
 
   compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer|loganalytics|agents)

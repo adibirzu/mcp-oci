@@ -1,9 +1,8 @@
 # OCI MCP Servers - Architecture & Operations Guide
 
-Last Updated: September 18, 2025
-Version: 2.2
+Last Updated: October 7, 2025
+Version: 2.3
 Status: Production Ready
-
 ## System Overview
 
 The OCI MCP (Model Context Protocol) Servers provide a streamlined interface for AI clients and operator UIs to interact with Oracle Cloud Infrastructure services using FastMCP. The system is optimized for:
@@ -219,6 +218,22 @@ Span semantics:
 - mcp.tool.name = the tool function name
 - oci.service + oci.operation denote backend call intent (e.g., Compute/ListInstances)
 
+## Traffic Redirection and Tool Execution
+
+In the Model Context Protocol (MCP) system, traffic is routed as follows:
+
+1. **Tool Request**: The AI or user initiates a tool use via the <use_mcp_tool> tag, specifying the `server_name` (e.g., "oci-mcp-compute"), `tool_name` (e.g., "list_instances"), and `arguments` as a JSON object.
+
+2. **Server Lookup and Launch**: The client application (e.g., Cline) references the mcp.json configuration file to find the matching server entry by `name`. If the server is not already running, it launches the process using the specified `command` (e.g., ["python", "mcp_servers/compute/server.py"]), in the given `cwd`, with provided `env` variables. The transport is typically "stdio" for local processes.
+
+3. **Request Routing**: The client sends the tool call to the server's process via the configured transport (stdio). The server receives the request and maps the `tool_name` to the corresponding function defined in its code (using Tool.from_function).
+
+4. **Tool Execution**: The server executes the tool function with the provided arguments, interacting with OCI services via the OCI Python SDK as needed. Results are returned to the client.
+
+5. **Observability**: During execution, spans and metrics are captured and exported to the OTEL collector for tracing and monitoring.
+
+This modular design allows independent server processes, with the client handling orchestration and routing based on server_name. Servers are launched on-demand and can run concurrently.
+
 ## Operations
 
 Local run (repo launcher):
@@ -260,13 +275,18 @@ ORACLE_SDK_PATH=oci-python-sdk ./scripts/vendor_oracle_examples.sh
 
 ## Change Log (Highlights)
 
+2.3 (2025-10-07)
+- Added detailed explanation of traffic redirection and tool execution flow
+- Performed cleanup: Archived legacy src/ directory to legacy_src/ as it contains unused server implementations
+- Reviewed docs and scripts; no further cleanup needed as they align with active servers
+
 2.2 (2025-09-18)
 - Added infrastructure creation capabilities with ALLOW_MUTATIONS safety controls
 - Added oci-mcp-blockstorage server with list_volumes and create_volume tools
 - Added oci-mcp-loadbalancer server with list_load_balancers and create_load_balancer tools
 - Enhanced oci-mcp-network with create_vcn and create_subnet tools
 - Enhanced oci-mcp-compute with create_instance tool (SSH key injection support)
-- Updated Claude Desktop configuration script with all new servers
+- Updated client configuration examples with all new servers
 - Fixed UX relations diagram to dynamically update with new servers and tools
 - Enhanced server descriptions and documentation with creation capabilities
 - All creation tools include comprehensive error handling and OCI tracing

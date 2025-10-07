@@ -1,6 +1,6 @@
 """
 Optimized FastMCP wrapper for Log Analytics
-Auto-discovers namespace, provides clear responses for Claude
+Auto-discovers namespace, provides clear, LLM-friendly responses
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def run_loganalytics_optimized(profile: str | None = None, region: str | None = 
             "optimized": True,
             "features": [
                 "Auto-discovers namespace - no manual parameters needed",
-                "Clear, Claude-friendly responses",
+                "Clear, LLM-friendly responses",
                 "Simplified API - only compartment_id required for most operations",
                 "Better error handling and user guidance"
             ],

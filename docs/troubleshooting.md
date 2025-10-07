@@ -9,11 +9,11 @@ Common errors
 - 404/Empty results: Check compartment OCIDs, region mismatches, and filters (e.g., `name` is exact match).
 
 Where to look
-- Claude Desktop logs (macOS): `~/Library/Logs/Claude/` (e.g., `mcp-server-oci-iam.log`, `mcp.log`).
+- MCP client logs depend on the host application. Consult your client documentation for log locations.
 - Run servers directly to debug: `mcp-oci-serve <service> --profile <PROFILE> --region <REGION> --log-level DEBUG`.
 
 Client‑specific guides
-- Claude Desktop: See `clients/claude-desktop` for config examples, PATH notes, and log locations.
+- See `clients/overview` for configuration examples and PATH notes.
 - Cursor: See `clients/cursor` for MCP settings and Docker args.
 - Cline (VS Code): See `clients/cline` for configuration and Docker usage.
 

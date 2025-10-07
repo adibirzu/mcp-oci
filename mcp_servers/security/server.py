@@ -310,6 +310,9 @@ tools = [
     ),
 ]
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
     try:
