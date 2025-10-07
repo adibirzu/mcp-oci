@@ -22,7 +22,7 @@ Run (compute)
 mcp-oci-serve-fast compute --profile DEFAULT --region eu-frankfurt-1
 ```
 
-Claude Desktop
+MCP Desktop Clients
 - Use a separate entry under `mcpServers`:
 ```
 "oci-compute-fast": {

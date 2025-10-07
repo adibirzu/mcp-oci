@@ -406,7 +406,7 @@ def create_common_tools(app, server_name: str):
                 "capabilities": [
                     "auto_discovery",
                     "token_optimized", 
-                    "claude_friendly",
+                    "llm_friendly",
                     "error_handling"
                 ],
                 "default_compartment": clients.root_compartment_id,

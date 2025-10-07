@@ -1,6 +1,6 @@
 """
 Optimized MCP Server: OCI Identity and Access Management (IAM)
-Provides clear, Claude-friendly responses
+Provides clear, LLM-friendly responses
 """
 
 from typing import Any
@@ -22,7 +22,7 @@ def create_client(profile: str | None = None, region: str | None = None):
 def list_users(compartment_id: str, name: str | None = None, limit: int | None = None, 
                page: str | None = None, profile: str | None = None, 
                region: str | None = None) -> dict[str, Any]:
-    """List IAM users with clear, Claude-friendly response"""
+    """List IAM users with clear, LLM-friendly response"""
     try:
         client = create_client(profile=profile, region=region)
         kwargs: dict[str, Any] = {}
@@ -75,7 +75,7 @@ def list_users(compartment_id: str, name: str | None = None, limit: int | None =
 def list_compartments(compartment_id: str, include_subtree: bool = True, access_level: str = "ANY",
                       limit: int | None = None, page: str | None = None,
                       profile: str | None = None, region: str | None = None) -> dict[str, Any]:
-    """List compartments with clear, Claude-friendly response"""
+    """List compartments with clear, LLM-friendly response"""
     try:
         client = create_client(profile=profile, region=region)
         

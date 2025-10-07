@@ -1,6 +1,6 @@
 """
 Optimized FastMCP wrapper for IAM
-Provides clear, Claude-friendly responses
+Provides clear, LLM-friendly responses
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def run_iam_optimized(profile: str | None = None, region: str | None = None,
             "service": "iam",
             "optimized": True,
             "features": [
-                "Clear, Claude-friendly responses",
+                "Clear, LLM-friendly responses",
                 "Structured data with helpful messages",
                 "Better error handling and user guidance",
                 "Consistent response format across all tools"

@@ -7,7 +7,7 @@ A comprehensive suite of Model Context Protocol (MCP) servers for Oracle Cloud I
 
 ## 🌟 Overview
 
-MCP-OCI is a collection of specialized MCP servers that enable Large Language Models (LLMs) like Claude to interact with Oracle Cloud Infrastructure services. Each server focuses on specific OCI domains, providing tools for automation, analysis, and monitoring.
+MCP-OCI is a collection of specialized MCP servers that enable Large Language Models (LLMs) to interact with Oracle Cloud Infrastructure services. Each server focuses on specific OCI domains, providing tools for automation, analysis, and monitoring.
 
 ### Key Features
 
@@ -22,7 +22,7 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Claude AI / LLM Client                      │
+│                         LLM Client (MCP)                        │
 └─────────────────────────────┬───────────────────────────────────┘
                               │ MCP Protocol
 ┌─────────────────────────────┴───────────────────────────────────┐
@@ -182,7 +182,7 @@ Note on tool names
 
 Add servers to your MCP client configuration:
 
-#### Claude Code Configuration
+#### MCP Client Configuration
 ```json
 {
   "mcpServers": {
@@ -211,10 +211,10 @@ export FINOPSAI_CACHE_TTL_SECONDS=600
 export TENANCY_OCID=ocid1.tenancy.oc1..example
 ```
 
-## 📊 Observability & Privacy
+## 📊 Observability
 
 - All servers include observability hooks (OTLP traces/metrics). For stdio servers, send OTLP to a collector by setting `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g., `http://localhost:4317`).
-- Privacy masking: enable with `MCP_OCI_PRIVACY=true` (default via launcher and mcp.json). Masks OCIDs/namespaces across outputs.
+- Privacy masking: enable with `MCP_OCI_PRIVACY=true`. Masks OCIDs/namespaces across outputs.
 
 ## 📊 Observability Stack
 

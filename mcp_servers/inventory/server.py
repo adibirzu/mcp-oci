@@ -613,6 +613,9 @@ tools = [
     ),
 ]
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 if __name__ == "__main__":
     try:
         from prometheus_client import start_http_server as _start_http_server

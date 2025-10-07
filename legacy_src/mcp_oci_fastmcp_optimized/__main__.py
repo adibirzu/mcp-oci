@@ -1,6 +1,6 @@
 """
 Optimized FastMCP Server Entry Point
-Clear, Claude-friendly responses with auto-discovery
+Clear, LLM-friendly responses with auto-discovery
 """
 
 import argparse

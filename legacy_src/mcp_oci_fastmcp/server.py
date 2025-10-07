@@ -9,7 +9,7 @@ Key Features:
 - Auto-discovery of compartments and namespaces
 - Token-optimized responses
 - Comprehensive error handling
-- Claude-friendly response format
+- LLM-friendly response format
 """
 
 import json
@@ -959,7 +959,7 @@ async def get_server_info() -> str:
             "features": [
                 "auto_discovery",
                 "token_optimized",
-                "claude_friendly",
+                "llm_friendly",
                 "error_handling"
             ],
             "default_compartment": clients.root_compartment_id,

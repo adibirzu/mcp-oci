@@ -94,7 +94,7 @@ def test_robust_logan():
 
 if __name__ == "__main__":
     # If this script is accidentally used as an MCP server launcher (as seen in external launch logs),
-    # proxy to the canonical cost server entrypoint so Cline/Claude can connect successfully.
+    # proxy to the canonical cost server entrypoint so MCP clients can connect successfully.
     # To run this diagnostic test instead, set RUN_LOGAN_TEST=1 in the environment.
     import os as _os
     import sys as _sys

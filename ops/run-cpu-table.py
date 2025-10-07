@@ -10,6 +10,8 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from mcp_oci_common.config import get_oci_config  # noqa: E402
+from mcp_oci_common.observability import init_tracing, tool_span
+from opentelemetry import trace
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -43,61 +45,70 @@ def summarize_cpu_for_instance(monitoring_client, compartment_id: str, instance_
     avg = sum(values) / len(values)
     return {"average": avg, "max": max(values), "min": min(values), "count": len(values)}
 
+# Initialize tracing
+os.environ.setdefault("OTEL_SERVICE_NAME", "mcp-oci-cpu-table")
+init_tracing(service_name="mcp-oci-cpu-table")
+tracer = trace.get_tracer("mcp-oci-cpu-table")
+
 def main():
-    try:
-        import oci
-        from oci.pagination import list_call_get_all_results
-    except Exception:
-        print("ERROR: OCI SDK not installed. Please install 'oci' (pip install oci).", file=sys.stderr)
-        sys.exit(2)
+    with tool_span(tracer, "run-cpu-table", mcp_server="mcp-oci-ops"):
+        try:
+            import oci
+            from oci.pagination import list_call_get_all_results
+        except Exception:
+            print("ERROR: OCI SDK not installed. Please install 'oci' (pip install oci).", file=sys.stderr)
+            sys.exit(2)
 
-    cfg = get_oci_config()
+        cfg = get_oci_config()
 
-    tenancy_id = cfg.get("tenancy") or os.getenv("COMPARTMENT_OCID")
-    if not tenancy_id:
-        print("ERROR: Could not determine tenancy OCID (missing 'tenancy' in config).", file=sys.stderr)
-        sys.exit(2)
+        tenancy_id = cfg.get("tenancy") or os.getenv("COMPARTMENT_OCID")
+        if not tenancy_id:
+            print("ERROR: Could not determine tenancy OCID (missing 'tenancy' in config).", file=sys.stderr)
+            sys.exit(2)
 
-    region = cfg.get("region")
-    compute = oci.core.ComputeClient(cfg)
-    monitoring = oci.monitoring.MonitoringClient(cfg)
-    identity = oci.identity.IdentityClient(cfg)
+        region = cfg.get("region")
+        compute = oci.core.ComputeClient(cfg)
+        monitoring = oci.monitoring.MonitoringClient(cfg)
+        identity = oci.identity.IdentityClient(cfg)
 
-    # Time window: today (UTC midnight -> now)
-    start_time = utc_midnight_today()
-    end_time = utc_now()
+        # Time window: today (UTC midnight -> now)
+        start_time = utc_midnight_today()
+        end_time = utc_now()
 
     # Enumerate all ACTIVE compartments in tenancy and list RUNNING instances
-    try:
-        comps_resp = list_call_get_all_results(
-            identity.list_compartments,
-            compartment_id=tenancy_id,
-            compartment_id_in_subtree=True,
-            access_level="ANY",
-        )
-        compartments = [c.id for c in comps_resp.data if getattr(c, "lifecycle_state", "ACTIVE") == "ACTIVE"]
-        # include root tenancy itself
-        if tenancy_id not in compartments:
-            compartments.append(tenancy_id)
-    except oci.exceptions.ServiceError as e:
-        print(f"ERROR: Failed to list compartments: {e}", file=sys.stderr)
-        sys.exit(2)
+    with tool_span(tracer, "list_compartments", mcp_server="mcp-oci-ops"):
+        try:
+            comps_resp = list_call_get_all_results(
+                identity.list_compartments,
+                compartment_id=tenancy_id,
+                compartment_id_in_subtree=True,
+                access_level="ANY",
+            )
+            compartments = [c.id for c in comps_resp.data if getattr(c, "lifecycle_state", "ACTIVE") == "ACTIVE"]
+            # include root tenancy itself
+            if tenancy_id not in compartments:
+                compartments.append(tenancy_id)
+        except oci.exceptions.ServiceError as e:
+            print(f"ERROR: Failed to list compartments: {e}", file=sys.stderr)
+            sys.exit(2)
 
     rows: List[Dict] = []
     for comp_id in compartments:
-        try:
-            resp = list_call_get_all_results(
-                compute.list_instances,
-                compartment_id=comp_id,
-                lifecycle_state="RUNNING",
-            )
-            instances = resp.data
-        except oci.exceptions.ServiceError:
-            # Skip compartments with permissions issues
-            continue
+        with tool_span(tracer, "list_instances", mcp_server="mcp-oci-ops", compartment_id=comp_id):
+            try:
+                resp = list_call_get_all_results(
+                    compute.list_instances,
+                    compartment_id=comp_id,
+                    lifecycle_state="RUNNING",
+                )
+                instances = resp.data
+            except oci.exceptions.ServiceError:
+                # Skip compartments with permissions issues
+                continue
 
         for inst in instances:
-            metrics = summarize_cpu_for_instance(monitoring, comp_id, inst.id, start_time, end_time)
+            with tool_span(tracer, "summarize_cpu", mcp_server="mcp-oci-ops", instance_id=inst.id):
+                metrics = summarize_cpu_for_instance(monitoring, comp_id, inst.id, start_time, end_time)
             rows.append({
                 "id": inst.id,
                 "name": getattr(inst, "display_name", ""),

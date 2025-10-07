@@ -103,6 +103,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Run docs checks
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: docs/docusaurus/yarn.lock
+      - name: Build Docusaurus site
         run: |
-          bash scripts/ci_doc_check.sh
+          corepack enable
+          cd docs/docusaurus
+          yarn install
+          yarn build
