@@ -76,6 +76,10 @@ def doctor() -> Dict[str, Any]:
     except Exception as e:
         return {"server": "oci-mcp-cost-enhanced", "ok": False, "error": str(e)}
 
+@app.tool("healthcheck", description="Lightweight readiness/liveness check for the cost server")
+def healthcheck() -> Dict[str, Any]:
+    return {"status": "ok", "server": "oci-mcp-cost-enhanced", "pid": os.getpid()}
+
 def _safe_serialize(obj) -> Dict[str, Any]:
     """Safely serialize objects with fallbacks for complex types"""
     try:
@@ -506,17 +510,22 @@ def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid:
     """Advanced monthly trend analysis with forecasting"""
     with tool_span(tracer, "monthly_trend_forecast", mcp_server="oci-mcp-cost-enhanced") as span:
         from datetime import timedelta
+        from dateutil.relativedelta import relativedelta
+
         now = datetime.now()
-        start_month = now.month - months_back
-        start_year = now.year
-        if start_month <= 0:
-            start_year += (start_month - 1) // 12
-            start_month = start_month % 12 + 12 * (start_month <= 0)
-        time_start = f"{start_year:04d}-{start_month:02d}-01"
+
+        # Calculate start date: first day of (current month - months_back)
+        start_date = (now - relativedelta(months=months_back)).replace(day=1)
+        time_start = start_date.strftime("%Y-%m-%d")
+
         # For MONTHLY granularity with forecast, end date must be first day of current/next month at midnight
         # Calculate first day of current month
         current_month_start = datetime(now.year, now.month, 1)
         time_end = current_month_start.strftime("%Y-%m-%d")
+
+        # Validate date range
+        if time_start >= time_end:
+            raise ValueError(f"Invalid date range: {time_start} to {time_end}")
         q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
         raw = request_summarized_usages(clients, tenancy_ocid, q)
         series = []

@@ -275,7 +275,7 @@ def run_log_analytics_query(
     limit: int = 1000,
     time_range: Optional[str] = None,
     should_run_async: bool = False,
-    work_request_id: Optional[str] = None,
+    work_request_id: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute a Logging Analytics query. Supports sync (simple) and async (submit+poll).
@@ -1354,7 +1354,6 @@ tools = [
     Tool.from_function(fn=set_la_namespace,  name="set_la_namespace",  description="Set the Logging Analytics namespace to use for all queries"),
     Tool.from_function(fn=get_la_namespace,  name="get_la_namespace",  description="Get the currently selected Logging Analytics namespace"),
 
-    # Core LA tools
     Tool.from_function(fn=run_log_analytics_query, name="run_log_analytics_query", description="Run ad-hoc Log Analytics query"),
     Tool.from_function(fn=run_saved_search,       name="run_saved_search",       description="Run saved Log Analytics search"),
     Tool.from_function(fn=emit_test_log,          name="emit_test_log",          description="Emit synthetic test log"),
@@ -1509,6 +1508,9 @@ def doctor_all() -> Dict:
 
 tools.append(Tool.from_function(fn=doctor_all, name="doctor_all", description="Aggregate doctor/healthcheck across all MCP-OCI servers"))
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
     try:
@@ -1544,7 +1546,16 @@ if __name__ == "__main__":
                 _w.__name__ = getattr(f, "__name__", "tool")
                 _w.__doc__ = getattr(f, "__doc__", "")
                 return _w
-            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+            _wf = _mk(_f)
+            try:
+                params = getattr(_t, "parameters", None)
+            except Exception:
+                params = None
+            if params is not None:
+                # Preserve original JSON schema if present (critical for tools defined with a custom parameters schema)
+                _wrapped.append(_Tool.from_function(_wf, name=_t.name, description=_t.description, parameters=params))
+            else:
+                _wrapped.append(_Tool.from_function(_wf, name=_t.name, description=_t.description))
         tools = _wrapped
     except Exception:
         pass
@@ -1581,4 +1592,13 @@ if __name__ == "__main__":
         # Never break server if profiler not available
         pass
 
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    host = os.getenv("MCP_HOST", "127.0.0.1")
+    try:
+        port = int(os.getenv("MCP_PORT", os.getenv("METRICS_PORT", "8000")))
+    except Exception:
+        port = 8000
+    if transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=transport, host=host, port=port)

@@ -8,7 +8,7 @@ Includes security analysis, MITRE ATT&CK integration, and advanced analytics.
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 from mcp_oci_common import get_oci_config
@@ -329,7 +329,7 @@ def _get_namespace(compartment_id: str, profile: str | None = None, region: str 
 
 def execute_query(
     query: str,
-    compartment_id: str,
+    compartment_id: Optional[str] = None,
     query_name: str | None = None,
     time_range: str = "24h",
     max_count: int = 1000,
@@ -338,6 +338,8 @@ def execute_query(
 ) -> str:
     """Execute a Log Analytics query using direct REST API with query enhancement"""
     with tool_span(tracer, "execute_query", mcp_server="oci-mcp-loganalytics") as span:
+        config = get_oci_config(profile_name=profile)
+        compartment_id = compartment_id or config["tenancy"]
         if requests is None or Signer is None:
             return with_meta({"error": "Required libraries not available"}, success=False)
 
@@ -1333,7 +1335,7 @@ def register_tools() -> list[dict[str, Any]]:
                     "profile": {"type": "string"},
                     "region": {"type": "string"},
                 },
-                "required": ["query", "compartment_id"],
+                "required": ["query"],
             },
             "handler": execute_query,
         },

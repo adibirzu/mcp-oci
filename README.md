@@ -1,7 +1,7 @@
 # MCP-OCI: Oracle Cloud Infrastructure MCP Servers
 
-[![CI](https://github.com/your-org/mcp-oci/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/mcp-oci/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/your-org/mcp-oci/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/mcp-oci)
+[![CI](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml/badge.svg)](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/adibirzu/mcp-oci/branch/main/graph/badge.svg)](https://codecov.io/gh/adibirzu/mcp-oci)
 
 A comprehensive suite of Model Context Protocol (MCP) servers for Oracle Cloud Infrastructure, providing AI-powered cloud operations, cost analysis, and observability.
 
@@ -43,6 +43,36 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 
 ## 🚀 Quick Start
 
+### One-line install (recommended)
+
+Prerequisites are handled automatically by the installer (Python venv, OCI CLI via pip if missing, Docker/Compose check, Docker image build). It will verify your OCI configuration and only then start the Observability stack and MCP servers.
+
+```bash
+# From the repository root
+./scripts/install.sh
+```
+
+What the installer does:
+- Checks/Guides Docker and Docker Compose availability
+- Creates and populates a Python virtualenv; installs project deps with [oci] extras
+- Installs OCI CLI via pip if it's not found on your system
+- Verifies OCI config (uses ~/.oci/config or proceeds if environment credentials/instance principals are present)
+- Builds the local Docker image mcp-oci:latest
+- Starts the Observability stack (Grafana, Prometheus, Tempo, Pyroscope, OTEL Collector) using docker compose
+- Starts all MCP servers via the unified launcher and writes a health summary to ops/MCP_HEALTH.json
+
+If no OCI config is found, the installer will stop and instruct you to run:
+```bash
+source .venv/bin/activate
+oci setup config
+```
+After which you can re-run:
+```bash
+./scripts/install.sh
+```
+
+Alternate MCP configuration:
+
 ### Prerequisites
 
 - Python 3.11+
@@ -60,7 +90,7 @@ Prerequisites
 Steps
 ```bash
 # 1) Clone and enter repo
-git clone https://github.com/your-org/mcp-oci.git
+git clone https://github.com/adibirzu/mcp-oci.git
 cd mcp-oci
 
 # 2) Create venv and install
@@ -92,7 +122,7 @@ Notes
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/mcp-oci.git
+git clone https://github.com/adibirzu/mcp-oci.git
 cd mcp-oci
 
 # Create and activate virtual environment
@@ -477,8 +507,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 - **Documentation**: [Full documentation](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/mcp-oci/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/mcp-oci/discussions)
+- **Issues**: [GitHub Issues](https://github.com/adibirzu/mcp-oci/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/adibirzu/mcp-oci/discussions)
 
 ## 🗺️ Roadmap
 
