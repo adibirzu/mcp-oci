@@ -9,13 +9,25 @@ from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.session import get_client
-import oracledb
-from dotenv import load_dotenv
+# Optional dependencies: load dotenv if available; import oracledb lazily
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except Exception:
+    _load_dotenv = None
+
+def _import_oracledb():
+    try:
+        import oracledb  # type: ignore
+        return oracledb
+    except Exception as e:
+        raise ImportError(
+            "Missing dependency 'oracledb'. Install with 'pip install oracledb' or 'pip install \"mcp-oci[dev]\"' to enable ADB features."
+        ) from e
 
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations
 
-# Load environment variables for ADB connection
-load_dotenv()
+# dotenv (if available) is already loaded above; continue without hard dependency
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -357,6 +369,7 @@ def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
 
 def _get_adb_connection():
     """Helper to get ADB connection"""
+    oracledb = _import_oracledb()
     username = os.getenv("ADB_USERNAME", "ADMIN")
     password = os.getenv("ADB_PASSWORD")
     service_name = os.getenv("ADB_SERVICE_NAME")
@@ -788,6 +801,15 @@ if __name__ == "__main__":
                 return _w
             _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
         tools = _wrapped
+    except Exception:
+        pass
+
+    # Validate MCP tool names at startup
+    try:
+        from mcp_oci_common.validation import validate_and_log_tools as _validate_and_log_tools
+        if not _validate_and_log_tools(tools, "oci-mcp-db"):
+            logging.error("MCP tool validation failed. Server will not start.")
+            exit(1)
     except Exception:
         pass
 

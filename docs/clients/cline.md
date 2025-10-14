@@ -1,71 +1,104 @@
 # Cline (VS Code) Integration
 
-Cline supports MCP servers via the `cline.mcpServers` setting in VS Code’s settings.json.
+Cline can launch MCP servers via the cline.mcpServers setting in VS Code’s settings.json. The examples below mirror this repository’s mcp.json so your local behavior is consistent.
 
 Edit settings.json
-- Open Command Palette → Preferences: Open Settings (JSON)
-- Add or merge the following:
+- Command Palette → “Preferences: Open Settings (JSON)”
+- Add/merge the following block (adjust paths/regions as needed)
 
-Standard MCP servers:
-```
+Recommended mappings (aligns with mcp.json)
 {
   "cline.mcpServers": {
-    "oci-iam": {
-      "command": "mcp-oci-serve-iam",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    "oci-mcp-compute": {
+      "command": "python",
+      "args": ["mcp_servers/compute/server.py"]
     },
-    "oci-compute": {
-      "command": "mcp-oci-serve-compute",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    "oci-mcp-db": {
+      "command": "python",
+      "args": ["mcp_servers/db/server.py"]
     },
-    "oci-usageapi": {
-      "command": "mcp-oci-serve-usageapi",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    "oci-mcp-network": {
+      "command": "python",
+      "args": ["mcp_servers/network/server.py"]
     },
-    "oci-monitoring": {
-      "command": "mcp-oci-serve-monitoring",
-      "args": ["--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+    "oci-mcp-security": {
+      "command": "python",
+      "args": ["mcp_servers/security/server.py"]
     },
     "oci-mcp-observability": {
       "command": "python",
       "args": ["mcp_servers/observability/server.py"]
     },
-    "oci-introspect": {
-      "command": "mcp-oci-serve-introspect",
-      "args": []
+    "oci-mcp-cost": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.cost.server"]
+    },
+    "oci-mcp-inventory": {
+      "command": "python",
+      "args": ["mcp_servers/inventory/server.py"]
+    },
+    "oci-mcp-blockstorage": {
+      "command": "python",
+      "args": ["mcp_servers/blockstorage/server.py"]
+    },
+    "oci-mcp-loadbalancer": {
+      "command": "python",
+      "args": ["mcp_servers/loadbalancer/server.py"]
+    },
+    "oci-mcp-agents": {
+      "command": "python",
+      "args": ["mcp_servers/agents/server.py"]
     }
   }
 }
-```
 
-FastMCP servers (recommended for better performance):
-```
+Environment configuration
+- Configure OCI in your shell or system:
+  - export OCI_PROFILE=DEFAULT
+  - export OCI_REGION=eu-frankfurt-1
+  - Optional: export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+  - Optional: export MCP_OCI_PRIVACY=true
+  - Optional OTLP: export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+- If your VS Code environment does not inherit your shell, set these variables in your OS environment or a devcontainer.
+- PYTHONPATH is not strictly required when running from the repo root; if needed:
+  - export PYTHONPATH=<repo-root>/src:<repo-root>
+
+Notes
+- The commands above launch each server over stdio (Cline’s preferred transport).
+- These servers also expose OTLP traces/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+- For HTTP metrics endpoints, set METRICS_PORT (e.g., 8001 for compute, 8003 for observability).
+- To stop or manage daemonized servers started via shell scripts, use scripts/mcp-launchers/start-mcp-server.sh.
+
+Alternative: single CLI wrapper
+If you use the unified CLI wrapper mcp-oci-serve (as referenced in the README), you can configure servers like:
 {
   "cline.mcpServers": {
-    "oci-iam-fast": {
-      "command": "mcp-oci-serve-fast",
-      "args": ["iam", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
-    },
-    "oci-compute-fast": {
-      "command": "mcp-oci-serve-fast",
+    "oci-compute": {
+      "command": "mcp-oci-serve",
       "args": ["compute", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
-    },
-    "oci-usageapi-fast": {
-      "command": "mcp-oci-serve-fast",
-      "args": ["usageapi", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     }
   }
 }
-```
+This requires mcp-oci-serve to be on PATH (installed in your venv/system).
 
-Docker-based Option
-```
-"oci-iam": {
-  "command": "docker",
-  "args": ["run", "--rm", "-i", "-v", "${env:HOME}/.oci:/root/.oci", "mcp-oci", "mcp-oci-serve-iam", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
+Docker-based option
+{
+  "cline.mcpServers": {
+    "oci-mcp-compute": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "${env:HOME}/.oci:/root/.oci",
+        "-v", "${workspaceFolder}:/work",
+        "-w", "/work",
+        "mcp-oci:latest",
+        "python", "mcp_servers/compute/server.py"
+      ]
+    }
+  }
 }
-```
 
-Tips
-- Ensure VS Code can find `mcp-oci` in PATH (set in your shell or VS Code terminal).
-- Use `--log-level INFO` to monitor requests; `DEBUG` for more details.
+Troubleshooting
+- Run mcp-oci doctor --profile DEFAULT --region eu-frankfurt-1 in a terminal to verify OCI access.
+- Use DEBUG=1 when debugging a specific server to increase log verbosity.
+- If LA has multiple namespaces, set LA_NAMESPACE explicitly for oci-mcp-observability.

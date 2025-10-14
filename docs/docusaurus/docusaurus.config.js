@@ -1,15 +1,15 @@
 // Minimal Docusaurus config for MCP-OCI, mirroring AWS MCP site structure
 // This is a stub to enable local docs preview/build.
 
-// @ts-check
+ // @ts-nocheck
 
 const config = {
   title: 'MCP-OCI',
-  url: 'https://your-org.github.io',
+  url: 'https://adibirzu.github.io',
   baseUrl: '/mcp-oci/',
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
-  organizationName: 'your-org',
+  organizationName: 'adibirzu',
   projectName: 'mcp-oci',
   trailingSlash: false,
   presets: [
