@@ -6,9 +6,7 @@ authors = [ "Abir Zu <abirzu@example.com>" ]
 readme = "README.md"
 packages = [
   {include = "mcp_servers"},
-  {include = "mcp_oci_common"},
-  # Production server packages live under src/
-  {include = "mcp_oci_*", from = "src"},
+  {include = "mcp_oci_common"}
 ]
 
 [tool.poetry.dependencies]
@@ -75,9 +73,6 @@ all = [
 ]
 
 # Expose CLI entry points
-[tool.poetry.scripts]
-mcp-oci = "mcp_oci_cli.__main__:main"
-mcp-oci-serve = "mcp_oci_serve.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
