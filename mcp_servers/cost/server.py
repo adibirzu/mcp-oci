@@ -3,13 +3,11 @@ Enhanced OCI Cost Server with FinOpsAI Integration
 Combines the existing MCP-OCI cost server with advanced FinOpsAI analytics tools
 """
 import os
-import sys
 import logging
 import oci
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Any
 import numpy as np
-import pandas as pd
 from scipy import stats
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
@@ -25,12 +23,11 @@ from .finopsai.templates import TEMPLATES
 from .finopsai.schemas import (
     CostByCompartment, CostByTagOut, MonthlyTrend, ServiceDrilldown,
     BudgetStatusOut, SchedulesOut, ObjectStorageOut, FocusHealthOut, SpikesOut,
-    UnitCostOut, ForecastCreditsOut, Window
+    UnitCostOut, ForecastCreditsOut
 )
 from .finopsai.tools.usage_queries import UsageQuery, request_summarized_usages
-from .finopsai.utils import safe_float, currency_from, map_compartment_rows, resolve_tenancy, resolve_compartments
+from .finopsai.utils import safe_float, currency_from, map_compartment_rows, resolve_tenancy
 from .finopsai.tools.focus import list_focus_days
-from .finopsai.tools.budgets import list_budgets_and_rules
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -78,6 +75,10 @@ def doctor() -> Dict[str, Any]:
         }
     except Exception as e:
         return {"server": "oci-mcp-cost-enhanced", "ok": False, "error": str(e)}
+
+@app.tool("healthcheck", description="Lightweight readiness/liveness check for the cost server")
+def healthcheck() -> Dict[str, Any]:
+    return {"status": "ok", "server": "oci-mcp-cost-enhanced", "pid": os.getpid()}
 
 def _safe_serialize(obj) -> Dict[str, Any]:
     """Safely serialize objects with fallbacks for complex types"""
@@ -508,14 +509,24 @@ def cost_by_tag_key_value(tenancy_ocid: str, time_start: str, time_end: str, def
 def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid: Optional[str] = None) -> Dict[str, Any]:
     """Advanced monthly trend analysis with forecasting"""
     with tool_span(tracer, "monthly_trend_forecast", mcp_server="oci-mcp-cost-enhanced") as span:
+        from datetime import timedelta
+        from dateutil.relativedelta import relativedelta
+
         now = datetime.now()
-        start_month = now.month - months_back
-        start_year = now.year
-        if start_month <= 0:
-            start_year += (start_month - 1) // 12
-            start_month = start_month % 12 + 12 * (start_month <= 0)
-        time_start = f"{start_year:04d}-{start_month:02d}-01"
-        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=now.strftime("%Y-%m-%d"), forecast=True)
+
+        # Calculate start date: first day of (current month - months_back)
+        start_date = (now - relativedelta(months=months_back)).replace(day=1)
+        time_start = start_date.strftime("%Y-%m-%d")
+
+        # For MONTHLY granularity with forecast, end date must be first day of current/next month at midnight
+        # Calculate first day of current month
+        current_month_start = datetime(now.year, now.month, 1)
+        time_end = current_month_start.strftime("%Y-%m-%d")
+
+        # Validate date range
+        if time_start >= time_end:
+            raise ValueError(f"Invalid date range: {time_start} to {time_end}")
+        q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
         raw = request_summarized_usages(clients, tenancy_ocid, q)
         series = []
         for it in raw.get("items", []):

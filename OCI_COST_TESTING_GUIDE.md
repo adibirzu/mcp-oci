@@ -232,5 +232,5 @@ Success Criteria: Risk categorization (NEUTRAL/OVER/UNDER) with analysis
 
 ---
 
-*Generated with Claude Code - OCI Cost MCP Server Enhanced*
+*Generated programmatically - OCI Cost MCP Server Enhanced*
 *Last Updated: September 2024*

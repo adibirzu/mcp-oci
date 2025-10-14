@@ -602,6 +602,9 @@ tools = [
     ),
 ]
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 # FastAPI instrumentation is imported lazily in __main__ to avoid hard dependency at import time
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ Provides validation functions for MCP tool names and other MCP compliance checks
 
 import re
 import logging
-from typing import List, Dict, Any
+from typing import List, Any
 
 # MCP tool name regex: only letters, digits, underscores, and hyphens, 1-64 characters
 MCP_TOOL_NAME_REGEX = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')

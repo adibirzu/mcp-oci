@@ -4,7 +4,6 @@ import time
 import threading
 import hashlib
 from typing import Dict, Any, Optional, Callable
-from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -105,7 +104,14 @@ class MCPCache:
 
         return None
 
-    def set(self, server_name: str, operation: str, params: Dict[str, Any], data: Any, ttl_seconds: Optional[int] = None):
+    def set(
+        self,
+        server_name: str,
+        operation: str,
+        params: Dict[str, Any],
+        data: Any,
+        ttl_seconds: Optional[int] = None,
+    ) -> None:
         """Cache data with optional TTL"""
         cache_key = self._get_cache_key(server_name, operation, params)
         ttl = ttl_seconds or self.default_ttl
@@ -168,8 +174,7 @@ class MCPCache:
                 time.sleep(300)  # Check every 5 minutes
 
                 with self.lock:
-                    to_refresh = []
-                    for cache_key, entry in self.cache.items():
+                    for cache_key, entry in list(self.cache.items()):
                         if entry.refresh_needed():
                             # We can't refresh here without knowing the fetch function
                             # Just mark for potential cleanup if expired

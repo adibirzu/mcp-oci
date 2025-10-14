@@ -32,7 +32,10 @@ fi
 
 . .venv/bin/activate
 pip install -U pip
-pip install -e .[dev]
+pip install -e .
+# Install runtime/test/dev tools needed by Makefile and tests
+pip install -r requirements.txt
+pip install pytest pytest-mock pytest-asyncio pytest-cov requests black isort flake8 mypy ruff
 
 echo "mcp-oci CLI: $(command -v mcp-oci || echo 'not found')"
 if command -v mcp-oci >/dev/null 2>&1; then
@@ -42,4 +45,3 @@ if command -v mcp-oci >/dev/null 2>&1; then
   set -e
 fi
 echo "Bootstrap complete. Activate venv with: . .venv/bin/activate"
-

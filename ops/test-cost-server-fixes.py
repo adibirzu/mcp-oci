@@ -5,8 +5,6 @@ Test script to validate OCI Usage API fixes in the cost MCP server
 
 import sys
 import os
-import json
-from datetime import datetime, timedelta
 
 # Add the mcp_servers path to sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'mcp_servers', 'cost'))

@@ -9,7 +9,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 import oci  # type: ignore
-from mcp_oci_common.config import get_oci_config, get_compartment_id  # type: ignore
+from mcp_oci_common.config import get_oci_config  # type: ignore
 
 
 def resolve_namespace(la_client, tenancy_id: str) -> str:

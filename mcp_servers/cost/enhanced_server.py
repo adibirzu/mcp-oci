@@ -3,13 +3,11 @@ Enhanced OCI Cost Server with FinOpsAI Integration
 Combines the existing MCP-OCI cost server with advanced FinOpsAI analytics tools
 """
 import os
-import sys
 import logging
 import oci
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Any
 import numpy as np
-import pandas as pd
 from scipy import stats
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
@@ -23,13 +21,11 @@ from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, 
 from finopsai.oci_client_adapter import make_clients, list_compartments_recursive
 from finopsai.templates import TEMPLATES
 from finopsai.schemas import (
-    CostByCompartment, CostByTagOut, MonthlyTrend, ServiceDrilldown,
-    BudgetStatusOut, SchedulesOut, ObjectStorageOut, FocusHealthOut, SpikesOut,
-    UnitCostOut, ForecastCreditsOut, Window
+    CostByCompartment, MonthlyTrend, ServiceDrilldown,
+    FocusHealthOut
 )
 from finopsai.tools.usage_queries import UsageQuery, request_summarized_usages
 from finopsai.tools.focus import list_focus_days
-from finopsai.tools.budgets import list_budgets_and_rules
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)

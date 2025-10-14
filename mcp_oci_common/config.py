@@ -135,17 +135,9 @@ def allow_mutations() -> bool:
 
 
 def is_oci_sdk_available() -> bool:
-    """
-    Check if OCI SDK is available without raising exceptions.
-
-    Returns:
-        bool: True if OCI SDK can be imported, False otherwise
-    """
-    try:
-        import oci
-        return True
-    except ImportError:
-        return False
+    """Check if OCI SDK is available without raising exceptions."""
+    import importlib.util as _importlib
+    return _importlib.find_spec("oci") is not None
 
 
 def get_oci_config_safe(profile_name: Optional[str] = None) -> Optional[Dict[str, Any]]:

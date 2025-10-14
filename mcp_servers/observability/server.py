@@ -1,7 +1,6 @@
 # oci_mcp_observability_server.py
 
 import os
-import sys
 import json
 import logging
 from datetime import datetime, timezone, timedelta
@@ -10,7 +9,7 @@ from typing import Dict, Optional, List
 # ----- Observability bootstrap -----
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 from mcp_oci_common.privacy import privacy_enabled, redact_payload
-from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer, MCPObservabilityEnhancer
+from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer
 
 # ----- OCI SDK -----
 import oci
@@ -276,7 +275,7 @@ def run_log_analytics_query(
     limit: int = 1000,
     time_range: Optional[str] = None,
     should_run_async: bool = False,
-    work_request_id: Optional[str] = None,
+    work_request_id: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute a Logging Analytics query. Supports sync (simple) and async (submit+poll).
@@ -761,6 +760,306 @@ def check_oci_connection(
         })
         return out
 
+def correlate_threat_intelligence(
+    indicator_type: str,
+    indicator_value: str,
+    time_range: str = "24h",
+    compartment_id: Optional[str] = None,
+    profile: Optional[str] = None,
+    region: Optional[str] = None,
+) -> Dict:
+    """Correlate threat intelligence indicators with log data.
+
+    Supported indicator types:
+    - ip: IP address (malicious IPs, C2 servers)
+    - domain: Domain name (malicious domains, phishing sites)
+    - hash: File hash (malware signatures - MD5, SHA1, SHA256)
+    - user: User account (compromised accounts)
+    - url: URL pattern (malicious URLs, attack patterns)
+    """
+    with tool_span(tracer, "correlate_threat_intelligence", mcp_server="oci-mcp-observability") as span:
+        cid = _ensure_compartment_id(compartment_id)
+
+        correlation_queries = {
+            "ip": f"""
+*
+| where 'Source IP' = '{indicator_value}' or 'Destination IP' = '{indicator_value}' or contains('Log Entry', '{indicator_value}')
+| stats count() as event_count,
+        count(distinct 'Event Name') as unique_events,
+        count(distinct 'User') as affected_users,
+        count(distinct 'Resource ID') as affected_resources,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'Log Source', 'Event Name'
+| sort -event_count
+""",
+            "domain": f"""
+*
+| where contains('Domain', '{indicator_value}') or contains('URL', '{indicator_value}') or contains('Log Entry', '{indicator_value}')
+| stats count() as event_count,
+        count(distinct 'Source IP') as source_ips,
+        count(distinct 'User') as affected_users,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'Event Name', 'Action'
+| sort -event_count
+""",
+            "hash": f"""
+*
+| where contains('File Hash', '{indicator_value}') or contains('MD5', '{indicator_value}') or contains('SHA256', '{indicator_value}') or contains('Log Entry', '{indicator_value}')
+| stats count() as event_count,
+        count(distinct 'File Path') as unique_files,
+        count(distinct 'User') as affected_users,
+        count(distinct 'Host') as affected_hosts,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'Event Name', 'File Name'
+| sort -event_count
+""",
+            "user": f"""
+*
+| where 'User' = '{indicator_value}' or contains('Log Entry', '{indicator_value}')
+| stats count() as event_count,
+        count(distinct 'Event Name') as unique_actions,
+        count(distinct 'Source IP') as source_ips,
+        count(distinct 'Resource ID') as accessed_resources,
+        count_if('Log Level' = 'ERROR' or 'Log Level' = 'WARNING') as suspicious_events,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'Event Name', 'Source IP'
+| eval suspicious_rate = (suspicious_events * 100.0) / event_count
+| sort -suspicious_rate, -event_count
+""",
+            "url": f"""
+*
+| where contains('URL', '{indicator_value}') or contains('Request URI', '{indicator_value}') or contains('Log Entry', '{indicator_value}')
+| stats count() as event_count,
+        count(distinct 'Source IP') as source_ips,
+        count(distinct 'User') as affected_users,
+        count_if('Status Code' >= 400) as error_responses,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'Request Method', 'Status Code'
+| eval error_rate = (error_responses * 100.0) / event_count
+| sort -event_count
+"""
+        }
+
+        if indicator_type not in correlation_queries:
+            return {
+                "success": False,
+                "error": f"Unknown indicator type: {indicator_type}",
+                "available_types": list(correlation_queries.keys())
+            }
+
+        query = correlation_queries[indicator_type]
+
+        # Execute the correlation query
+        result = execute_logan_query(
+            query=query,
+            compartment_id=cid,
+            query_name=f"threat_intel_{indicator_type}",
+            time_range=time_range,
+            profile=profile,
+            region=region,
+        )
+
+        # Enrich with threat intelligence context
+        threat_context = {
+            "indicator_type": indicator_type,
+            "indicator_value": indicator_value,
+            "time_range": time_range,
+            "query_executed": query.strip(),
+            "correlation_results": result.get("results", []),
+            "total_matches": result.get("count", 0),
+            "risk_level": "unknown"
+        }
+
+        # Calculate risk level based on findings
+        count = result.get("count", 0)
+        if count > 100:
+            threat_context["risk_level"] = "critical"
+        elif count > 50:
+            threat_context["risk_level"] = "high"
+        elif count > 10:
+            threat_context["risk_level"] = "medium"
+        elif count > 0:
+            threat_context["risk_level"] = "low"
+        else:
+            threat_context["risk_level"] = "none"
+
+        return {
+            "success": True,
+            **threat_context
+        }
+
+def build_advanced_query(
+    query_type: str,
+    time_range: str = "24h",
+    group_by: Optional[List[str]] = None,
+    filters: Optional[Dict[str, str]] = None,
+    aggregation: Optional[str] = None,
+) -> Dict:
+    """Build advanced Log Analytics queries for common patterns.
+
+    Supported query types:
+    - error_analysis: Find and analyze errors with stack traces
+    - performance_slowdown: Identify slow operations and bottlenecks
+    - security_audit: Security events and access patterns
+    - resource_usage: Resource utilization and capacity metrics
+    - api_monitoring: API call patterns, latency, errors
+    - user_activity: User behavior and activity patterns
+    - data_access: Data access patterns and anomalies
+    - network_traffic: Network flow analysis
+    """
+    with tool_span(tracer, "build_advanced_query", mcp_server="oci-mcp-observability") as span:
+        query_templates = {
+            "error_analysis": """
+*
+| where 'Log Level' = 'ERROR' or 'Log Level' = 'FATAL' or contains('Log Entry', 'Exception') or contains('Log Entry', 'Error')
+| stats count() as error_count by 'Log Source', 'Log Level', 'Error Type'
+| sort -error_count
+""",
+            "performance_slowdown": """
+*
+| where 'Response Time' > 1000 or contains('Log Entry', 'slow') or contains('Log Entry', 'timeout')
+| eval duration_sec = 'Response Time' / 1000
+| stats avg(duration_sec) as avg_duration, max(duration_sec) as max_duration, count() as slow_requests by 'Service', 'Endpoint'
+| where slow_requests > 5
+| sort -avg_duration
+""",
+            "security_audit": """
+*
+| where 'Event Name' in ('CreateUser', 'DeleteUser', 'UpdateUser', 'ChangePassword', 'AssumeRole', 'UpdatePolicy')
+     or contains('Log Entry', 'authentication') or contains('Log Entry', 'authorization')
+| stats count() as event_count by 'Event Name', 'User', 'Source IP'
+| sort -event_count
+""",
+            "resource_usage": """
+*
+| where contains('Log Source', 'Compute') or contains('Log Source', 'Database') or contains('Log Source', 'Storage')
+| where 'CPU Usage' > 0 or 'Memory Usage' > 0 or 'Disk Usage' > 0
+| stats avg('CPU Usage') as avg_cpu, avg('Memory Usage') as avg_memory, avg('Disk Usage') as avg_disk by 'Resource ID', 'Resource Name'
+| sort -avg_cpu
+""",
+            "api_monitoring": """
+*
+| where contains('Log Source', 'API') or 'Request Method' in ('GET', 'POST', 'PUT', 'DELETE', 'PATCH')
+| stats count() as request_count,
+        avg('Response Time') as avg_latency,
+        percentile('Response Time', 95) as p95_latency,
+        percentile('Response Time', 99) as p99_latency,
+        count_if('Status Code' >= 400) as error_count,
+        count_if('Status Code' >= 500) as server_error_count
+  by 'Endpoint', 'Request Method'
+| eval error_rate = (error_count * 100.0) / request_count
+| where request_count > 10
+| sort -request_count
+""",
+            "user_activity": """
+*
+| where 'User' != '' and 'User' != 'null'
+| stats count() as action_count,
+        count(distinct 'Event Name') as unique_actions,
+        count(distinct 'Source IP') as unique_ips,
+        min(Time) as first_seen,
+        max(Time) as last_seen
+  by 'User'
+| eval active_duration_hours = (last_seen - first_seen) / 3600
+| sort -action_count
+""",
+            "data_access": """
+*
+| where 'Event Name' in ('GetObject', 'PutObject', 'DeleteObject', 'ListBucket', 'HeadObject')
+     or contains('Log Entry', 'data access') or contains('Log Entry', 'file read')
+| stats count() as access_count,
+        sum('Bytes Transferred') as total_bytes,
+        count(distinct 'Resource ID') as unique_resources
+  by 'User', 'Event Name', 'Resource Type'
+| eval total_mb = total_bytes / 1048576
+| sort -access_count
+""",
+            "network_traffic": """
+*
+| where 'Protocol' in ('TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS')
+     or 'Source IP' != '' or 'Destination IP' != ''
+| stats count() as packet_count,
+        sum('Bytes') as total_bytes,
+        count(distinct 'Destination Port') as unique_ports,
+        count_if('Action' = 'ACCEPT') as accepted,
+        count_if('Action' = 'REJECT') as rejected
+  by 'Source IP', 'Destination IP', 'Protocol'
+| eval total_mb = total_bytes / 1048576,
+       reject_rate = (rejected * 100.0) / packet_count
+| sort -packet_count
+"""
+        }
+
+        if query_type not in query_templates:
+            return {
+                "success": False,
+                "error": f"Unknown query type: {query_type}",
+                "available_types": list(query_templates.keys())
+            }
+
+        base_query = query_templates[query_type].strip()
+
+        # Apply time range filter
+        if time_range:
+            time_filter = f"Time > dateRelative({time_range})"
+            # Insert time filter after the base selector
+            lines = base_query.split('\n')
+            base_query = '\n'.join([lines[0], f"| where {time_filter}"] + lines[1:])
+
+        # Apply custom filters
+        if filters:
+            filter_clauses = []
+            for key, value in filters.items():
+                if isinstance(value, str):
+                    filter_clauses.append(f"'{key}' = '{value}'")
+                else:
+                    filter_clauses.append(f"'{key}' = {value}")
+            if filter_clauses:
+                filter_line = f"| where {' and '.join(filter_clauses)}"
+                lines = base_query.split('\n')
+                base_query = '\n'.join(lines[:2] + [filter_line] + lines[2:])
+
+        # Override group by if specified
+        if group_by:
+            # Replace the existing "by" clause in stats commands
+            lines = base_query.split('\n')
+            modified_lines = []
+            for line in lines:
+                if '| stats' in line and ' by ' in line:
+                    # Keep stats aggregations, replace group by fields
+                    parts = line.split(' by ')
+                    quoted_groups = [repr(g) for g in group_by]
+                    group_by_clause = ', '.join(quoted_groups)
+                    modified_lines.append(f"{parts[0]} by {group_by_clause}")
+                else:
+                    modified_lines.append(line)
+            base_query = '\n'.join(modified_lines)
+
+        # Add additional aggregation if specified
+        if aggregation:
+            lines = base_query.split('\n')
+            # Insert aggregation before sort
+            for i, line in enumerate(lines):
+                if '| sort' in line:
+                    lines.insert(i, f"| {aggregation}")
+                    break
+            base_query = '\n'.join(lines)
+
+        return {
+            "success": True,
+            "query_type": query_type,
+            "query": base_query,
+            "time_range": time_range,
+            "filters": filters,
+            "group_by": group_by,
+            "description": f"Advanced {query_type.replace('_', ' ')} query for Log Analytics"
+        }
+
 def quick_checks(
     compartment_id: Optional[str] = None,
     time_range: str = "24h",
@@ -1055,10 +1354,13 @@ tools = [
     Tool.from_function(fn=set_la_namespace,  name="set_la_namespace",  description="Set the Logging Analytics namespace to use for all queries"),
     Tool.from_function(fn=get_la_namespace,  name="get_la_namespace",  description="Get the currently selected Logging Analytics namespace"),
 
-    # Core LA tools
     Tool.from_function(fn=run_log_analytics_query, name="run_log_analytics_query", description="Run ad-hoc Log Analytics query"),
     Tool.from_function(fn=run_saved_search,       name="run_saved_search",       description="Run saved Log Analytics search"),
     Tool.from_function(fn=emit_test_log,          name="emit_test_log",          description="Emit synthetic test log"),
+
+    # Advanced query builders
+    Tool.from_function(fn=build_advanced_query, name="build_advanced_query", description="Build advanced Log Analytics queries for common patterns (error analysis, performance, security audit, API monitoring, etc.)"),
+    Tool.from_function(fn=correlate_threat_intelligence, name="correlate_threat_intelligence", description="Correlate threat intelligence indicators (IPs, domains, hashes, users, URLs) with log data"),
 
     # Logan-enhanced capabilities
     Tool.from_function(fn=execute_logan_query,          name="execute_logan_query",          description="Execute enhanced OCI Logging Analytics query (Logan)"),
@@ -1206,6 +1508,9 @@ def doctor_all() -> Dict:
 
 tools.append(Tool.from_function(fn=doctor_all, name="doctor_all", description="Aggregate doctor/healthcheck across all MCP-OCI servers"))
 
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
+
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
     try:
@@ -1241,7 +1546,16 @@ if __name__ == "__main__":
                 _w.__name__ = getattr(f, "__name__", "tool")
                 _w.__doc__ = getattr(f, "__doc__", "")
                 return _w
-            _wrapped.append(_Tool.from_function(_mk(_f), name=_t.name, description=_t.description))
+            _wf = _mk(_f)
+            try:
+                params = getattr(_t, "parameters", None)
+            except Exception:
+                params = None
+            if params is not None:
+                # Preserve original JSON schema if present (critical for tools defined with a custom parameters schema)
+                _wrapped.append(_Tool.from_function(_wf, name=_t.name, description=_t.description, parameters=params))
+            else:
+                _wrapped.append(_Tool.from_function(_wf, name=_t.name, description=_t.description))
         tools = _wrapped
     except Exception:
         pass
@@ -1278,4 +1592,13 @@ if __name__ == "__main__":
         # Never break server if profiler not available
         pass
 
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    host = os.getenv("MCP_HOST", "127.0.0.1")
+    try:
+        port = int(os.getenv("MCP_PORT", os.getenv("METRICS_PORT", "8000")))
+    except Exception:
+        port = 8000
+    if transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=transport, host=host, port=port)
