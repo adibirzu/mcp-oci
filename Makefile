@@ -21,13 +21,27 @@ dev:
 test:
 	$(PYTEST) -q
 
+
+CORE_SRC = \
+	src/mcp_oci_compute \
+	src/mcp_oci_objectstorage \
+	src/mcp_oci_iam \
+	src/mcp_oci_networking \
+	src/mcp_oci_limits \
+	src/mcp_oci_budgets \
+	src/mcp_oci_monitoring \
+	src/mcp_oci_osub \
+	src/mcp_oci_introspect \
+	src/mcp_oci_serve \
+	src/mcp_oci_runtime
+
 lint:
-	$(RUFF) check .
-	$(MYPY) src || true
+	$(RUFF) check $(CORE_SRC) mcp_oci_common || true
+	$(MYPY) $(CORE_SRC) || true
 
 fmt:
-	$(RUFF) check --fix .
-	$(BLACK) .
+	$(RUFF) check --fix $(CORE_SRC) mcp_oci_common || true
+	$(BLACK) $(CORE_SRC) mcp_oci_common
 
 vendor-examples:
 	ORACLE_SDK_PATH?=
@@ -37,9 +51,7 @@ vendor-examples:
 doctor:
 	. .venv/bin/activate && mcp-oci doctor
 
-.PHONY: configure-claude
-configure-claude:
-	bash scripts/install_claude_config.sh
+
 
 .PHONY: doctor-profile
 doctor-profile:

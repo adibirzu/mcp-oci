@@ -30,7 +30,7 @@ Cost server hardening
 - Doctor tool reports masking status and tool names
 
 Client configuration
-- `mcp.json` provides ready-to-use server commands for MCP clients (e.g., Claude Desktop). Each entry sets `MCP_OCI_PRIVACY=true` by default.
+- `mcp.json` provides ready-to-use server commands for MCP clients. Each entry sets `MCP_OCI_PRIVACY=true` by default.
 
 Deployment summary
 - Linux quick start:

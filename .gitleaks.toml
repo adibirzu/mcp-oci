@@ -1,0 +1,16 @@
+title = "mcp-oci gitleaks configuration"
+
+# Global allowlist to avoid false positives from vendored SDK examples
+[allowlist]
+description = "Exclude vendored OCI Python SDK and secret scan report from gitleaks"
+paths = [
+  '''.*/oci-python-sdk/.*''',         # absolute or relative paths containing the vendor tree
+  '''.*/third_party/oci-python-sdk/.*''', # in case vendor is moved under third_party
+  '''^ops/secret_scan\.json$'''      # exclude generated scan report
+]
+
+# Notes:
+# - The allowlist above intentionally excludes only the vendored SDK sources and the generated report.
+# - All project-owned code remains scanned. Do not add additional paths here unless they are vendor/example content.
+# - Run gitleaks with this config:
+#     gitleaks detect --no-git -s . -c .gitleaks.toml -f json -r ops/secret_scan.json

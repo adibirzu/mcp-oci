@@ -1,4 +1,5 @@
 import threading
+import os
 from typing import Any, Dict, Optional, Tuple, Type
 
 from .config import get_oci_config
@@ -36,11 +37,47 @@ def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Op
         if region:
             cfg["region"] = region
 
+        # Build client kwargs with optional retries and timeouts (safe fallbacks)
+        client_kwargs = {}
+        try:
+            enable_retries = os.getenv("OCI_ENABLE_RETRIES", "true").lower() in ("1", "true", "yes", "on")
+            if enable_retries:
+                try:
+                    import oci as _oci_mod  # noqa: F401
+                    from oci import retry as _oci_retry  # type: ignore
+                    client_kwargs["retry_strategy"] = getattr(_oci_retry, "DEFAULT_RETRY_STRATEGY", None)
+                except Exception:
+                    # Retry strategy not available; proceed without
+                    pass
+        except Exception:
+            pass
+
+        # Timeout configuration: supports "OCI_REQUEST_TIMEOUT" (single seconds) or connect/read split
+        try:
+            to_connect = os.getenv("OCI_REQUEST_TIMEOUT_CONNECT")
+            to_read = os.getenv("OCI_REQUEST_TIMEOUT_READ")
+            to_both = os.getenv("OCI_REQUEST_TIMEOUT")
+            if to_connect and to_read:
+                client_kwargs["timeout"] = (float(to_connect), float(to_read))
+            elif to_both:
+                sec = float(to_both)
+                client_kwargs["timeout"] = (sec, sec)
+        except Exception:
+            # If the SDK/client does not accept 'timeout', ignore silently
+            pass
+
         signer = cfg.get("signer")
-        if signer is not None:
-            client = oci_client_class(cfg, signer=signer)
-        else:
-            client = oci_client_class(cfg)
+        try:
+            if signer is not None:
+                client = oci_client_class(cfg, signer=signer, **client_kwargs)
+            else:
+                client = oci_client_class(cfg, **client_kwargs)
+        except TypeError:
+            # Some clients may not accept retry_strategy/timeout kwargs; fall back gracefully
+            if signer is not None:
+                client = oci_client_class(cfg, signer=signer)
+            else:
+                client = oci_client_class(cfg)
 
         _client_cache[key] = client
         return client

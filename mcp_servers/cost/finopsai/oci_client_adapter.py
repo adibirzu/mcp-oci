@@ -4,7 +4,7 @@ OCI Client Adapter for FinOpsAI integration with MCP-OCI architecture
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 import oci
-from mcp_oci_common import get_oci_config, get_compartment_id
+from mcp_oci_common import get_oci_config
 
 
 @dataclass

@@ -1,10 +1,13 @@
 # MCP-OCI: Oracle Cloud Infrastructure MCP Servers
 
+[![CI](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml/badge.svg)](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/adibirzu/mcp-oci/branch/main/graph/badge.svg)](https://codecov.io/gh/adibirzu/mcp-oci)
+
 A comprehensive suite of Model Context Protocol (MCP) servers for Oracle Cloud Infrastructure, providing AI-powered cloud operations, cost analysis, and observability.
 
 ## 🌟 Overview
 
-MCP-OCI is a collection of specialized MCP servers that enable Large Language Models (LLMs) like Claude to interact with Oracle Cloud Infrastructure services. Each server focuses on specific OCI domains, providing tools for automation, analysis, and monitoring.
+MCP-OCI is a collection of specialized MCP servers that enable Large Language Models (LLMs) to interact with Oracle Cloud Infrastructure services. Each server focuses on specific OCI domains, providing tools for automation, analysis, and monitoring.
 
 ### Key Features
 
@@ -19,7 +22,7 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Claude AI / LLM Client                      │
+│                         LLM Client (MCP)                        │
 └─────────────────────────────┬───────────────────────────────────┘
                               │ MCP Protocol
 ┌─────────────────────────────┴───────────────────────────────────┐
@@ -40,6 +43,36 @@ MCP-OCI is a collection of specialized MCP servers that enable Large Language Mo
 
 ## 🚀 Quick Start
 
+### One-line install (recommended)
+
+Prerequisites are handled automatically by the installer (Python venv, OCI CLI via pip if missing, Docker/Compose check, Docker image build). It will verify your OCI configuration and only then start the Observability stack and MCP servers.
+
+```bash
+# From the repository root
+./scripts/install.sh
+```
+
+What the installer does:
+- Checks/Guides Docker and Docker Compose availability
+- Creates and populates a Python virtualenv; installs project deps with [oci] extras
+- Installs OCI CLI via pip if it's not found on your system
+- Verifies OCI config (uses ~/.oci/config or proceeds if environment credentials/instance principals are present)
+- Builds the local Docker image mcp-oci:latest
+- Starts the Observability stack (Grafana, Prometheus, Tempo, Pyroscope, OTEL Collector) using docker compose
+- Starts all MCP servers via the unified launcher and writes a health summary to ops/MCP_HEALTH.json
+
+If no OCI config is found, the installer will stop and instruct you to run:
+```bash
+source .venv/bin/activate
+oci setup config
+```
+After which you can re-run:
+```bash
+./scripts/install.sh
+```
+
+Alternate MCP configuration:
+
 ### Prerequisites
 
 - Python 3.11+
@@ -57,7 +90,7 @@ Prerequisites
 Steps
 ```bash
 # 1) Clone and enter repo
-git clone https://github.com/your-org/mcp-oci.git
+git clone https://github.com/adibirzu/mcp-oci.git
 cd mcp-oci
 
 # 2) Create venv and install
@@ -65,6 +98,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .[oci]
+
+# 3) Verify CLI and OCI access
+mcp-oci doctor --profile DEFAULT --region eu-frankfurt-1
 
 # 3) Set OCI defaults (or rely on ~/.oci/config profile DEFAULT)
 export OCI_PROFILE=DEFAULT
@@ -86,15 +122,18 @@ Notes
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/mcp-oci.git
+git clone https://github.com/adibirzu/mcp-oci.git
 cd mcp-oci
 
 # Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -e .
+# Install dependencies and expose CLIs
+pip install -e .[oci]
+
+# Quick doctor check
+mcp-oci doctor --profile DEFAULT --region eu-frankfurt-1
 ```
 
 ### OCI Configuration
@@ -152,39 +191,38 @@ python scripts/smoke_check.py
 
 ### Running Single Servers
 
-Each MCP server can be run independently:
+Serve any OCI service over stdio using the unified CLI:
 
 ```bash
-# Compute server
-python -m mcp_servers.compute.server
+# Compute
+mcp-oci-serve compute --profile DEFAULT --region eu-frankfurt-1
 
-# Cost analysis server
-python -m mcp_servers.cost.server
+# Object Storage
+mcp-oci-serve objectstorage --profile DEFAULT --region eu-frankfurt-1
 
-# Security server
-python -m mcp_servers.security.server
+# IAM
+mcp-oci-serve iam --profile DEFAULT --region eu-frankfurt-1
 
-# With custom port (via environment)
-METRICS_PORT=9001 python -m mcp_servers.compute.server
+Note on tool names
+- Tools are published with stable snake_case names (e.g., `oci_objectstorage_list_buckets`).
+- For compatibility with design guidelines, colon-form aliases are also exposed automatically (e.g., `oci:objectstorage:list-buckets`).
 ```
 
 ### MCP Configuration
 
 Add servers to your MCP client configuration:
 
-#### Claude Code Configuration
+#### MCP Client Configuration
 ```json
 {
   "mcpServers": {
     "oci-compute": {
-      "command": "python",
-      "args": ["-m", "mcp_servers.compute.server"],
-      "cwd": "/path/to/mcp-oci"
+      "command": "mcp-oci-serve",
+      "args": ["compute", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     },
-    "oci-cost": {
-      "command": "python",
-      "args": ["-m", "mcp_servers.cost.server"],
-      "cwd": "/path/to/mcp-oci"
+    "oci-objectstorage": {
+      "command": "mcp-oci-serve",
+      "args": ["objectstorage", "--profile", "DEFAULT", "--region", "eu-frankfurt-1"]
     }
   }
 }
@@ -203,10 +241,10 @@ export FINOPSAI_CACHE_TTL_SECONDS=600
 export TENANCY_OCID=ocid1.tenancy.oc1..example
 ```
 
-## 📊 Observability & Privacy
+## 📊 Observability
 
-- All servers include observability hooks (OTLP traces/metrics) and a `/metrics` Prometheus exporter when started directly.
-- Privacy masking: enable with `MCP_OCI_PRIVACY=true` (default via launcher and mcp.json). Masks OCIDs/namespaces across outputs.
+- All servers include observability hooks (OTLP traces/metrics). For stdio servers, send OTLP to a collector by setting `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g., `http://localhost:4317`).
+- Privacy masking: enable with `MCP_OCI_PRIVACY=true`. Masks OCIDs/namespaces across outputs.
 
 ## 📊 Observability Stack
 
@@ -282,16 +320,9 @@ export OTEL_EXPORTER_APM_ENABLED=true
 
 ### Metrics Collection
 
-All servers automatically expose Prometheus metrics:
-
-```bash
-# Server health and performance
-curl http://localhost:8001/metrics  # Compute server
-curl http://localhost:8004/metrics  # Security server
-
-# Aggregated metrics
-curl http://localhost:8889/metrics  # OTEL Collector
-```
+- HTTP servers export a `/metrics` endpoint for Prometheus.
+- Stdio servers export metrics via OTLP. Point them at your collector with `OTEL_EXPORTER_OTLP_ENDPOINT`.
+  Example: `export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
 
 ## 🛠️ Configuration
 
@@ -460,19 +491,13 @@ if __name__ == "__main__":
 ### Development Setup
 
 ```bash
-# Install development dependencies
-pip install -e ".[dev]"
+# Bootstrap and test
+make setup
+make test
+make lint
+make fmt
 
-# Install pre-commit hooks
-pre-commit install
-
-# Run linting
-flake8 mcp_servers/
-mypy mcp_servers/
-
-# Format code
-black mcp_servers/
-isort mcp_servers/
+# Note: vendored SDK sources under oci-python-sdk/ are ignored by pytest.
 ```
 
 ## 📄 License
@@ -482,8 +507,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 - **Documentation**: [Full documentation](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/mcp-oci/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/mcp-oci/discussions)
+- **Issues**: [GitHub Issues](https://github.com/adibirzu/mcp-oci/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/adibirzu/mcp-oci/discussions)
 
 ## 🗺️ Roadmap
 

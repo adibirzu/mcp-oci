@@ -502,3 +502,59 @@ echo "✅ Health check complete"
 ```
 
 This comprehensive observability integration documentation enables users to deploy MCP-OCI with full monitoring capabilities across both local development and OCI production environments.
+
+## 🔧 Pyroscope reliability and auto-disable (noise-free dev)
+
+Some environments intermittently block local HTTP to Pyroscope; to avoid spammy client logs, the stack now probes the backend and auto-disables profiling when unreachable:
+
+- UX app launcher (ops/run-ux-local.sh) checks PYROSCOPE_SERVER_ADDRESS and flips ENABLE_PYROSCOPE=false if the probe fails
+- MCP server launcher (scripts/mcp-launchers/start-mcp-server.sh) does the same for each server before starting
+- Pyroscope container now uses an explicit config file mount:
+  - ops/pyroscope/pyroscope.yaml/config.yaml → /etc/pyroscope.yaml
+  - Basic, no-auth config that listens on 0.0.0.0:4040 and stores under /var/lib/pyroscope
+
+Manual override:
+- Disable profiling: export ENABLE_PYROSCOPE=false
+- Reduce cost: export PYROSCOPE_SAMPLE_RATE=10
+
+## 🌐 HTTP/Streamable HTTP transport for MCP servers
+
+Besides stdio, MCP servers can run with HTTP or streamable HTTP transport for browser/remote clients.
+
+Supported flags via launcher:
+- HTTP: ./scripts/mcp-launchers/start-mcp-server.sh observability --http --host 127.0.0.1 --port 8003
+- SSE: ./scripts/mcp-launchers/start-mcp-server.sh observability --sse --host 127.0.0.1 --port 8003
+- Streamable HTTP: ./scripts/mcp-launchers/start-mcp-server.sh observability --stream --host 127.0.0.1 --port 8003
+
+Environment variables (alternative):
+- MCP_TRANSPORT=stdio|http|sse|streamable-http
+- MCP_HOST=127.0.0.1
+- MCP_PORT=8003
+
+Notes:
+- Observability server is transport-aware and will switch based on env/flags.
+- Launcher sets defaults: MCP_HOST=127.0.0.1 and MCP_PORT fallback to METRICS_PORT per service.
+- Stdio remains the default for local CLI workflows.
+
+## 🐳 Running MCP servers in Docker images
+
+The project Dockerfile supports both the UX (obs-app) and MCP servers.
+
+Run UX app in container (default CMD):
+- docker compose -f ops/docker-compose.yml up -d obs-app
+
+Run a specific MCP server in a container:
+- Build: docker build -t mcp-oci:latest .
+- Run with SERVICE_NAME and transport:
+  - StdIO (typical when used by an IDE attaching stdin/stdout): not applicable inside detached containers
+  - HTTP:
+    - docker run --rm -p 8001:8001 -e SERVICE_NAME=compute -e MCP_TRANSPORT=http -e MCP_HOST=0.0.0.0 -e MCP_PORT=8001 mcp-oci:latest
+  - Streamable HTTP:
+    - docker run --rm -p 8001:8001 -e SERVICE_NAME=compute -e MCP_TRANSPORT=streamable-http -e MCP_HOST=0.0.0.0 -e MCP_PORT=8001 mcp-oci:latest
+
+Observability envs:
+- To wire traces/metrics to the local collector from inside the container:
+  - -e OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317 (when on the compose network)
+  - -e OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+- To enable Pyroscope in-container:
+  - -e ENABLE_PYROSCOPE=true -e PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040 -e PYROSCOPE_APP_NAME=oci-mcp-compute

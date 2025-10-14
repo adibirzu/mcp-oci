@@ -267,7 +267,7 @@ def generate_compute_capacity_report(
         try:
             from mcp_oci_common import get_oci_config
             import oci
-            from datetime import datetime, timedelta
+            from datetime import datetime
 
             config = get_oci_config()
             if profile:
@@ -612,6 +612,9 @@ tools = [
         description="Aggregate discovery of core resources in a compartment"
     ),
 ]
+
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
 
 if __name__ == "__main__":
     try:

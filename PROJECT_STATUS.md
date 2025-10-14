@@ -10,7 +10,7 @@ The OCI MCP Servers project provides a comprehensive Model Context Protocol (MCP
 - ✅ **All MCP servers operational** - 18+ OCI services supported
 - ✅ **Auto-discovery implemented** - Tenancy ID, compartments, namespaces
 - ✅ **Cross-compartment search** - Finds resources across all accessible compartments
-- ✅ **Token optimization** - Claude-friendly responses with minimal token usage
+- ✅ **Token optimization** - LLM-friendly responses with minimal token usage
 - ✅ **Comprehensive error handling** - Graceful degradation and detailed error messages
 - ✅ **Shared architecture** - Consistent patterns across all servers
 - ✅ **Documentation complete** - Full architecture and API documentation
@@ -68,7 +68,7 @@ python -m mcp_oci_fastmcp usageapi --profile DEFAULT --region eu-frankfurt-1
 python -m mcp_oci_fastmcp optimized --profile DEFAULT --region eu-frankfurt-1
 ```
 
-### **Claude Desktop Integration**
+### **MCP Client Integration**
 ```json
 {
   "mcpServers": {
@@ -147,7 +147,7 @@ mcp-oci/
 
 ### **Token Optimization**
 - **Response Size**: 60-80% reduction compared to raw OCI responses
-- **Claude Compatibility**: Optimized for AI model consumption
+- **MCP Client Compatibility**: Optimized for AI model consumption
 - **Pagination**: Efficient handling of large datasets
 
 ## 🔒 **Security & Compliance**
@@ -192,7 +192,7 @@ docker run -v ~/.oci:/root/.oci mcp-oci <service>
 - **ARCHITECTURE.md**: Complete architecture overview
 - **README.md**: Quick start and usage guide
 - **docs/**: Comprehensive service documentation
-- **CLAUDE_DESKTOP_SETUP.md**: Claude Desktop integration
+- **MCP_CLIENT_SETUP.md**: MCP client integration
 
 ### **API Reference**
 - **Common Tools**: Server info, compartment listing, guidance

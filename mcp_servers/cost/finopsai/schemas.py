@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import List, Optional, Literal, Any
+from typing import List, Optional, Literal
 
 class Window(BaseModel):
     start: str

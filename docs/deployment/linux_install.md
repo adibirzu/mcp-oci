@@ -8,7 +8,7 @@ Prerequisites
 Install steps
 ```bash
 # 1) Clone
-git clone https://github.com/your-org/mcp-oci.git
+git clone https://github.com/adibirzu/mcp-oci.git
 cd mcp-oci
 
 # 2) Python venv + install
@@ -36,4 +36,3 @@ Operations
 Notes
 - The launcher sets OpenTelemetry defaults; point OTLP endpoint via `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - The Log Analytics namespace is auto-discovered; if multiple exist, set `LA_NAMESPACE`.
-

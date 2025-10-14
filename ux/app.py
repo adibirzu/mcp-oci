@@ -4,10 +4,6 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app, Counter, Histogram
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 try:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 except Exception:
@@ -18,6 +14,7 @@ except Exception:
     RequestsInstrumentor = None
 from mcp_oci_common.observability import init_tracing
 from time import perf_counter
+import subprocess
 
 # Optional Pyroscope (continuous profiling)
 ENABLE_PYROSCOPE = os.getenv("ENABLE_PYROSCOPE", "true").lower() in ("1", "true", "yes", "on")
@@ -85,93 +82,24 @@ try:
 except Exception:
     templates = None
 
-import importlib
 
 def get_server_tools(server_name, status):
-    """Get tool information for each MCP server type"""
+    """Dynamically get tool information by importing the server module"""
+    import importlib
+    try:
+        # Infer module path from server_name (e.g., oci-mcp-compute -> mcp_servers.compute.server)
+        module_name = server_name.replace('oci-mcp-', '').replace('-', '_')
+        module = importlib.import_module(f'mcp_servers.{module_name}.server')
+        
+        # Assume servers have a get_tools() function returning list of dicts
+        tools = module.get_tools() if hasattr(module, 'get_tools') else []
+        
+        if not tools:
+            tools = [{'name': 'Tools not defined', 'description': 'Add get_tools() to server.py'}]
+    except Exception as e:
+        tools = [{'name': 'Import failed', 'description': f'Error: {str(e)}'}]
 
-    # Define tools for each server type
-    server_tools = {
-        'oci-mcp-compute': [
-            {'name': 'list_instances', 'description': 'List compute instances in compartment'},
-            {'name': 'create_instance', 'description': 'Create a new compute instance'},
-            {'name': 'terminate_instance', 'description': 'Terminate a compute instance'},
-            {'name': 'get_instance_details', 'description': 'Get detailed information about an instance'},
-            {'name': 'list_images', 'description': 'List available compute images'},
-            {'name': 'list_shapes', 'description': 'List available compute shapes'}
-        ],
-        'oci-mcp-db': [
-            {'name': 'list_db_systems', 'description': 'List database systems'},
-            {'name': 'list_autonomous_databases', 'description': 'List autonomous databases'},
-            {'name': 'create_autonomous_database', 'description': 'Create a new autonomous database'},
-            {'name': 'get_db_system_details', 'description': 'Get database system details'},
-            {'name': 'list_backups', 'description': 'List database backups'}
-        ],
-        'oci-mcp-network': [
-            {'name': 'list_vcns', 'description': 'List Virtual Cloud Networks'},
-            {'name': 'create_vcn', 'description': 'Create a new VCN'},
-            {'name': 'list_subnets', 'description': 'List subnets in VCN'},
-            {'name': 'create_subnet', 'description': 'Create a new subnet'},
-            {'name': 'list_security_groups', 'description': 'List network security groups'},
-            {'name': 'list_route_tables', 'description': 'List route tables'}
-        ],
-        'oci-mcp-security': [
-            {'name': 'list_security_policies', 'description': 'List security policies'},
-            {'name': 'scan_vulnerabilities', 'description': 'Scan for security vulnerabilities'},
-            {'name': 'list_security_lists', 'description': 'List security lists'},
-            {'name': 'audit_compliance', 'description': 'Run compliance audit'}
-        ],
-        'oci-mcp-observability': [
-            {'name': 'get_metrics', 'description': 'Get monitoring metrics'},
-            {'name': 'list_alarms', 'description': 'List monitoring alarms'},
-            {'name': 'create_alarm', 'description': 'Create monitoring alarm'},
-            {'name': 'get_logs', 'description': 'Retrieve application logs'},
-            {'name': 'export_logs', 'description': 'Export logs to external system'}
-        ],
-        'oci-mcp-cost': [
-            {'name': 'get_cost_analysis', 'description': 'Analyze costs by service and time period'},
-            {'name': 'forecast_spending', 'description': 'Forecast future spending patterns'},
-            {'name': 'list_budgets', 'description': 'List configured budgets'},
-            {'name': 'create_budget', 'description': 'Create spending budget'},
-            {'name': 'cost_optimization', 'description': 'Get cost optimization recommendations'}
-        ],
-        'oci-mcp-inventory': [
-            {'name': 'list_all_resources', 'description': 'Comprehensive resource inventory'},
-            {'name': 'search_resources', 'description': 'Search resources by criteria'},
-            {'name': 'resource_discovery', 'description': 'Discover new resources'},
-            {'name': 'export_inventory', 'description': 'Export inventory to CSV/JSON'}
-        ],
-        'oci-mcp-blockstorage': [
-            {'name': 'list_volumes', 'description': 'List block storage volumes'},
-            {'name': 'create_volume', 'description': 'Create new block storage volume'},
-            {'name': 'attach_volume', 'description': 'Attach volume to instance'},
-            {'name': 'list_backups', 'description': 'List volume backups'},
-            {'name': 'create_backup', 'description': 'Create volume backup'}
-        ],
-        'oci-mcp-loadbalancer': [
-            {'name': 'list_load_balancers', 'description': 'List load balancers'},
-            {'name': 'create_load_balancer', 'description': 'Create new load balancer'},
-            {'name': 'configure_backend_set', 'description': 'Configure backend servers'},
-            {'name': 'list_listeners', 'description': 'List load balancer listeners'},
-            {'name': 'get_health_status', 'description': 'Get backend health status'}
-        ],
-        'oci-mcp-agents': [
-            {'name': 'list_ai_agents', 'description': 'List available AI agents'},
-            {'name': 'invoke_agent', 'description': 'Invoke AI agent for analysis'},
-            {'name': 'get_agent_results', 'description': 'Get agent execution results'},
-            {'name': 'schedule_agent_task', 'description': 'Schedule periodic agent execution'}
-        ]
-    }
-
-    # Get tools for this server type, fallback to basic MCP info
-    tools = server_tools.get(server_name, [
-        {
-            'name': 'MCP Protocol',
-            'description': 'Server communicates via MCP protocol over stdio',
-        }
-    ])
-
-    # Add status indicator to tool descriptions
+    # Add status indicator
     if status != 'running':
         for tool in tools:
             tool['description'] += f' (Server {status})'
@@ -179,34 +107,41 @@ def get_server_tools(server_name, status):
     return tools
 
 def load_mcp_servers():
-    """Load MCP server configurations and check their status"""
+    """Dynamically discover servers from mcp_servers/ directories and mcp.json"""
+    import glob
+    discovered = []
+
+    # Scan for server directories with server.py
+    server_dirs = glob.glob('mcp_servers/*/server.py')
+    dynamic_servers = []
+    for path in server_dirs:
+        dir_name = os.path.dirname(path).split('/')[-1]
+        server_name = f'oci-mcp-{dir_name}'
+        dynamic_servers.append({
+            'name': server_name,
+            'command': ['python', f'mcp_servers/{dir_name}/server.py'],
+            'port': 8000 + len(discovered) + 1  # Assign incremental ports
+        })
+
+    # Load from mcp.json if exists, merge with discovered
     try:
         with open('mcp.json', 'r') as f:
-            data = json.load(f)
+            config_servers = json.load(f)
+        # Merge: prioritize config, add discovered if not present
+        server_map = {s['name']: s for s in config_servers}
+        for ds in dynamic_servers:
+            if ds['name'] not in server_map:
+                server_map[ds['name']] = ds
+        all_servers = list(server_map.values())
     except FileNotFoundError:
-        return []
-
-    # Server port mapping for status checks
-    server_ports = {
-        'oci-mcp-compute': 8001,
-        'oci-mcp-db': 8002,
-        'oci-mcp-observability': 8003,
-        'oci-mcp-security': 8004,
-        'oci-mcp-cost': 8005,
-        'oci-mcp-network': 8006,
-        'oci-mcp-blockstorage': 8007,
-        'oci-mcp-loadbalancer': 8008,
-        'oci-mcp-inventory': 8009,
-        'oci-mcp-loganalytics': 8003,  # May share port with observability
-        'oci-mcp-agents': 8011,
-    }
+        all_servers = dynamic_servers
 
     enhanced = []
-    for server in data:
+    for server in all_servers:
         server_name = server['name']
-        port = server_ports.get(server_name, 8000)
+        port = server.get('port', 8000)
 
-        # Check if server is running by testing metrics endpoint
+        # Check status
         status = "unknown"
         try:
             import requests
@@ -215,10 +150,8 @@ def load_mcp_servers():
         except Exception:
             status = "stopped"
 
-        # Get tool information based on server type
         tools = get_server_tools(server_name, status)
 
-        # Add comprehensive server info
         server_info = {
             'name': server_name,
             'command': server.get('command', []),
@@ -229,6 +162,7 @@ def load_mcp_servers():
             'tools': tools
         }
         enhanced.append(server_info)
+        discovered.append(server_name)
 
     return enhanced
 
@@ -245,11 +179,11 @@ async def index(request: Request):
     # Generate valid Mermaid diagram with error handling
     try:
         relations = """graph TD
-    Claude[Claude AI Client]
+    LLM[LLM Client]
     MCP[MCP Protocol]
     OCI[Oracle Cloud Infrastructure]
 
-    Claude --> MCP
+    LLM --> MCP
     MCP --> OCI
 
     subgraph MCP_Servers["MCP Servers"]
@@ -279,11 +213,11 @@ async def index(request: Request):
     except Exception as e:
         # Fallback to simple text representation if Mermaid generation fails
         relations = f"""graph TD
-    Claude[Claude AI Client]
+    LLM[LLM Client]
     MCP[MCP Protocol]
     OCI[Oracle Cloud Infrastructure]
 
-    Claude --> MCP
+    LLM --> MCP
     MCP --> OCI
 
     %% Error in diagram generation: {str(e)}
@@ -321,6 +255,16 @@ async def dashboards(request: Request):
         from fastapi.responses import JSONResponse
         return JSONResponse(payload)
     return templates.TemplateResponse(request, "dashboard.html", payload)
+
+@app.get("/start/{server_name}")
+async def start_server(server_name: str):
+    try:
+        result = subprocess.run(["bash", "scripts/mcp-launchers/start-mcp-server.sh", server_name.replace("oci-mcp-", ""), "--daemon"], check=True, capture_output=True, text=True)
+        return {"status": "started", "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        return {"status": "error", "message": e.stderr}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/health")
 async def health():

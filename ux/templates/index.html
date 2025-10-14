@@ -152,6 +152,20 @@
             }
         };
 
+        function startServer(serverName) {
+            fetch(`/start/${serverName}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'started') {
+                        alert(`Started ${serverName}`);
+                        location.reload();
+                    } else {
+                        alert(`Error: ${data.message}`);
+                    }
+                })
+                .catch(error => alert(`Error: ${error}`));
+        }
+
         // Handle Mermaid errors gracefully and add click listeners
         window.addEventListener('load', function() {
             try {
@@ -191,6 +205,9 @@
             {{ server.name }}
             <span class="status status-{{ server.status }}">{{ server.status|upper }}</span>
             {% if server.port %}(Port: {{ server.port }}){% endif %}
+            {% if server.status != 'running' %}
+                <button onclick="startServer('{{ server.name }}')">Start</button>
+            {% endif %}
         </summary>
         <div class="server-details">
             <p><strong>Command:</strong> {{ server.command|join(' ') }}</p>

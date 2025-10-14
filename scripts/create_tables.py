@@ -25,7 +25,8 @@ def main() -> None:
 
     conn = None
     if wallet and svc:
-        import zipfile, tempfile
+        import zipfile
+        import tempfile
         tmp = tempfile.mkdtemp(prefix="mcp_wallet_")
         with zipfile.ZipFile(wallet, 'r') as z:
             z.extractall(tmp)

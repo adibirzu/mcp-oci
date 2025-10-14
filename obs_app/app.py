@@ -1,10 +1,6 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from prometheus_client import make_asgi_app, Counter, Histogram
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from time import perf_counter
 

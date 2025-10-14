@@ -1,12 +1,10 @@
 from typing import Any
 
-from mcp_oci_iam.server import list_users
+from mcp_servers.security.server import list_iam_users
 
 
 def test_iam_list_users_minimal(tenancy_ocid, oci_profile, oci_region):
-    out: dict[str, Any] = list_users(
-        compartment_id=tenancy_ocid, limit=1, profile=oci_profile, region=oci_region
+    out: dict[str, Any] = list_iam_users(
+        compartment_id=tenancy_ocid, region=oci_region
     )
-    assert "items" in out
-    assert isinstance(out["items"], list)
-
+    assert isinstance(out, list)

@@ -12,7 +12,8 @@ def main() -> None:
     wallet_dir = None
     if wallet_zip and svc and user and pwd:
         # Use wallet-based TCPS Thin connection
-        import zipfile, tempfile, shutil
+        import zipfile
+        import tempfile
         tmp = tempfile.mkdtemp(prefix="mcp_wallet_")
         with zipfile.ZipFile(wallet_zip, 'r') as z:
             z.extractall(tmp)
@@ -46,7 +47,7 @@ def main() -> None:
         placeholders = ",".join([":"+str(i+1) for i in range(len(cols))])
         sql = f"MERGE INTO {table} t USING (SELECT {placeholders} FROM dual) s ON (t.id = s.column1) " \
               f"WHEN MATCHED THEN UPDATE SET " + ",".join([f"t.{c}=s.column{i+1}" for i,c in enumerate(cols, start=1)]) + \
-              f" WHEN NOT MATCHED THEN INSERT (" + ",".join(cols) + ") VALUES (" + ",".join([f"s.column{i+1}" for i in range(1,len(cols)+1)]) + ")"
+              " WHEN NOT MATCHED THEN INSERT (" + ",".join(cols) + ") VALUES (" + ",".join([f"s.column{i+1}" for i in range(1,len(cols)+1)]) + ")"
         for r in rows:
             cur.execute(sql, r)
 
