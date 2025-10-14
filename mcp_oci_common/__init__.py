@@ -19,19 +19,26 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
         from mcp_oci_common import make_client
         client = make_client(oci.log_analytics.LogAnalyticsClient, profile="DEFAULT", region="eu-frankfurt-1")
     """
-    # Lazy availability check to avoid hard dependency at import time
-    import importlib.util as _importlib
-    if _importlib.find_spec("oci") is None:
-        raise RuntimeError("OCI SDK not available. Please install 'oci' package.")
-
-    # Load config; supports instance principal fallback via get_oci_config()
-    cfg = get_oci_config(profile_name=profile)
-    if region:
-        cfg["region"] = region
-
-    signer = cfg.get("signer")
-    if signer is not None:
-        # Instance principals or other signer-based auth
-        return oci_client_class(cfg, signer=signer)
-    else:
-        return oci_client_class(cfg)
+    # Prefer the shared cached factory (adds retries/timeouts and reuses clients)
+    try:
+        from .session import get_client as _get_client
+        return _get_client(oci_client_class, profile=profile, region=region)
+    except Exception:
+        # Fallback to legacy behavior if session module or kwargs not supported
+        import importlib.util as _importlib
+        if _importlib.find_spec("oci") is None:
+            raise RuntimeError("OCI SDK not available. Please install 'oci' package.")
+        cfg = get_oci_config(profile_name=profile)
+        if region:
+            cfg["region"] = region
+        signer = cfg.get("signer")
+        try:
+            if signer is not None:
+                return oci_client_class(cfg, signer=signer)
+            else:
+                return oci_client_class(cfg)
+        except TypeError:
+            # Safety if client signature mismatch
+            if signer is not None:
+                return oci_client_class(cfg, signer=signer)
+            return oci_client_class(cfg)

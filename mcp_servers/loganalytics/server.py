@@ -18,6 +18,8 @@ from opentelemetry import trace
 
 import oci  # type: ignore
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from oci.signer import Signer
 
 # Set up tracing with proper Resource so service.name is set (avoids unknown_service)
@@ -25,6 +27,46 @@ os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-loganalytics")
 init_tracing(service_name="oci-mcp-loganalytics")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-loganalytics")
+
+# Shared HTTP session with connection pooling and retries for LA REST calls
+_HTTP_SESSION = None
+
+def _get_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is not None:
+        return _HTTP_SESSION
+    try:
+        pool = int(os.getenv("LA_HTTP_POOL", "16"))
+        retries = int(os.getenv("LA_HTTP_RETRIES", "3"))
+        backoff = float(os.getenv("LA_HTTP_BACKOFF", "0.2"))
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=frozenset(["GET", "POST"])
+        )
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        _HTTP_SESSION = session
+        return session
+    except Exception:
+        # Fallback to default requests if configuration fails
+        _HTTP_SESSION = requests.Session()
+        return _HTTP_SESSION
+
+def _http_post(url, *, json=None, auth=None, params=None, timeout=None):
+    """POST using shared session; honors LA_HTTP_TIMEOUT if timeout not provided."""
+    session = _get_http_session()
+    try:
+        effective_timeout = timeout
+        if effective_timeout is None:
+            # Default 60s; overridable via env
+            effective_timeout = float(os.getenv("LA_HTTP_TIMEOUT", "60"))
+    except Exception:
+        effective_timeout = 60
+    return session.post(url, json=json, auth=auth, params=params, timeout=effective_timeout)
 
 
 @dataclass
@@ -275,7 +317,7 @@ def run_query_legacy(
         }
         params = {"limit": max_total_count or 1000}
 
-        resp = requests.post(url, json=body, auth=signer, params=params, timeout=60)
+        resp = _http_post(url, json=body, auth=signer, params=params)
         if not resp.ok:
             raise Exception(f"HTTP {resp.status_code}: {resp.text}")
         data = resp.json()
@@ -410,7 +452,7 @@ def execute_query(
 
             params = {"limit": max_count}
 
-            response = requests.post(url, json=query_details, auth=signer, params=params, timeout=60)
+            response = _http_post(url, json=query_details, auth=signer, params=params)
 
             # Synchronous completion
             if response.status_code == 200:
