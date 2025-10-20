@@ -16,8 +16,10 @@ from fastmcp.tools import Tool
 from opentelemetry import trace
 
 # MCP-OCI common imports
-from mcp_oci_common import get_oci_config, get_compartment_id
+from mcp_oci_common import get_oci_config, get_compartment_id, validate_and_log_tools
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
+from mcp_oci_common.session import get_client
+from mcp_oci_common.cache import get_cache
 
 # FinOpsAI integration imports
 from .finopsai.oci_client_adapter import make_clients, list_compartments_recursive
@@ -99,6 +101,87 @@ def _safe_serialize(obj) -> Dict[str, Any]:
 
 # ===== EXISTING MCP-OCI COST TOOLS =====
 
+def _fetch_cost_summary(
+    time_window: str = "7d",
+    granularity: str = "DAILY",
+    compartment_id: Optional[str] = None,
+    region: Optional[str] = None
+):
+    config = get_oci_config()
+    if region:
+        config['region'] = region
+    # Usage API requires home-region endpoint for many operations
+    idc = get_client(oci.identity.IdentityClient, region=config.get("region"))
+    # Discover home region via home_region_key -> list_regions mapping (with subscription fallback)
+    usage_cfg = dict(config)
+    try:
+        ten = usage_cfg.get("tenancy")
+        if ten:
+            ten_data = idc.get_tenancy(ten).data
+            hr_key = getattr(ten_data, 'home_region_key', None)
+            if hr_key:
+                regs = idc.list_regions().data or []
+                for r in regs:
+                    if getattr(r, 'key', None) == hr_key:
+                        usage_cfg['region'] = getattr(r, 'name', usage_cfg.get('region'))
+                        break
+            if 'region' not in usage_cfg or usage_cfg['region'] == config.get('region'):
+                subs = idc.list_region_subscriptions(ten)
+                for s in getattr(subs, 'data', []) or []:
+                    if getattr(s, 'is_home_region', False):
+                        usage_cfg['region'] = getattr(s, 'region_name', None) or getattr(s, 'region', usage_cfg.get('region'))
+                        break
+    except Exception:
+        pass
+    usage_client = get_client(oci.usage_api.UsageapiClient, region=usage_cfg.get('region', config.get("region")))
+    compartment = compartment_id or get_compartment_id()
+
+    endpoint = usage_client.base_client.endpoint or ""
+    add_oci_call_attributes(
+        None,  # No span in internal
+        oci_service="Usage API",
+        oci_operation="RequestSummarizedUsages",
+        region=config.get("region"),
+        endpoint=endpoint,
+    )
+
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(days=7) if time_window == "7d" else end_time - timedelta(days=30)
+
+    details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+        tenant_id=config.get("tenancy"),
+        time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+        time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+        granularity=granularity.upper(),
+        query_type="COST"
+    )
+    response = usage_client.request_summarized_usages(
+        request_summarized_usages_details=details
+    )
+    req_id = getattr(response, "headers", {}).get("opc-request-id") if hasattr(response, "headers") else None
+    items = getattr(getattr(response, "data", None), "items", None) or []
+
+    # Calculate total cost and extract currency information
+    total = 0
+    currency = None
+    for item in items:
+        amount = getattr(item, "computed_amount", 0) or 0
+        total += amount
+        # Extract currency from the first item that has it
+        if hasattr(item, "currency") and getattr(item, "currency"):
+            currency = str(getattr(item, "currency")).strip()
+
+    return {
+        'total_cost': total,
+        'currency': currency,
+        'time_period': {
+            'start': start_time.isoformat(),
+            'end': end_time.isoformat(),
+            'granularity': granularity
+        },
+        'items_count': len(items)
+    }, req_id
+
 def get_cost_summary(
     time_window: str = "7d",
     granularity: str = "DAILY",
@@ -107,86 +190,80 @@ def get_cost_summary(
 ) -> Dict:
     """Get cost summary (existing MCP-OCI functionality)"""
     with tool_span(tracer, "get_cost_summary", mcp_server="oci-mcp-cost-enhanced") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        # Usage API requires home-region endpoint for many operations
-        idc = oci.identity.IdentityClient(config)
-        # Discover home region via home_region_key -> list_regions mapping (with subscription fallback)
-        usage_cfg = dict(config)
+        cache = get_cache()
+        params = {'time_window': time_window, 'granularity': granularity, 'compartment_id': compartment_id, 'region': region}
         try:
-            ten = usage_cfg.get("tenancy")
-            if ten:
-                ten_data = idc.get_tenancy(ten).data
-                hr_key = getattr(ten_data, 'home_region_key', None)
-                if hr_key:
-                    regs = idc.list_regions().data or []
-                    for r in regs:
-                        if getattr(r, 'key', None) == hr_key:
-                            usage_cfg['region'] = getattr(r, 'name', usage_cfg.get('region'))
-                            break
-                if 'region' not in usage_cfg or usage_cfg['region'] == config.get('region'):
-                    subs = idc.list_region_subscriptions(ten)
-                    for s in getattr(subs, 'data', []) or []:
-                        if getattr(s, 'is_home_region', False):
-                            usage_cfg['region'] = getattr(s, 'region_name', None) or getattr(s, 'region', usage_cfg.get('region'))
-                            break
-        except Exception:
-            pass
-        usage_client = oci.usage_api.UsageapiClient(usage_cfg)
-        compartment = compartment_id or get_compartment_id()
-
-        endpoint = usage_client.base_client.endpoint or ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Usage API",
-            oci_operation="RequestSummarizedUsages",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=7) if time_window == "7d" else end_time - timedelta(days=30)
-
-        try:
-            details = oci.usage_api.models.RequestSummarizedUsagesDetails(
-                tenant_id=config.get("tenancy"),
-                time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                granularity=granularity.upper(),
-                query_type="COST"
+            summary, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-cost-enhanced",
+                operation="get_cost_summary",
+                params=params,
+                fetch_func=lambda: _fetch_cost_summary(time_window, granularity, compartment_id, region),
+                ttl_minutes=5,
+                force_refresh=False
             )
-            response = usage_client.request_summarized_usages(
-                request_summarized_usages_details=details
-            )
-            req_id = getattr(response, "headers", {}).get("opc-request-id") if hasattr(response, "headers") else None
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
-            items = getattr(getattr(response, "data", None), "items", None) or []
-
-            # Calculate total cost and extract currency information
-            total = 0
-            currency = None
-            for item in items:
-                amount = getattr(item, "computed_amount", 0) or 0
-                total += amount
-                # Extract currency from the first item that has it
-                if hasattr(item, "currency") and getattr(item, "currency"):
-                    currency = str(getattr(item, "currency")).strip()
-
-            return {
-                'total_cost': total,
-                'currency': currency,
-                'time_period': {
-                    'start': start_time.isoformat(),
-                    'end': end_time.isoformat(),
-                    'granularity': granularity
-                }
-            }
+            span.set_attribute("items.count", summary.get('items_count', 0))
+            return summary
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error getting cost summary: {e}")
             span.record_exception(e)
             return {'error': str(e)}
+
+def _fetch_usage_breakdown(
+    service: Optional[str] = None,
+    compartment_id: Optional[str] = None,
+    region: Optional[str] = None
+):
+    config = get_oci_config()
+    if region:
+        config['region'] = region
+    usage_client = get_client(oci.usage_api.UsageapiClient, region=config.get("region"))
+    compartment = compartment_id or get_compartment_id()
+
+    end_time = datetime.utcnow()
+    start_time = end_time - timedelta(days=30)
+
+    details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+        tenant_id=config.get("tenancy"),
+        time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+        time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+        granularity="DAILY",
+        query_type="COST",
+        group_by=["service", "compartmentName"],
+        compartment_depth=10  # required when grouping by compartment
+    )
+
+    if service:
+        # Add service filter
+        details.filter = oci.usage_api.models.Filter(
+            operator="AND",
+            dimensions=[
+                oci.usage_api.models.Dimension(
+                    key="service",
+                    value=service
+                )
+            ]
+        )
+
+    response = usage_client.request_summarized_usages(
+        request_summarized_usages_details=details
+    )
+    req_id = getattr(response, "headers", {}).get("opc-request-id") if hasattr(response, "headers") else None
+    items = getattr(getattr(response, "data", None), "items", None) or []
+
+    breakdown = []
+    for item in items:
+        breakdown.append({
+            'service': getattr(item, 'service', 'Unknown'),
+            'compartment': getattr(item, 'compartment_name', 'Unknown'),
+            'cost': getattr(item, 'computed_amount', 0),
+            'currency': getattr(item, 'currency', 'USD'),
+            'usage_start': str(getattr(item, 'time_usage_started', '')),
+            'usage_end': str(getattr(item, 'time_usage_ended', ''))
+        })
+
+    return breakdown, req_id
 
 def get_usage_breakdown(
     service: Optional[str] = None,
@@ -195,68 +272,26 @@ def get_usage_breakdown(
 ) -> List[Dict]:
     """Get usage breakdown by service (existing MCP-OCI functionality)"""
     with tool_span(tracer, "get_usage_breakdown", mcp_server="oci-mcp-cost-enhanced") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        usage_client = oci.usage_api.UsageapiClient(config)
-        compartment = compartment_id or get_compartment_id()
-
-        endpoint = usage_client.base_client.endpoint or ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Usage API",
-            oci_operation="RequestSummarizedUsages",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=30)
-
+        cache = get_cache()
+        params = {'service': service, 'compartment_id': compartment_id, 'region': region}
         try:
-            details = oci.usage_api.models.RequestSummarizedUsagesDetails(
-                tenant_id=config.get("tenancy"),
-                time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                granularity="DAILY",
-                query_type="COST",
-                group_by=["service", "compartmentName"],
-                compartment_depth=10  # required when grouping by compartment
+            breakdown, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-cost-enhanced",
+                operation="get_usage_breakdown",
+                params=params,
+                fetch_func=lambda: _fetch_usage_breakdown(service, compartment_id, region),
+                ttl_minutes=5,
+                force_refresh=False
             )
-
-            if service:
-                # Add service filter
-                details.filter = oci.usage_api.models.Filter(
-                    operator="AND",
-                    dimensions=[
-                        oci.usage_api.models.Dimension(
-                            key="service",
-                            value=service
-                        )
-                    ]
-                )
-
-            response = usage_client.request_summarized_usages(
-                request_summarized_usages_details=details
-            )
-
-            req_id = getattr(response, "headers", {}).get("opc-request-id") if hasattr(response, "headers") else None
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
-
-            items = getattr(getattr(response, "data", None), "items", None) or []
-
-            breakdown = []
-            for item in items:
-                breakdown.append({
-                    'service': getattr(item, 'service', 'Unknown'),
-                    'compartment': getattr(item, 'compartment_name', 'Unknown'),
-                    'cost': getattr(item, 'computed_amount', 0),
-                    'currency': getattr(item, 'currency', 'USD'),
-                    'usage_start': str(getattr(item, 'time_usage_started', '')),
-                    'usage_end': str(getattr(item, 'time_usage_ended', ''))
-                })
-
+            span.set_attribute("items.count", len(breakdown))
+            if service:
+                span.set_attribute("service", service)
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            if region:
+                span.set_attribute("region", region)
             return breakdown
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error getting usage breakdown: {e}")
@@ -699,6 +734,30 @@ app.add_tool(Tool.from_function(get_usage_breakdown, name="get_usage_breakdown",
 app.add_tool(Tool.from_function(detect_cost_anomaly, name="detect_cost_anomaly", description="Detect cost anomalies in time series data"))
 
 if __name__ == "__main__":
+    # Validate MCP tool names at startup
+    tool_names = [
+        "doctor",
+        "cost_by_compartment_daily",
+        "service_cost_drilldown",
+        "cost_by_tag_key_value",
+        "monthly_trend_forecast",
+        "focus_etl_healthcheck",
+        "budget_status_and_actions",
+        "schedule_report_create_or_list",
+        "object_storage_costs_and_tiering",
+        "top_cost_spikes_explain",
+        "per_compartment_unit_cost",
+        "forecast_vs_universal_credits",
+        "templates",
+        "get_cost_summary",
+        "get_usage_breakdown",
+        "detect_cost_anomaly"
+    ]
+    validation_entries = [{"name": name} for name in tool_names]
+    if not validate_and_log_tools(validation_entries, "oci-mcp-cost"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     # Start HTTP server for Prometheus metrics (non-blocking) - before app.run()
     try:
         from prometheus_client import start_http_server as _start_http_server

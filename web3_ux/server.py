@@ -582,6 +582,8 @@ async def api_endpoints_update(ep_id: str, req: Request):
             should_enable_multi_language=payload.get('should_enable_multi_language'),
         )
     except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 # Optional metrics exporter for Prometheus
 try:
     from prometheus_client import start_http_server as _start_http_server
@@ -610,7 +612,6 @@ try:
         )
 except Exception:
     pass
-        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.delete("/api/endpoints/{ep_id}")

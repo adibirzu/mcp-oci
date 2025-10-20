@@ -20,18 +20,26 @@ from mcp_oci_common.observability import init_tracing
 from time import perf_counter
 
 # Optional Pyroscope (continuous profiling)
-ENABLE_PYROSCOPE = os.getenv("ENABLE_PYROSCOPE", "true").lower() in ("1", "true", "yes", "on")
+# Default disabled to avoid noisy errors if backend is not available (docker/k8s)
+ENABLE_PYROSCOPE = os.getenv("ENABLE_PYROSCOPE", "false").lower() in ("1", "true", "yes", "on")
 try:
     if ENABLE_PYROSCOPE:
         import pyroscope  # provided by pyroscope-io
-        pyroscope.configure(
-            application_name=os.getenv("PYROSCOPE_APP_NAME", "mcp-ux"),
-            server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://localhost:4040"),
-            # reasonable defaults
-            sample_rate=int(os.getenv("PYROSCOPE_SAMPLE_RATE", "100")),  # Hz
-            detect_subprocesses=True,
-            enable_logging=True,
-        )
+        import requests
+        server_addr = os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://127.0.0.1:4040")
+        # Quick reachability check; if not reachable, disable profiling silently
+        try:
+            requests.get(server_addr, timeout=0.5)
+            pyroscope.configure(
+                application_name=os.getenv("PYROSCOPE_APP_NAME", "mcp-ux"),
+                server_address=server_addr,
+                # reasonable defaults
+                sample_rate=int(os.getenv("PYROSCOPE_SAMPLE_RATE", "100")),  # Hz
+                detect_subprocesses=True,
+                enable_logging=True,
+            )
+        except Exception:
+            ENABLE_PYROSCOPE = False
 except Exception as _e:
     # Do not fail app startup due to profiler availability
     pass
@@ -85,98 +93,171 @@ try:
 except Exception:
     templates = None
 
-import importlib
+import importlib, sys, inspect
 
-def get_server_tools(server_name, status):
-    """Get tool information for each MCP server type"""
+def get_server_tools_dynamic(server: dict, status: str) -> list[dict]:
+    """
+    Dynamically discover tool names/descriptions (and input schemas when possible)
+    from the MCP server module referenced by mcp.json. This avoids static drift and
+    reflects code changes (module reload on each request).
 
-    # Define tools for each server type
-    server_tools = {
-        'oci-mcp-compute': [
-            {'name': 'list_instances', 'description': 'List compute instances in compartment'},
-            {'name': 'create_instance', 'description': 'Create a new compute instance'},
-            {'name': 'terminate_instance', 'description': 'Terminate a compute instance'},
-            {'name': 'get_instance_details', 'description': 'Get detailed information about an instance'},
-            {'name': 'list_images', 'description': 'List available compute images'},
-            {'name': 'list_shapes', 'description': 'List available compute shapes'}
-        ],
-        'oci-mcp-db': [
-            {'name': 'list_db_systems', 'description': 'List database systems'},
-            {'name': 'list_autonomous_databases', 'description': 'List autonomous databases'},
-            {'name': 'create_autonomous_database', 'description': 'Create a new autonomous database'},
-            {'name': 'get_db_system_details', 'description': 'Get database system details'},
-            {'name': 'list_backups', 'description': 'List database backups'}
-        ],
-        'oci-mcp-network': [
-            {'name': 'list_vcns', 'description': 'List Virtual Cloud Networks'},
-            {'name': 'create_vcn', 'description': 'Create a new VCN'},
-            {'name': 'list_subnets', 'description': 'List subnets in VCN'},
-            {'name': 'create_subnet', 'description': 'Create a new subnet'},
-            {'name': 'list_security_groups', 'description': 'List network security groups'},
-            {'name': 'list_route_tables', 'description': 'List route tables'}
-        ],
-        'oci-mcp-security': [
-            {'name': 'list_security_policies', 'description': 'List security policies'},
-            {'name': 'scan_vulnerabilities', 'description': 'Scan for security vulnerabilities'},
-            {'name': 'list_security_lists', 'description': 'List security lists'},
-            {'name': 'audit_compliance', 'description': 'Run compliance audit'}
-        ],
-        'oci-mcp-observability': [
-            {'name': 'get_metrics', 'description': 'Get monitoring metrics'},
-            {'name': 'list_alarms', 'description': 'List monitoring alarms'},
-            {'name': 'create_alarm', 'description': 'Create monitoring alarm'},
-            {'name': 'get_logs', 'description': 'Retrieve application logs'},
-            {'name': 'export_logs', 'description': 'Export logs to external system'}
-        ],
-        'oci-mcp-cost': [
-            {'name': 'get_cost_analysis', 'description': 'Analyze costs by service and time period'},
-            {'name': 'forecast_spending', 'description': 'Forecast future spending patterns'},
-            {'name': 'list_budgets', 'description': 'List configured budgets'},
-            {'name': 'create_budget', 'description': 'Create spending budget'},
-            {'name': 'cost_optimization', 'description': 'Get cost optimization recommendations'}
-        ],
-        'oci-mcp-inventory': [
-            {'name': 'list_all_resources', 'description': 'Comprehensive resource inventory'},
-            {'name': 'search_resources', 'description': 'Search resources by criteria'},
-            {'name': 'resource_discovery', 'description': 'Discover new resources'},
-            {'name': 'export_inventory', 'description': 'Export inventory to CSV/JSON'}
-        ],
-        'oci-mcp-blockstorage': [
-            {'name': 'list_volumes', 'description': 'List block storage volumes'},
-            {'name': 'create_volume', 'description': 'Create new block storage volume'},
-            {'name': 'attach_volume', 'description': 'Attach volume to instance'},
-            {'name': 'list_backups', 'description': 'List volume backups'},
-            {'name': 'create_backup', 'description': 'Create volume backup'}
-        ],
-        'oci-mcp-loadbalancer': [
-            {'name': 'list_load_balancers', 'description': 'List load balancers'},
-            {'name': 'create_load_balancer', 'description': 'Create new load balancer'},
-            {'name': 'configure_backend_set', 'description': 'Configure backend servers'},
-            {'name': 'list_listeners', 'description': 'List load balancer listeners'},
-            {'name': 'get_health_status', 'description': 'Get backend health status'}
-        ],
-        'oci-mcp-agents': [
-            {'name': 'list_ai_agents', 'description': 'List available AI agents'},
-            {'name': 'invoke_agent', 'description': 'Invoke AI agent for analysis'},
-            {'name': 'get_agent_results', 'description': 'Get agent execution results'},
-            {'name': 'schedule_agent_task', 'description': 'Schedule periodic agent execution'}
-        ]
-    }
+    Supports command forms:
+      - ["python", "mcp_servers/<name>/server.py"]
+      - ["python", "-m", "mcp_servers.<name>.server"]
+    """
+    module_path = None
+    try:
+        cmd = server.get("command", [])
+        if len(cmd) >= 3 and cmd[1] == "-m":
+            # Module form
+            module_path = cmd[2]
+        elif len(cmd) >= 2 and isinstance(cmd[0], str) and "python" in cmd[0]:
+            # Script path form -> convert to module
+            script_path = cmd[1]
+            if isinstance(script_path, str) and script_path.endswith(".py"):
+                module_path = script_path[:-3].replace("/", ".").replace("\\", ".")
+        # Fallback: try to infer from name
+        if not module_path and server.get("name", "").startswith("oci-mcp-"):
+            inferred = server["name"].replace("-", ".")
+            module_path = f"{inferred}.server" if not inferred.endswith(".server") else inferred
+    except Exception:
+        module_path = None
 
-    # Get tools for this server type, fallback to basic MCP info
-    tools = server_tools.get(server_name, [
-        {
-            'name': 'MCP Protocol',
-            'description': 'Server communicates via MCP protocol over stdio',
-        }
-    ])
+    tools_list: list[dict] = []
+    if module_path:
+        try:
+            # Import module fresh each request to reflect latest code
+            importlib.invalidate_caches()
+            mod = sys.modules.get(module_path)
+            if mod is not None:
+                mod = importlib.reload(mod)
+            else:
+                mod = importlib.import_module(module_path)
 
-    # Add status indicator to tool descriptions
-    if status != 'running':
-        for tool in tools:
-            tool['description'] += f' (Server {status})'
+            # Prefer explicit tools attribute
+            mod_tools = getattr(mod, "tools", None)
+            if isinstance(mod_tools, list) and mod_tools:
+                for t in mod_tools:
+                    # fastmcp.tools.Tool typically exposes name/description and underlying function
+                    name = getattr(t, "name", None) or getattr(t, "tool", None) or "tool"
+                    desc = getattr(t, "description", "") or ""
+                    schema = None
 
-    return tools
+                    # Attempt to capture schema from known attributes
+                    schema = getattr(t, "input_schema", None) or getattr(t, "schema", None)
+                    # If a method was returned (e.g., Pydantic BaseModel.schema), prefer model_json_schema
+                    try:
+                        if callable(schema):
+                            owner = getattr(schema, "__self__", None)
+                            if owner is not None and hasattr(owner, "model_json_schema"):
+                                schema = owner.model_json_schema()
+                            else:
+                                schema = schema()
+                    except Exception:
+                        schema = None
+                    if schema is None:
+                        # Some wrappers expose a Pydantic model
+                        model = getattr(t, "input_model", None) or getattr(t, "model", None)
+                        try:
+                            if model and hasattr(model, "model_json_schema"):
+                                schema = model.model_json_schema()
+                            elif model and hasattr(model, "schema"):
+                                schema = model.schema()
+                        except Exception:
+                            schema = None
+
+                    # Fallback: derive a basic JSON schema from the function signature
+                    if schema is None:
+                        func = getattr(t, "func", None) or getattr(t, "handler", None) or getattr(t, "fn", None)
+                        try:
+                            if callable(func):
+                                sig = inspect.signature(func)
+                                properties = {}
+                                required = []
+                                for pname, param in sig.parameters.items():
+                                    # Skip typical instance/class parameters
+                                    if pname in ("self", "cls"):
+                                        continue
+                                    # Infer a simple type
+                                    ann = param.annotation
+                                    json_type = "string"
+                                    try:
+                                        if ann in (int,):
+                                            json_type = "integer"
+                                        elif ann in (float,):
+                                            json_type = "number"
+                                        elif ann in (bool,):
+                                            json_type = "boolean"
+                                        elif ann in (list,):
+                                            json_type = "array"
+                                        elif ann in (dict,):
+                                            json_type = "object"
+                                        elif ann in (str,) or ann is inspect._empty:
+                                            json_type = "string"
+                                        else:
+                                            origin = getattr(ann, "__origin__", None)
+                                            if origin in (list,):
+                                                json_type = "array"
+                                            elif origin in (dict,):
+                                                json_type = "object"
+                                            elif getattr(ann, "__name__", None) in ("int", "Integer"):
+                                                json_type = "integer"
+                                            elif getattr(ann, "__name__", None) in ("float", "Float"):
+                                                json_type = "number"
+                                            elif getattr(ann, "__name__", None) in ("bool", "Boolean"):
+                                                json_type = "boolean"
+                                            else:
+                                                json_type = "string"
+                                    except Exception:
+                                        json_type = "string"
+
+                                    properties[pname] = {"type": json_type}
+                                    if param.default is inspect._empty:
+                                        required.append(pname)
+
+                                schema = {"type": "object", "properties": properties}
+                                if required:
+                                    schema["required"] = required
+                        except Exception:
+                            schema = None
+
+                    entry = {"name": name, "description": desc}
+                    if schema:
+                        entry["input_schema"] = schema
+                    tools_list.append(entry)
+            else:
+                # Some modules expose register_tools() returning dict-like signatures
+                reg = getattr(mod, "register_tools", None)
+                if callable(reg):
+                    try:
+                        for t in reg():
+                            name = t.get("name", "tool")
+                            desc = t.get("description", "")
+                            entry = {"name": name, "description": desc}
+                            if "input_schema" in t and t["input_schema"]:
+                                entry["input_schema"] = t["input_schema"]
+                            tools_list.append(entry)
+                    except Exception:
+                        pass
+        except Exception:
+            # Dynamic import failed; fall back to MCP protocol placeholder
+            pass
+
+    if not tools_list:
+        tools_list = [{
+            "name": "MCP Protocol",
+            "description": "Server communicates via MCP protocol over stdio"
+        }]
+
+    # Annotate with status for UX consistency
+    if status != "running":
+        for tool in tools_list:
+            try:
+                tool["description"] = (tool.get("description", "") + f" (Server {status})").strip()
+            except Exception:
+                pass
+
+    return tools_list
 
 def load_mcp_servers():
     """Load MCP server configurations and check their status"""
@@ -215,8 +296,8 @@ def load_mcp_servers():
         except Exception:
             status = "stopped"
 
-        # Get tool information based on server type
-        tools = get_server_tools(server_name, status)
+        # Get tool information dynamically from server's Python module
+        tools = get_server_tools_dynamic(server, status)
 
         # Add comprehensive server info
         server_info = {

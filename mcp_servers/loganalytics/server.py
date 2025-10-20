@@ -20,6 +20,8 @@ import oci  # type: ignore
 import requests
 from oci.signer import Signer
 
+from mcp_oci_common.session import get_client
+
 # Set up tracing with proper Resource so service.name is set (avoids unknown_service)
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-loganalytics")
 init_tracing(service_name="oci-mcp-loganalytics")
@@ -259,41 +261,8 @@ def run_query_legacy(
             private_key_file_location=cfg["key_file"],
             pass_phrase=cfg.get("pass_phrase"),
         )
-
-        # Determine region strictly: prefer explicit cfg, then env; no silent fallback
-        api_region = cfg.get("region") or os.getenv("OCI_REGION")
-        if not api_region:
-            return with_meta({"error": "OCI region not set for Log Analytics. Set OCI_REGION or pass region param."}, success=False)
-        url = f"https://loganalytics.{api_region}.oci.oraclecloud.com/20200601/namespaces/{namespace_name}/search/actions/query"
-
-        body = {
-            "queryString": query_string,
-            "subSystem": subsystem or "LOG",
-            "maxTotalCount": max_total_count or 1000,
-            "timeFilter": {"timeStart": time_start, "timeEnd": time_end},
-            "shouldIncludeTotalCount": True,
-        }
-        params = {"limit": max_total_count or 1000}
-
-        resp = requests.post(url, json=body, auth=signer, params=params, timeout=60)
-        if not resp.ok:
-            raise Exception(f"HTTP {resp.status_code}: {resp.text}")
-        data = resp.json()
-        results = data.get("results") or data.get("items") or []
-        return with_meta(
-            {
-                "namespace": namespace_name,
-                "query": query_string,
-                "results": results,
-                "count": len(results),
-                "time_start": time_start,
-                "time_end": time_end,
-            },
-            success=True,
-            message=f"Query executed successfully. Found {len(results)} results.",
-        )
     except Exception as e:
-        return with_meta({"error": str(e)}, success=False, message=f"Legacy query failed: {e}")
+        return with_meta({"error": f"Configuration error: {e}"}, success=False)
 
 
 def _get_namespace(compartment_id: str, profile: str | None = None, region: str | None = None) -> str:
@@ -310,7 +279,7 @@ def _get_namespace(compartment_id: str, profile: str | None = None, region: str 
 
     # Prefer proper Log Analytics namespace discovery (requires tenancy OCID)
     try:
-        la = oci.log_analytics.LogAnalyticsClient(cfg)
+        la = get_client(oci.log_analytics.LogAnalyticsClient, region=cfg.get("region"))
         resp = la.list_namespaces(compartment_id=tenancy_id)
         items = getattr(resp.data, 'items', None) or []
         if items:
@@ -320,7 +289,7 @@ def _get_namespace(compartment_id: str, profile: str | None = None, region: str 
 
     # Fallback to Object Storage namespace if available
     try:
-        os_client = oci.object_storage.ObjectStorageClient(cfg)
+        os_client = get_client(oci.object_storage.ObjectStorageClient, region=cfg.get("region"))
         return os_client.get_namespace().data
     except Exception:
         # Last resort: return tenancy or the provided compartment_id
@@ -429,7 +398,7 @@ def execute_query(
                 if wr_id:
                     try:
                         # Use SDK to poll get_query_result for completion
-                        la_client = oci.log_analytics.LogAnalyticsClient(config)
+                        la_client = get_client(oci.log_analytics.LogAnalyticsClient, region=config.get("region"))
                         poll_resp = la_client.get_query_result(
                             namespace_name=namespace,
                             work_request_id=wr_id,
@@ -732,7 +701,8 @@ def perform_statistical_analysis(
                 field = agg.get("field")
                 alias = agg.get("alias", fn.lower())
                 if fn == "COUNT":
-                    expr = "COUNT()" if not field else f"COUNT({field})"
+                    # Avoid tenancy parser errors: use COUNT without parentheses when no field is provided
+                    expr = "COUNT" if not field else f"COUNT({field})"
                 else:
                     expr = f"{fn}({field})" if field else f"{fn}()"
                 return f"{expr} as {alias}"

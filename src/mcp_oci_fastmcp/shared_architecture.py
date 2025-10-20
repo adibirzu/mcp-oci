@@ -511,30 +511,3 @@ def get_all_compartments_recursive(identity_client, root_compartment_id: str, vi
         pass
     
     return all_compartments
-
-def validate_compartment_id(compartment_id: str) -> bool:
-    """Validate that the compartment ID format is correct."""
-    if not compartment_id:
-        return False
-    return compartment_id.startswith("ocid1.compartment.") or compartment_id.startswith("ocid1.tenancy.")
-
-def get_available_compartments(limit: int = 50):
-    """Get available compartments using recursive discovery."""
-    try:
-        identity_client = clients.identity
-        compartments = get_all_compartments_recursive(identity_client, clients.root_compartment_id)
-        
-        # Convert to simple dictionaries for LLM consumption
-        compartment_list = []
-        for comp in compartments[:limit]:
-            compartment_list.append({
-                "id": comp.id,
-                "name": comp.name,
-                "description": comp.description,
-                "lifecycle_state": comp.lifecycle_state,
-                "time_created": comp.time_created.isoformat() if comp.time_created else None
-            })
-        
-        return compartment_list
-    except Exception as e:
-        raise handle_oci_error(e, "get_available_compartments", "identity")

@@ -8,7 +8,8 @@ from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 
-from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations
+from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations, validate_and_log_tools
+from mcp_oci_common.session import get_client
 
 # Set up tracing with proper Resource
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-loadbalancer")
@@ -65,7 +66,7 @@ def _safe_serialize(obj):
 def list_load_balancers(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_load_balancers", mcp_server="oci-mcp-loadbalancer") as span:
         config = get_oci_config()
-        load_balancer_client = oci.load_balancer.LoadBalancerClient(config)
+        load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region=config.get("region"))
         compartment = compartment_id or get_compartment_id()
 
         try:
@@ -89,6 +90,7 @@ def list_load_balancers(compartment_id: Optional[str] = None) -> List[Dict[str, 
             except Exception:
                 pass
             load_balancers = response.data
+            span.set_attribute("load_balancers.count", len(load_balancers))
             return [_safe_serialize(lb) for lb in load_balancers]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing load balancers: {e}")
@@ -111,7 +113,7 @@ def create_load_balancer(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        load_balancer_client = oci.load_balancer.LoadBalancerClient(config)
+        load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region=config.get("region"))
 
         try:
             endpoint = getattr(load_balancer_client.base_client, "endpoint", "")
@@ -201,6 +203,11 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8008")))
         except Exception:
             pass
+    # Validate MCP tool names at startup
+    if not validate_and_log_tools(tools, "oci-mcp-loadbalancer"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     # Apply privacy masking to all tools (wrapper)
     try:
         from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp

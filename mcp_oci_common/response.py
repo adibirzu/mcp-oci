@@ -96,3 +96,46 @@ def with_meta(payload: Dict[str, Any] | Any, *args, **kwargs) -> str:
     except Exception:
         # Last resort: stringify payload
         return json.dumps({"data": str(out), "_meta": meta}, default=str)
+
+
+def safe_serialize(obj):
+    """Safely serialize OCI SDK objects and other complex types"""
+    if obj is None:
+        return None
+
+    # Handle OCI SDK objects
+    if hasattr(obj, '__dict__'):
+        try:
+            # Try to convert OCI objects to dict
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+                return obj._data.__dict__
+            else:
+                # Fallback to manual serialization of object attributes
+                result = {}
+                for key, value in obj.__dict__.items():
+                    if not key.startswith('_'):
+                        result[key] = safe_serialize(value)
+                return result
+        except Exception as e:
+            return {"serialization_error": str(e), "original_type": str(type(obj))}
+
+    # Handle lists and tuples
+    elif isinstance(obj, (list, tuple)):
+        return [safe_serialize(item) for item in obj]
+
+    # Handle dictionaries
+    elif isinstance(obj, dict):
+        return {key: safe_serialize(value) for key, value in obj.items()}
+
+    # Handle primitive types
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # For unknown types, try to convert to string
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return {"unknown_type": str(type(obj))}
