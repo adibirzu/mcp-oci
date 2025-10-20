@@ -48,6 +48,14 @@ def _lazy_import_instance_principals():
     except ImportError as e:
         raise OCISDKImportError("instance principals authentication", e)
 
+def _lazy_import_resource_principals():
+    """Lazy import of OCI resource principals (OKE Workload Identity, Functions, etc.)."""
+    try:
+        from oci.auth.signers import get_resource_principals_signer
+        return get_resource_principals_signer
+    except ImportError as e:
+        raise OCISDKImportError("resource principals authentication", e)
+
 def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Get OCI configuration with lazy SDK import and comprehensive error handling.
@@ -65,6 +73,28 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
     # Lazy import OCI SDK
     oci = _lazy_import_oci()
 
+    # Honor explicit resource principal mode or detected OKE/Functions environment first
+    auth_mode = os.getenv('OCI_CLI_AUTH', '').lower()
+    if auth_mode in ('resource_principal', 'resource_principals', 'resource') or os.getenv('OCI_RESOURCE_PRINCIPAL_VERSION'):
+        try:
+            get_rp_signer = _lazy_import_resource_principals()
+            signer = get_rp_signer()
+            region = os.getenv('OCI_REGION') or getattr(signer, 'region', None)
+            if not region:
+                # Region is required by SDK base_client; require OCI_REGION via ConfigMap/Secret in k8s
+                raise RuntimeError(
+                    "Using Resource Principals requires OCI_REGION to be set in environment."
+                )
+            return {'region': region, 'signer': signer}
+        except OCISDKImportError:
+            # Fall through to other mechanisms if SDK missing
+            pass
+        except Exception as e:
+            # If resource principal was explicitly requested, fail fast with guidance
+            if auth_mode in ('resource_principal', 'resource_principals', 'resource'):
+                raise RuntimeError(f"Failed to initialize Resource Principals signer: {e}") from e
+            # Otherwise continue to next auth mechanisms
+
     profile = profile_name or os.getenv('OCI_PROFILE', 'DEFAULT')
     config_path = os.getenv('OCI_CONFIG_FILE', os.path.expanduser('~/.oci/config'))
 
@@ -72,25 +102,36 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
         config = oci.config.from_file(file_location=config_path, profile_name=profile)
     except oci.exceptions.ConfigFileNotFound:
         try:
-            # Fallback to instance principal
-            InstancePrincipalsSecurityTokenSigner = _lazy_import_instance_principals()
-            signer = InstancePrincipalsSecurityTokenSigner()
-            config = {'region': signer.region}
-            config['signer'] = signer
-        except OCISDKImportError:
-            # Re-raise SDK import errors
-            raise
-        except Exception as e:
-            raise RuntimeError(
-                f"""Failed to load OCI config and instance principal fallback: {str(e)}
+            # Try Resource Principals first (OKE Workload Identity, Functions)
+            get_rp_signer = _lazy_import_resource_principals()
+            rp_signer = get_rp_signer()
+            rp_region = os.getenv('OCI_REGION') or getattr(rp_signer, 'region', None)
+            if not rp_region:
+                # If region still missing, attempt instance principals next
+                raise RuntimeError("Resource Principals available but OCI_REGION not set")
+            return {'region': rp_region, 'signer': rp_signer}
+        except Exception:
+            # Fallback to Instance Principals
+            try:
+                InstancePrincipalsSecurityTokenSigner = _lazy_import_instance_principals()
+                signer = InstancePrincipalsSecurityTokenSigner()
+                config = {'region': signer.region}
+                config['signer'] = signer
+            except OCISDKImportError:
+                # Re-raise SDK import errors
+                raise
+            except Exception as e:
+                raise RuntimeError(
+                    f"""Failed to load OCI config, resource principals, and instance principals fallback: {str(e)}
 
 Troubleshooting:
 1. Ensure OCI config file exists at: {config_path}
 2. Or run on OCI compute instance with instance principals enabled
-3. Check OCI_PROFILE environment variable if using non-default profile
-4. Verify OCI SDK is properly installed: pip install oci
+3. Or enable OKE Workload Identity / Resource Principals for pods and set OCI_REGION
+4. Check OCI_PROFILE environment variable if using non-default profile
+5. Verify OCI SDK is properly installed: pip install oci
 """
-            ) from e
+                ) from e
     except Exception as e:
         raise RuntimeError(
             f"""Failed to load OCI config from {config_path} with profile '{profile}': {str(e)}
@@ -107,6 +148,11 @@ Troubleshooting:
     env_region = os.getenv('OCI_REGION')
     if env_region:
         config['region'] = env_region
+
+    # Inject tenancy OCID if provided via environment (needed when using Resource Principals)
+    env_tenancy = os.getenv('TENANCY_OCID') or os.getenv('OCI_TENANCY')
+    if env_tenancy:
+        config['tenancy'] = env_tenancy
 
     return config
 

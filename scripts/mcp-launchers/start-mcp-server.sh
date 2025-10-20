@@ -129,9 +129,10 @@ launch_server() {
     esac
 
     # Enable Pyroscope profiling (non-fatal if backend unavailable)
-    export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-true}"
+    # Default disabled to avoid noisy connection errors when no backend is present (e.g., OKE, CI)
+    export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-false}"
     export PYROSCOPE_APP_NAME="mcp-oci-$server"
-    # Use IPv4 loopback to avoid macOS IPv6 localhost resolution issues with Docker port publishing
+    # Use IPv4 loopback by default for local docker-compose; override in k8s/CI via env
     export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://127.0.0.1:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
 

@@ -23,20 +23,35 @@ from fastmcp.tools import Tool
 # ----- OpenTelemetry -----
 from opentelemetry import trace
 
-"""Use the consolidated Log Analytics implementation from mcp_servers.loganalytics.server.
-This ensures there is a single source of truth for LA tools across servers.
-"""
-from mcp_servers.loganalytics.server import (
-    execute_query as la_execute_query_impl,
-    search_security_events as la_search_security_events_impl,
-    get_mitre_techniques as la_get_mitre_techniques_impl,
-    analyze_ip_activity as la_analyze_ip_activity_impl,
-    perform_statistical_analysis as la_perform_statistical_analysis_impl,
-    perform_advanced_analytics as la_perform_advanced_analytics_impl,
-    validate_query as la_validate_query_impl,
-    get_documentation as la_get_documentation_impl,
-    check_oci_connection as la_check_connection_impl,
-)
+# Log Analytics support is optional; import lazily when available.
+la_execute_query_impl = None
+la_search_security_events_impl = None
+la_get_mitre_techniques_impl = None
+la_analyze_ip_activity_impl = None
+la_perform_statistical_analysis_impl = None
+la_perform_advanced_analytics_impl = None
+la_validate_query_impl = None
+la_get_documentation_impl = None
+la_check_connection_impl = None
+
+try:
+    from mcp_servers.loganalytics.server import (
+        execute_query as la_execute_query_impl,
+        search_security_events as la_search_security_events_impl,
+        get_mitre_techniques as la_get_mitre_techniques_impl,
+        analyze_ip_activity as la_analyze_ip_activity_impl,
+        perform_statistical_analysis as la_perform_statistical_analysis_impl,
+        perform_advanced_analytics as la_perform_advanced_analytics_impl,
+        validate_query as la_validate_query_impl,
+        get_documentation as la_get_documentation_impl,
+        check_oci_connection as la_check_connection_impl,
+    )
+except Exception as exc:
+    logging.warning("[Observability] Log Analytics module unavailable: %s", exc)
+
+LOGAN_AVAILABLE = la_execute_query_impl is not None
+if not LOGAN_AVAILABLE:
+    logging.info("[Observability] Log Analytics-dependent tools disabled")
 
 from mcp_oci_common import get_oci_config, get_compartment_id
 
@@ -107,7 +122,7 @@ def _list_la_namespaces(config) -> List[Dict]:
     List OCI Logging Analytics namespaces for the current tenancy.
     """
     la_client = oci.log_analytics.LogAnalyticsClient(config)
-    tenancy_id = config.get("tenancy") or os.getenv("COMPARTMENT_OCID")
+    tenancy_id = config.get("tenancy") or os.getenv("TENANCY_OCID") or os.getenv("COMPARTMENT_OCID")
     if not tenancy_id:
         raise RuntimeError("Cannot resolve tenancy OCID for Logging Analytics namespace lookup")
     resp = la_client.list_namespaces(compartment_id=tenancy_id)
@@ -131,7 +146,7 @@ def _init_la_namespace_on_start():
     global _la_namespace, _la_namespace_source, _la_namespaces, _la_tenancy
     try:
         cfg = get_oci_config()
-        _la_tenancy = cfg.get("tenancy") or os.getenv("COMPARTMENT_OCID")
+        _la_tenancy = cfg.get("tenancy") or os.getenv("TENANCY_OCID") or os.getenv("COMPARTMENT_OCID")
         # 1) From env (authoritative)
         ns_env = os.getenv("LA_NAMESPACE")
         if ns_env:
@@ -505,6 +520,8 @@ def execute_logan_query(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "execute_logan_query", mcp_server="oci-mcp-observability") as span:
         res = la_execute_query_impl(
             query=query,
@@ -539,6 +556,8 @@ def search_security_events(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "search_security_events", mcp_server="oci-mcp-observability") as span:
         res = la_search_security_events_impl(
             search_term=search_term,
@@ -572,6 +591,8 @@ def get_mitre_techniques(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "get_mitre_techniques", mcp_server="oci-mcp-observability") as span:
         res = la_get_mitre_techniques_impl(
             compartment_id=_ensure_compartment_id(compartment_id),
@@ -604,6 +625,8 @@ def analyze_ip_activity(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "analyze_ip_activity", mcp_server="oci-mcp-observability") as span:
         res = la_analyze_ip_activity_impl(
             ip_address=ip_address,
@@ -639,6 +662,8 @@ def execute_statistical_analysis(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "execute_statistical_analysis", mcp_server="oci-mcp-observability") as span:
         res = la_perform_statistical_analysis_impl(
             base_query=base_query,
@@ -675,6 +700,8 @@ def execute_advanced_analytics(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "execute_advanced_analytics", mcp_server="oci-mcp-observability") as span:
         res = la_perform_advanced_analytics_impl(
             base_query=base_query,
@@ -700,10 +727,156 @@ def execute_advanced_analytics(
         })
         return out
 
+def correlate_metrics_with_logs(
+    instance_id: str,
+    compartment_id: Optional[str] = None,
+    metric: str = "CpuUtilization",
+    threshold: float = 80.0,
+    time_range: str = "24h",
+    include_flow_logs: bool = False,
+    max_count: int = 1000,
+    profile: Optional[str] = None,
+    region: Optional[str] = None,
+) -> Dict:
+    """
+    Correlate Monitoring metric spikes (e.g., CPU) for an instance with Log Analytics results.
+    Optionally restrict correlation to VCN Flow Logs.
+
+    - Pulls metric series via MonitoringClient.summarize_metrics_data
+    - Detects contiguous spike windows where value >= threshold
+    - For each window, runs an LA query constrained by instance + window and summarizes logs by Log Source
+    """
+    with tool_span(tracer, "correlate_metrics_with_logs", mcp_server="oci-mcp-observability") as span:
+        try:
+            cfg = get_oci_config()
+            if region:
+                cfg["region"] = region
+
+            mon_client = oci.monitoring.MonitoringClient(cfg)
+            cid = _ensure_compartment_id(compartment_id)
+
+            # Parse relative time_range to absolute window
+            now = datetime.now(timezone.utc)
+            tr = (time_range or "24h").strip().lower()
+            if tr.endswith("m"):
+                start = now - timedelta(minutes=int(tr[:-1]))
+            elif tr.endswith("h"):
+                start = now - timedelta(hours=int(tr[:-1]))
+            elif tr.endswith("d"):
+                start = now - timedelta(days=int(tr[:-1]))
+            elif tr.endswith("w"):
+                start = now - timedelta(weeks=int(tr[:-1]))
+            else:
+                # default 24h
+                start = now - timedelta(hours=24)
+
+            # Build Monitoring query (Compute Agent)
+            mon_query = f'{metric}[1m]{{resourceId="{instance_id}"}}.mean()'
+            span.set_attribute("monitoring.query", mon_query)
+
+            mon_resp = mon_client.summarize_metrics_data(
+                compartment_id=cid,
+                summarize_metrics_data_details=oci.monitoring.models.SummarizeMetricsDataDetails(
+                    namespace="oci_computeagent",
+                    query=mon_query,
+                    start_time=start,
+                    end_time=now
+                )
+            )
+
+            series = mon_resp.data[0].aggregated_datapoints if (mon_resp.data and len(mon_resp.data) > 0) else []
+            # Detect contiguous spike windows
+            spikes: List[Dict] = []
+            current: Optional[Dict] = None
+            for dp in series:
+                ts = getattr(dp, "timestamp", None) or getattr(dp, "time_stamp", None)
+                val = getattr(dp, "value", 0.0) or 0.0
+                try:
+                    v = float(val)
+                except Exception:
+                    v = 0.0
+
+                if v >= float(threshold):
+                    if current is None:
+                        current = {"start": ts, "sum": v, "count": 1, "max": v}
+                    else:
+                        current["sum"] += v
+                        current["count"] += 1
+                        current["max"] = max(current["max"], v)
+                else:
+                    if current is not None:
+                        current["end"] = ts or now
+                        current["avg"] = (current["sum"] / current["count"]) if current["count"] else current["max"]
+                        spikes.append(current)
+                        current = None
+            if current is not None:
+                current["end"] = now
+                current["avg"] = (current["sum"] / current["count"]) if current["count"] else current["max"]
+                spikes.append(current)
+
+            # For each spike window, run a constrained LA query and summarize by Log Source
+            results: List[Dict] = []
+            for s in spikes:
+                s_start = s.get("start") or start
+                s_end = s.get("end") or now
+                s_start_iso = s_start.isoformat().replace("+00:00", "Z") if hasattr(s_start, "isoformat") else str(s_start)
+                s_end_iso = s_end.isoformat().replace("+00:00", "Z") if hasattr(s_end, "isoformat") else str(s_end)
+
+                base_q = f"* | where 'resourceId' = '{instance_id}'"
+                if include_flow_logs:
+                    base_q += " and 'Log Source' = 'VCN Flow Logs'"
+                # Constrain timeframe explicitly in query; execute_query also applies time_range as coarse window
+                time_clause = f" and Time > date('{s_start_iso}') and Time < date('{s_end_iso}')"
+                summary_q = f"{base_q}{time_clause} | stats COUNT as logrecords by 'Log Source' | sort -logrecords"
+
+                # Execute via consolidated LA implementation
+                raw = la_execute_query_impl(
+                    query=summary_q,
+                    compartment_id=cid,
+                    query_name="correlate_metrics_with_logs",
+                    time_range=time_range,
+                    max_count=max_count,
+                    profile=profile,
+                    region=region
+                )
+                parsed = _parse_result(raw)
+
+                results.append({
+                    "window": {
+                        "start": s_start_iso,
+                        "end": s_end_iso,
+                        "avg": s.get("avg"),
+                        "max": s.get("max"),
+                        "points": s.get("count"),
+                    },
+                    "log_summary": parsed.get("results", []),
+                    "log_count": parsed.get("count", 0),
+                    "query_used": summary_q,
+                    "success": bool(parsed.get("_meta", {}).get("success"))
+                })
+
+            return {
+                "success": True,
+                "instance_id": instance_id,
+                "metric": metric,
+                "threshold": threshold,
+                "time_range": time_range,
+                "include_flow_logs": include_flow_logs,
+                "spikes_detected": len(results),
+                "spike_windows": results
+            }
+        except oci.exceptions.ServiceError as e:
+            return {"success": False, "error": str(e)}
+        except Exception as e:
+            logging.error(f"Correlation failed: {e}")
+            return {"success": False, "error": str(e)}
+
 def validate_query(
     query: str,
     fix: bool = False,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "validate_query", mcp_server="oci-mcp-observability") as span:
         res = la_validate_query_impl(query=query, fix=fix)
         out = _parse_result(res)
@@ -722,6 +895,8 @@ def get_documentation(
     topic: str = "query_syntax",
     search_term: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "get_documentation", mcp_server="oci-mcp-observability") as span:
         res = la_get_documentation_impl(topic=topic, search_term=search_term)
         out = _parse_result(res)
@@ -742,6 +917,8 @@ def check_oci_connection(
     profile: Optional[str] = None,
     region: Optional[str] = None,
 ) -> Dict:
+    if not LOGAN_AVAILABLE:
+        return {"error": "Log Analytics tools not available", "success": False}
     with tool_span(tracer, "check_oci_connection", mcp_server="oci-mcp-observability") as span:
         res = la_check_connection_impl(
             compartment_id=_ensure_compartment_id(compartment_id),
@@ -772,7 +949,7 @@ def quick_checks(
 
     - head:   "* | head N"
     - fields: "* | fields Time, 'Log Source' | head N"
-    - stats:  "* | fields 'Log Source' | head 100 | stats count() by 'Log Source' | sort -count | head N"
+    - stats:  "* | fields 'Log Source' | head 100 | stats count by 'Log Source' | sort -count | head N"
     """
     with tool_span(tracer, "quick_checks", mcp_server="oci-mcp-observability") as span:
         cid = _ensure_compartment_id(compartment_id)
@@ -809,8 +986,7 @@ def quick_checks(
         # Try multiple variants for COUNT to handle parser differences across tenancies
         stats_queries = [
             "* | stats count as logrecords by 'Log Source' | sort -logrecords",
-            "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords",
-            "* | stats COUNT() as logrecords by 'Log Source' | sort -logrecords",
+            "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords"
         ]
 
         checks.append(_run("head", head_q))
@@ -1067,6 +1243,7 @@ tools = [
     Tool.from_function(fn=analyze_ip_activity,          name="analyze_ip_activity",          description="Analyze activity for an IP across authentication/network/threat intel"),
     Tool.from_function(fn=execute_statistical_analysis, name="execute_statistical_analysis", description="Run stats/timestats/eventstats/top/bottom/frequent/rare"),
     Tool.from_function(fn=execute_advanced_analytics,   name="execute_advanced_analytics",   description="Advanced analytics: cluster, link, nlp, classify, outlier, sequence, geostats, timecluster"),
+    Tool.from_function(fn=correlate_metrics_with_logs,  name="correlate_metrics_with_logs",  description="Correlate Monitoring spikes with Log Analytics (optionally VCN Flow Logs)"),
     Tool.from_function(fn=validate_query,               name="validate_query",               description="Validate Log Analytics query; optionally auto-fix common issues"),
     Tool.from_function(fn=get_documentation,            name="get_documentation",            description="Get docs for Log Analytics query syntax, fields, functions, MITRE mapping, etc."),
     Tool.from_function(fn=check_oci_connection,         name="check_oci_connection",         description="Verify Logging Analytics connectivity and run optional test query"),
@@ -1112,8 +1289,7 @@ def diagnostics_loganalytics_stats(
     cid = _ensure_compartment_id(compartment_id)
     variants = [
         "* | stats count as logrecords by 'Log Source' | sort -logrecords",
-        "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords",
-        "* | stats COUNT() as logrecords by 'Log Source' | sort -logrecords",
+        "* | stats COUNT as logrecords by 'Log Source' | sort -logrecords"
     ]
     attempts: List[Dict] = []
     for q in variants:
@@ -1145,7 +1321,8 @@ def diagnostics_loganalytics_stats(
     }
 
 # Register diagnostics tool
-tools.append(Tool.from_function(fn=diagnostics_loganalytics_stats, name="diagnostics_loganalytics_stats", description="Run multiple 'stats by Log Source' variants and report which works"))
+if LOGAN_AVAILABLE:
+    tools.append(Tool.from_function(fn=diagnostics_loganalytics_stats, name="diagnostics_loganalytics_stats", description="Run multiple 'stats by Log Source' variants and report which works"))
 tools.append(Tool.from_function(fn=doctor, name="doctor", description="Return server health, config summary, and masking status"))
 
 def doctor_all() -> Dict:

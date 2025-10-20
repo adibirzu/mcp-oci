@@ -10,7 +10,8 @@ from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.session import get_client
 
-from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations
+from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations, validate_and_log_tools
+from mcp_oci_common.cache import get_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -21,87 +22,113 @@ init_tracing(service_name="oci-mcp-db")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-db")
 
+def _fetch_autonomous_databases(compartment_id: Optional[str] = None, region: Optional[str] = None):
+    config = get_oci_config()
+    if region:
+        config['region'] = region
+    database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
+    try:
+        endpoint = getattr(database_client.base_client, "endpoint", "")
+    except Exception:
+        endpoint = ""
+    add_oci_call_attributes(
+        None,  # No span in internal
+        oci_service="Database",
+        oci_operation="ListAutonomousDatabases",
+        region=config.get("region"),
+        endpoint=endpoint,
+    )
+    compartment = compartment_id or get_compartment_id()
+    response = list_call_get_all_results(database_client.list_autonomous_databases, compartment_id=compartment)
+    req_id = response.headers.get("opc-request-id")
+    dbs = response.data
+    return [{
+        'id': db.id,
+        'display_name': db.display_name,
+        'lifecycle_state': db.lifecycle_state,
+        'db_workload': db.db_workload
+    } for db in dbs], req_id
+
 def list_autonomous_databases(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None
 ) -> List[Dict]:
     with tool_span(tracer, "list_autonomous_databases", mcp_server="oci-mcp-db") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
-        # Enrich span with backend call metadata
+        cache = get_cache()
+        params = {'compartment_id': compartment_id, 'region': region}
         try:
-            endpoint = getattr(database_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Database",
-            oci_operation="ListAutonomousDatabases",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        compartment = compartment_id or get_compartment_id()
-        
-        try:
-            response = list_call_get_all_results(database_client.list_autonomous_databases, compartment_id=compartment)
-            try:
-                req_id = response.headers.get("opc-request-id")
-                if req_id:
-                    span.set_attribute("oci.request_id", req_id)
-            except Exception:
-                pass
-            dbs = response.data
-            return [{
-                'id': db.id,
-                'display_name': db.display_name,
-                'lifecycle_state': db.lifecycle_state,
-                'db_workload': db.db_workload
-            } for db in dbs]
+            dbs, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-db",
+                operation="list_autonomous_databases",
+                params=params,
+                fetch_func=lambda: _fetch_autonomous_databases(compartment_id, region),
+                ttl_minutes=10,
+                force_refresh=False
+            )
+            if req_id:
+                span.set_attribute("oci.request_id", req_id)
+            span.set_attribute("dbs.count", len(dbs))
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            if region:
+                span.set_attribute("region", region)
+            return dbs
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing autonomous databases: {e}")
             span.record_exception(e)
             return []
+
+def _fetch_db_systems(compartment_id: Optional[str] = None, region: Optional[str] = None):
+    config = get_oci_config()
+    if region:
+        config['region'] = region
+    database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
+    try:
+        endpoint = getattr(database_client.base_client, "endpoint", "")
+    except Exception:
+        endpoint = ""
+    add_oci_call_attributes(
+        None,  # No span in internal
+        oci_service="Database",
+        oci_operation="ListDbSystems",
+        region=config.get("region"),
+        endpoint=endpoint,
+    )
+    compartment = compartment_id or get_compartment_id()
+    response = list_call_get_all_results(database_client.list_db_systems, compartment_id=compartment)
+    req_id = response.headers.get("opc-request-id")
+    systems = response.data
+    return [{
+        'id': system.id,
+        'display_name': system.display_name,
+        'lifecycle_state': system.lifecycle_state,
+        'shape': system.shape
+    } for system in systems], req_id
 
 def list_db_systems(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None
 ) -> List[Dict]:
     with tool_span(tracer, "list_db_systems", mcp_server="oci-mcp-db") as span:
-        config = get_oci_config()
-        if region:
-            config['region'] = region
-        database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
-        # Enrich span with backend call metadata
+        cache = get_cache()
+        params = {'compartment_id': compartment_id, 'region': region}
         try:
-            endpoint = getattr(database_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="Database",
-            oci_operation="ListDbSystems",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        compartment = compartment_id or get_compartment_id()
-        
-        try:
-            response = list_call_get_all_results(database_client.list_db_systems, compartment_id=compartment)
-            try:
-                req_id = response.headers.get("opc-request-id")
-                if req_id:
-                    span.set_attribute("oci.request_id", req_id)
-            except Exception:
-                pass
-            systems = response.data
-            return [{
-                'id': system.id,
-                'display_name': system.display_name,
-                'lifecycle_state': system.lifecycle_state,
-                'shape': system.shape
-            } for system in systems]
+            systems, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-db",
+                operation="list_db_systems",
+                params=params,
+                fetch_func=lambda: _fetch_db_systems(compartment_id, region),
+                ttl_minutes=10,
+                force_refresh=False
+            )
+            if req_id:
+                span.set_attribute("oci.request_id", req_id)
+            span.set_attribute("systems.count", len(systems))
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            if region:
+                span.set_attribute("region", region)
+            return systems
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing DB systems: {e}")
             span.record_exception(e)
@@ -339,10 +366,12 @@ def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
                 pass
             if response.data:
                 metrics = response.data[0].aggregated_datapoints
+                span.set_attribute("metrics.datapoints", len(metrics))
                 summary = {
                     'average': sum(dp.value for dp in metrics) / len(metrics) if metrics else 0,
                     'max': max(dp.value for dp in metrics) if metrics else 0,
-                    'min': min(dp.value for dp in metrics) if metrics else 0
+                    'min': min(dp.value for dp in metrics) if metrics else 0,
+                    'datapoints_count': len(metrics)
                 }
                 return summary
             return {'error': 'No metrics found'}
@@ -445,6 +474,11 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8002")))
         except Exception:
             pass
+    # Validate MCP tool names at startup
+    if not validate_and_log_tools(tools, "oci-mcp-db"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     # Apply privacy masking to all tools (wrapper)
     try:
         from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp

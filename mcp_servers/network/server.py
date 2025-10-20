@@ -7,7 +7,9 @@ import oci
 import requests
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
-from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, allow_mutations, make_client
+from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, allow_mutations, validate_and_log_tools
+from mcp_oci_common.session import get_client
+from mcp_oci_common.cache import get_cache
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 
 # Set up tracing with proper Resource
@@ -21,57 +23,90 @@ logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNIN
 logger = logging.getLogger(__name__)
 
 
+def _fetch_vcns(compartment_id: Optional[str] = None):
+    compartment = compartment_id or get_compartment_id()
+    config = get_oci_config()
+    vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
+    try:
+        endpoint = getattr(vn_client.base_client, "endpoint", "")
+    except Exception:
+        endpoint = ""
+    add_oci_call_attributes(
+        None,  # No span in internal fetch
+        oci_service="VirtualNetwork",
+        oci_operation="ListVcns",
+        region=config.get("region"),
+        endpoint=endpoint,
+    )
+    response = list_call_get_all_results(vn_client.list_vcns, compartment_id=compartment)
+    req_id = response.headers.get("opc-request-id")
+    vcns = response.data
+    return [{'display_name': vcn.display_name, 'id': vcn.id, 'cidr_block': getattr(vcn, 'cidr_block', '')} for vcn in vcns], req_id
+
 def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
     with tool_span(tracer, "list_vcns", mcp_server="oci-mcp-network") as span:
-        compartment = compartment_id or get_compartment_id()
-        config = get_oci_config()
-        vn_client = oci.core.VirtualNetworkClient(config)
+        cache = get_cache()
+        params = {'compartment_id': compartment_id}
         try:
-            endpoint = getattr(vn_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="VirtualNetwork",
-            oci_operation="ListVcns",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        try:
-            response = list_call_get_all_results(vn_client.list_vcns, compartment_id=compartment)
-            req_id = response.headers.get("opc-request-id")
+            vcns, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-network",
+                operation="list_vcns",
+                params=params,
+                fetch_func=lambda: _fetch_vcns(compartment_id),
+                ttl_minutes=10,
+                force_refresh=False
+            )
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
-            vcns = response.data
-            return [{'display_name': vcn.display_name, 'id': vcn.id, 'cidr_block': getattr(vcn, 'cidr_block', '')} for vcn in vcns]
+            span.set_attribute("vcns.count", len(vcns))
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            return vcns
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing VCNs: {e}")
             span.record_exception(e)
             return []
 
+def _fetch_subnets(vcn_id: str, compartment_id: Optional[str] = None):
+    compartment = compartment_id or get_compartment_id()
+    config = get_oci_config()
+    vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
+    try:
+        endpoint = getattr(vn_client.base_client, "endpoint", "")
+    except Exception:
+        endpoint = ""
+    add_oci_call_attributes(
+        None,  # No span in internal fetch
+        oci_service="VirtualNetwork",
+        oci_operation="ListSubnets",
+        region=config.get("region"),
+        endpoint=endpoint,
+    )
+    response = list_call_get_all_results(vn_client.list_subnets, compartment_id=compartment, vcn_id=vcn_id)
+    req_id = response.headers.get("opc-request-id")
+    subnets = response.data
+    return [{'display_name': subnet.display_name, 'id': subnet.id, 'cidr_block': subnet.cidr_block, 'vcn_id': vcn_id} for subnet in subnets], req_id
+
 def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict]:
     with tool_span(tracer, "list_subnets", mcp_server="oci-mcp-network") as span:
-        compartment = compartment_id or get_compartment_id()
-        config = get_oci_config()
-        vn_client = oci.core.VirtualNetworkClient(config)
+        cache = get_cache()
+        params = {'vcn_id': vcn_id, 'compartment_id': compartment_id}
         try:
-            endpoint = getattr(vn_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="VirtualNetwork",
-            oci_operation="ListSubnets",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        try:
-            response = list_call_get_all_results(vn_client.list_subnets, compartment_id=compartment, vcn_id=vcn_id)
-            req_id = response.headers.get("opc-request-id")
+            subnets, req_id = cache.get_or_refresh(
+                server_name="oci-mcp-network",
+                operation="list_subnets",
+                params=params,
+                fetch_func=lambda: _fetch_subnets(vcn_id, compartment_id),
+                ttl_minutes=10,
+                force_refresh=False
+            )
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
-            subnets = response.data
-            return [{'display_name': subnet.display_name, 'id': subnet.id, 'cidr_block': subnet.cidr_block, 'vcn_id': vcn_id} for subnet in subnets]
+            span.set_attribute("subnets.count", len(subnets))
+            span.set_attribute("vcn_id", vcn_id)
+            if compartment_id:
+                span.set_attribute("compartment_id", compartment_id)
+            return subnets
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing subnets: {e}")
             span.record_exception(e)
@@ -89,7 +124,7 @@ def create_vcn(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        vn_client = oci.core.VirtualNetworkClient(config)
+        vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -145,7 +180,7 @@ def create_subnet(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        vn_client = oci.core.VirtualNetworkClient(config)
+        vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -197,7 +232,7 @@ def summarize_public_endpoints(compartment_id: Optional[str] = None) -> List[Dic
     with tool_span(tracer, "summarize_public_endpoints", mcp_server="oci-mcp-network") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        vn_client = oci.core.VirtualNetworkClient(config)
+        vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -227,6 +262,7 @@ def summarize_public_endpoints(compartment_id: Optional[str] = None) -> List[Dic
                         'public_subnets': len(public_subnets),
                         'total_subnets': len(subnets)
                     })
+            span.set_attribute("public_endpoints.count", len(public_endpoints))
             return public_endpoints
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error summarizing public endpoints: {e}")
@@ -266,7 +302,7 @@ def create_vcn_with_subnets(
         cfg = get_oci_config()
         used_region = region or cfg.get("region")
         # Create client pinned to region
-        vn_client = make_client(oci.core.VirtualNetworkClient, region=used_region)
+        vn_client = get_client(oci.core.VirtualNetworkClient, region=used_region)
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -742,6 +778,11 @@ if __name__ == "__main__":
             _start_http_server(int(os.getenv("METRICS_PORT", "8006")))
         except Exception:
             pass
+    # Validate MCP tool names at startup
+    if not validate_and_log_tools(tools, "oci-mcp-network"):
+        logging.error("MCP tool validation failed. Server will not start.")
+        exit(1)
+
     # Apply privacy masking to all tools (wrapper)
     try:
         from mcp_oci_common.privacy import privacy_enabled as _pe, redact_payload as _rp

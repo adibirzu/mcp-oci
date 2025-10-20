@@ -1,64 +1,123 @@
-# OCI Compute Server
+Compute MCP Server (oci-mcp-compute) - SDK and API Reference
 
-Exposes `oci:compute:*` tools for instances, images, and VNICs.
+Overview
+- Purpose: Provide black-box tools to interact with OCI Compute instances via the official OCI Python SDK, with optional REST fallbacks using signed requests.
+- Primitives:
+  - Instance summary: {id, display_name, lifecycle_state, shape, availability_domain, compartment_id, time_created, private/public IPs}
+  - Metrics summary: {average, max, min, datapoints_count} over a time window
+- Observability: Tools run in traced spans with OTEL attributes for backend calls; Prometheus /metrics optional via env.
 
-## Tools
-- `oci:compute:list-instances` — List instances (optionally filter by `lifecycle_state`; defaults to tenancy if `compartment_id` omitted; can search subcompartments).
- - `oci:compute:list-instances` — List instances with advanced filters (defaults to tenancy if `compartment_id` omitted; can search subcompartments).
-- `oci:compute:get-instance` — Get instance details.
-- `oci:compute:list-images` — List images.
-  - Filters: `operating_system`, `operating_system_version`.
-- `oci:compute:list-vnics` — List VNIC attachments for an instance.
-- `oci:compute:list-shapes` — List shapes.
-- `oci:compute:instance-action` — Mutating. START/STOP/RESET (confirm/dry_run).
-- `oci:compute:list-boot-volumes` — List boot volumes (Blockstorage).
-- `oci:compute:list-instance-configurations` — List instance configurations (Compute Management).
-- `oci:compute:list-boot-volume-attachments` — List boot volume attachments.
-- `oci:compute:search-instances` — Search instances via OCI Resource Search (structured queries).
-- `oci:compute:list-stopped-instances` — Convenience alias that lists STOPPED instances and prompts to narrow scope.
+FASTMCP Readiness
+- Healthcheck tool: Lightweight liveness/readiness
+- Doctor tool: Config summary, privacy masking, tool list
+- Caching: Shared cache layer used for list_instances to reduce API pressure
+- Pagination: Uses oci.pagination.list_call_get_all_results to retrieve all pages per OCI best practices
 
-## Usage
-Serve:
-```
-mcp-oci-serve-compute --profile DEFAULT --region us-phoenix-1
-```
-Dev calls:
-```
-mcp-oci call compute oci:compute:list-instances --params '{"lifecycle_state":"STOPPED"}'
-mcp-oci call compute oci:compute:list-instances --params '{"compartment_name":"prod", "display_name_contains":"web", "time_created_after":"2025-01-01T00:00:00Z"}'
-mcp-oci call compute oci:compute:list-shapes --params '{"compartment_id":"ocid1.compartment..."}'
-mcp-oci call compute oci:compute:list-images --params '{"compartment_id":"ocid1.compartment...","operating_system":"Oracle Linux","operating_system_version":"9"}'
-\# Mutating example
-mcp-oci call compute oci:compute:instance-action --params '{"instance_id":"ocid1.instance...","action":"STOP","dry_run":true}'
-\# Search examples
-mcp-oci call compute oci:compute:search-instances --params '{"lifecycle_state":"STOPPED"}'
-mcp-oci call compute oci:compute:search-instances --params '{"display_name":"web-01","compartment_id":"ocid1.compartment...","include_subtree":true}'
-\# Alias: STOPPED with guidance
-mcp-oci call compute oci:compute:list-stopped-instances --params '{"compartment_name":"adrian_birzu","include_subtree":true}'
-```
+Tools and Mappings
 
-## Parameters
-- list-instances: `compartment_id?` (defaults to tenancy), `compartment_name?` (resolve to id), `availability_domain?`, `lifecycle_state?` (e.g., STOPPED), `include_subtree?` (default true), `display_name?`, `display_name_contains?`, `shape?`, `time_created_after?`, `time_created_before?`, `freeform_tags?` (map), `defined_tags?` (map of `namespace.key` -> value), `limit?`, `page?`, `max_items?` (cap aggregated results).
-  - Performance: results and name→OCID mappings are cached in‑process. Subsequent calls reuse cached compartments and instance lists (within TTL) to minimize backend/API calls.
-- search-instances: `query?` (structured), `lifecycle_state?`, `display_name?`, `compartment_id?`, `include_subtree?` (default true), `limit?`, `page?`.
-- list-stopped-instances: same filters as `list-instances` (without `lifecycle_state` which is forced to STOPPED); returns `hints` suggesting `compartment_name/time_created_after/before` when results are large or empty.
-- list-images: `compartment_id` (required), `operating_system?`, `operating_system_version?`, `limit?`, `page?`, `image_id?`.
-- list-boot-volumes: `compartment_id` (required), `availability_domain` (required), `limit?`, `page?`.
-- list-instance-configurations: `compartment_id` (required), `limit?`, `page?`.
-- instance-action: `instance_id` (required), `action` (required), `dry_run?`, `confirm?`.
-- list-boot-volume-attachments: `compartment_id?`, `instance_id?`, `availability_domain?`, `limit?`, `page?`.
+1) list_instances
+- What it does: Returns instances in a compartment (defaults to resolved COMPARTMENT_OCID), with optional region override and lifecycle_state filter. Enhances with IPs if instance is RUNNING.
+- SDK calls:
+  - oci.core.ComputeClient.list_instances
+    - Python SDK docs:
+      https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.list_instances
+  - oci.core.ComputeClient.get_instance (when enriching IPs)
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.get_instance
+  - oci.core.VirtualNetworkClient.get_vnic (to resolve IPs)
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.VirtualNetworkClient.html#oci.core.VirtualNetworkClient.get_vnic
+  - Pagination: oci.pagination.list_call_get_all_results
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/sdk_behaviors/pagination.html
+- REST references (optional alternative):
+  - ListInstances (Core): https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/Instance/ListInstances
+  - GetInstance (Core): https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/Instance/GetInstance
+  - GetVnic (Core): https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/Vnic/GetVnic
+- Notes:
+  - lifecycle_state validated against known values (RUNNING, STOPPED, etc.)
+  - Region can be overridden per-call; underlying clients are created via a common get_client wrapper.
 
-## Troubleshooting
-- 404 or empty: verify compartment, AD, and region.
-- 401/403: ensure profile has permissions for Compute/Blockstorage.
-- Instance action blocked: ensure instance in a valid lifecycle state for the action.
-## Responses
-- Handlers attach `opc_request_id` and `next_page` when available.
-Example:
-```
-{
-  "items": [ { "id": "ocid1.instance...", "shape": "VM.Standard.E5.Flex" } ],
-  "next_page": null,
-  "opc_request_id": "EFGH5678..."
-}
-```
+2) get_instance_details_with_ips
+- What it does: Returns a detailed instance document including primary/all IP addresses.
+- SDK calls:
+  - oci.core.ComputeClient.get_instance
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.get_instance
+  - oci.core.VirtualNetworkClient.get_vnic
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.VirtualNetworkClient.html#oci.core.VirtualNetworkClient.get_vnic
+  - oci.core.ComputeClient.list_vnic_attachments (via pagination)
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.list_vnic_attachments
+- REST references:
+  - GetInstance: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/Instance/GetInstance
+  - ListVnicAttachments: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/VnicAttachment/ListVnicAttachments
+  - GetVnic: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/Vnic/GetVnic
+
+3) get_instance_metrics
+- What it does: Returns CPU utilization summary for an instance over a window (default 1h).
+- SDK calls:
+  - oci.monitoring.MonitoringClient.summarize_metrics_data
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/monitoring/client/oci.monitoring.MonitoringClient.html#oci.monitoring.MonitoringClient.summarize_metrics_data
+  - Prior lookup: oci.core.ComputeClient.get_instance (to resolve compartment_id)
+- REST references:
+  - SummarizeMetricsData (Monitoring): https://docs.oracle.com/en-us/iaas/api/#/en/monitoring/20180401/MetricData/SummarizeMetricsData
+
+4) start_instance
+- What it does: Starts a compute instance (requires ALLOW_MUTATIONS=true).
+- SDK calls:
+  - oci.core.ComputeClient.instance_action with action="START"
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.instance_action
+- REST references:
+  - InstanceAction: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/InstanceAction/InstanceAction
+
+5) stop_instance
+- What it does: Stops a compute instance (requires ALLOW_MUTATIONS=true).
+- SDK calls:
+  - oci.core.ComputeClient.instance_action with action="STOP"
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.instance_action
+- REST references:
+  - InstanceAction: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/InstanceAction/InstanceAction
+
+6) restart_instance
+- What it does: Restarts a compute instance; soft reset by default or hard reset if requested (requires ALLOW_MUTATIONS=true).
+- SDK calls:
+  - oci.core.ComputeClient.instance_action with action="SOFTRESET" or "RESET"
+    - https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.instance_action
+- REST references:
+  - InstanceAction: https://docs.oracle.com/en-us/iaas/api/#/en/iaas/20160918/InstanceAction/InstanceAction
+
+7) healthcheck
+- What it does: Returns basic readiness/liveness info.
+
+8) doctor
+- What it does: Returns configuration summary (profile, region), privacy mask status, and tool list.
+
+Inputs and Behavior
+- Region override: list_instances and other tools accept region overrides and will create region-scoped clients via a shared get_client wrapper for consistency and reuse.
+- Compartment resolution: If compartment_id is not provided, the server resolves it with get_compartment_id() which typically reads COMPARTMENT_OCID or falls back to tenancy where appropriate.
+- Pagination: All list operations use list_call_get_all_results to ensure full enumeration across pages, consistent with SDK best practices.
+- Caching: list_instances results are cached per parameter set with an opt-out via force_refresh.
+
+REST Fallback (Signed Requests)
+- When to use: For features not present in the SDK layer or for composite flows where REST provides a better shape, an OCI RequestSigner can be used to sign requests to Core/Monitoring endpoints.
+- Reference:
+  - Python SDK Signer guide: https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/pythonsdk.htm
+  - REST API index: https://docs.oracle.com/en-us/iaas/api/
+
+Operational Notes
+- OTEL tracing: Each tool wraps calls in a tool_span with attributes for oci_service, operation, region, and backend endpoint (when available). OPC request IDs are attached to spans when present.
+- Privacy masking: If privacy is enabled, outputs are redacted via a common wrapper.
+- Metrics: Optional Prometheus exporter listens on METRICS_PORT (default 8001) when enabled.
+
+Examples (Pseudo-usage)
+- List instances (all states):
+  - Tool: list_instances
+  - Params: {"compartment_id": null, "region": null, "lifecycle_state": null}
+- Get instance details with IPs:
+  - Tool: get_instance_details_with_ips
+  - Params: {"instance_id": "ocid1.instance..."}
+- CPU metrics last hour:
+  - Tool: get_instance_metrics
+  - Params: {"instance_id": "ocid1.instance...", "window": "1h"}
+
+Maintenance Checklist
+- Verify SDK calls map 1:1 to latest Python SDK docs and that parameters/options are up to date.
+- Validate lifecycle_state enum set when SDK updates add/remove states.
+- Ensure pagination behavior remains consistent with SDK guidance.
+- Confirm signer-based REST example remains accurate when REST API evolves.

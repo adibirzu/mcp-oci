@@ -143,9 +143,10 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040
-      - ENABLE_PYROSCOPE=true
+      - ENABLE_PYROSCOPE=false
       - OTEL_SERVICE_NAME=mcp-ux
       - PYROSCOPE_APP_NAME=mcp-ux
+    command: ["bash", "-lc", "python -m uvicorn ux.app:app --host 0.0.0.0 --port 8000"]
     depends_on:
       - otel-collector
     restart: unless-stopped

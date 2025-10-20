@@ -15,9 +15,16 @@ export ENABLE_PYROSCOPE="true"
 export PYTHONDONTWRITEBYTECODE="1"
 export PYTHONUNBUFFERED="1"
 
+# If Pyroscope is not reachable locally, disable profiling to avoid noisy errors
+if ! curl -fsS "$PYROSCOPE_SERVER_ADDRESS" >/dev/null 2>&1; then
+  echo "[run-ux-local] Pyroscope not reachable at $PYROSCOPE_SERVER_ADDRESS; disabling profiling (ENABLE_PYROSCOPE=false)"
+  export ENABLE_PYROSCOPE="false"
+fi
+
 echo "Starting UX app with observability environment..."
 echo "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT"
 echo "PYROSCOPE_SERVER_ADDRESS=$PYROSCOPE_SERVER_ADDRESS"
+echo "ENABLE_PYROSCOPE=$ENABLE_PYROSCOPE"
 
 cd "$(dirname "$0")/../"
 python -m uvicorn ux.app:app --host 127.0.0.1 --port 8010 --reload

@@ -243,11 +243,19 @@ def init_tracing(
     exporter_endpoint = _normalize_otlp_endpoint(endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"))
     resource = _build_resource(service_name, service_namespace)
 
-    provider = TracerProvider(resource=resource)
-    span_exporter = OTLPSpanExporter(endpoint=exporter_endpoint, insecure=insecure)
-    provider.add_span_processor(BatchSpanProcessor(span_exporter))
-    trace.set_tracer_provider(provider)
-    return trace.get_tracer(service_name)
+    try:
+        provider = TracerProvider(resource=resource)
+        span_exporter = OTLPSpanExporter(endpoint=exporter_endpoint, insecure=insecure)
+        provider.add_span_processor(BatchSpanProcessor(span_exporter))
+        trace.set_tracer_provider(provider)
+        return trace.get_tracer(service_name)
+    except Exception as e:
+        warnings.warn(
+            f"Failed to initialize tracing for {service_name}: {e}",
+            UserWarning,
+            stacklevel=2
+        )
+        return None
 
 
 def init_metrics(
@@ -281,12 +289,21 @@ def init_metrics(
         return metrics.get_meter(meter_name)
 
     exporter_endpoint = _normalize_otlp_endpoint(endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"))
-    metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint=exporter_endpoint, insecure=insecure)
-    )
-    provider = MeterProvider(resource=_build_resource(meter_name), metric_readers=[metric_reader])
-    metrics.set_meter_provider(provider)
-    return metrics.get_meter(meter_name)
+    
+    try:
+        metric_reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=exporter_endpoint, insecure=insecure)
+        )
+        provider = MeterProvider(resource=_build_resource(meter_name), metric_readers=[metric_reader])
+        metrics.set_meter_provider(provider)
+        return metrics.get_meter(meter_name)
+    except Exception as e:
+        warnings.warn(
+            f"Failed to initialize metrics for {meter_name}: {e}",
+            UserWarning,
+            stacklevel=2
+        )
+        return None
 
 
 def set_common_span_attributes(
