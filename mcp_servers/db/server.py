@@ -79,7 +79,7 @@ def list_autonomous_databases(
                 operation="list_autonomous_databases",
                 params=params,
                 fetch_func=lambda: _fetch_autonomous_databases(compartment_id, region),
-                ttl_minutes=10,
+                ttl_seconds=600,
                 force_refresh=False
             )
             if req_id:
@@ -135,7 +135,7 @@ def list_db_systems(
                 operation="list_db_systems",
                 params=params,
                 fetch_func=lambda: _fetch_db_systems(compartment_id, region),
-                ttl_minutes=10,
+                ttl_seconds=600,
                 force_refresh=False
             )
             if req_id:

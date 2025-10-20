@@ -83,7 +83,7 @@ def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
                 operation="list_vcns",
                 params=params,
                 fetch_func=lambda: _fetch_vcns(compartment_id),
-                ttl_minutes=10,
+                ttl_seconds=600,
                 force_refresh=False
             )
             if req_id:
@@ -128,7 +128,7 @@ def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict
                 operation="list_subnets",
                 params=params,
                 fetch_func=lambda: _fetch_subnets(vcn_id, compartment_id),
-                ttl_minutes=10,
+                ttl_seconds=600,
                 force_refresh=False
             )
             if req_id:
