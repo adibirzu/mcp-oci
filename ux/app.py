@@ -4,10 +4,6 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import make_asgi_app, Counter, Histogram
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 try:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 except Exception:
@@ -18,6 +14,7 @@ except Exception:
     RequestsInstrumentor = None
 from mcp_oci_common.observability import init_tracing
 from time import perf_counter
+import subprocess
 
 # Optional Pyroscope (continuous profiling)
 # Default disabled to avoid noisy errors if backend is not available (docker/k8s)
@@ -260,34 +257,41 @@ def get_server_tools_dynamic(server: dict, status: str) -> list[dict]:
     return tools_list
 
 def load_mcp_servers():
-    """Load MCP server configurations and check their status"""
+    """Dynamically discover servers from mcp_servers/ directories and mcp.json"""
+    import glob
+    discovered = []
+
+    # Scan for server directories with server.py
+    server_dirs = glob.glob('mcp_servers/*/server.py')
+    dynamic_servers = []
+    for path in server_dirs:
+        dir_name = os.path.dirname(path).split('/')[-1]
+        server_name = f'oci-mcp-{dir_name}'
+        dynamic_servers.append({
+            'name': server_name,
+            'command': ['python', f'mcp_servers/{dir_name}/server.py'],
+            'port': 8000 + len(discovered) + 1  # Assign incremental ports
+        })
+
+    # Load from mcp.json if exists, merge with discovered
     try:
         with open('mcp.json', 'r') as f:
-            data = json.load(f)
+            config_servers = json.load(f)
+        # Merge: prioritize config, add discovered if not present
+        server_map = {s['name']: s for s in config_servers}
+        for ds in dynamic_servers:
+            if ds['name'] not in server_map:
+                server_map[ds['name']] = ds
+        all_servers = list(server_map.values())
     except FileNotFoundError:
-        return []
-
-    # Server port mapping for status checks
-    server_ports = {
-        'oci-mcp-compute': 8001,
-        'oci-mcp-db': 8002,
-        'oci-mcp-observability': 8003,
-        'oci-mcp-security': 8004,
-        'oci-mcp-cost': 8005,
-        'oci-mcp-network': 8006,
-        'oci-mcp-blockstorage': 8007,
-        'oci-mcp-loadbalancer': 8008,
-        'oci-mcp-inventory': 8009,
-        'oci-mcp-loganalytics': 8003,  # May share port with observability
-        'oci-mcp-agents': 8011,
-    }
+        all_servers = dynamic_servers
 
     enhanced = []
-    for server in data:
+    for server in all_servers:
         server_name = server['name']
-        port = server_ports.get(server_name, 8000)
+        port = server.get('port', 8000)
 
-        # Check if server is running by testing metrics endpoint
+        # Check status
         status = "unknown"
         try:
             import requests
@@ -299,7 +303,6 @@ def load_mcp_servers():
         # Get tool information dynamically from server's Python module
         tools = get_server_tools_dynamic(server, status)
 
-        # Add comprehensive server info
         server_info = {
             'name': server_name,
             'command': server.get('command', []),
@@ -310,6 +313,7 @@ def load_mcp_servers():
             'tools': tools
         }
         enhanced.append(server_info)
+        discovered.append(server_name)
 
     return enhanced
 
@@ -326,11 +330,11 @@ async def index(request: Request):
     # Generate valid Mermaid diagram with error handling
     try:
         relations = """graph TD
-    Claude[Claude AI Client]
+    LLM[LLM Client]
     MCP[MCP Protocol]
     OCI[Oracle Cloud Infrastructure]
 
-    Claude --> MCP
+    LLM --> MCP
     MCP --> OCI
 
     subgraph MCP_Servers["MCP Servers"]
@@ -360,11 +364,11 @@ async def index(request: Request):
     except Exception as e:
         # Fallback to simple text representation if Mermaid generation fails
         relations = f"""graph TD
-    Claude[Claude AI Client]
+    LLM[LLM Client]
     MCP[MCP Protocol]
     OCI[Oracle Cloud Infrastructure]
 
-    Claude --> MCP
+    LLM --> MCP
     MCP --> OCI
 
     %% Error in diagram generation: {str(e)}
@@ -402,6 +406,16 @@ async def dashboards(request: Request):
         from fastapi.responses import JSONResponse
         return JSONResponse(payload)
     return templates.TemplateResponse(request, "dashboard.html", payload)
+
+@app.get("/start/{server_name}")
+async def start_server(server_name: str):
+    try:
+        result = subprocess.run(["bash", "scripts/mcp-launchers/start-mcp-server.sh", server_name.replace("oci-mcp-", ""), "--daemon"], check=True, capture_output=True, text=True)
+        return {"status": "started", "output": result.stdout}
+    except subprocess.CalledProcessError as e:
+        return {"status": "error", "message": e.stderr}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/health")
 async def health():

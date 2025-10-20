@@ -5,6 +5,8 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool
 import oci
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, allow_mutations, validate_and_log_tools
@@ -17,6 +19,33 @@ os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-network")
 init_tracing(service_name="oci-mcp-network")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-network")
+
+# Shared HTTP session with connection pooling and retries for OCI REST calls
+_HTTP_SESSION = None
+
+def _get_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is not None:
+        return _HTTP_SESSION
+    try:
+        pool = int(os.getenv("NET_HTTP_POOL", "16"))
+        retries = int(os.getenv("NET_HTTP_RETRIES", "3"))
+        backoff = float(os.getenv("NET_HTTP_BACKOFF", "0.2"))
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=frozenset(["GET", "POST", "PUT", "DELETE", "PATCH"])
+        )
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        _HTTP_SESSION = session
+        return session
+    except Exception:
+        _HTTP_SESSION = requests.Session()
+        return _HTTP_SESSION
 
 # Logging setup
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -45,8 +74,9 @@ def _fetch_vcns(compartment_id: Optional[str] = None):
 
 def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
     with tool_span(tracer, "list_vcns", mcp_server="oci-mcp-network") as span:
+        compartment = compartment_id or get_compartment_id()
         cache = get_cache()
-        params = {'compartment_id': compartment_id}
+        params = {'compartment_id': compartment}
         try:
             vcns, req_id = cache.get_or_refresh(
                 server_name="oci-mcp-network",
@@ -89,8 +119,9 @@ def _fetch_subnets(vcn_id: str, compartment_id: Optional[str] = None):
 
 def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict]:
     with tool_span(tracer, "list_subnets", mcp_server="oci-mcp-network") as span:
+        compartment = compartment_id or get_compartment_id()
         cache = get_cache()
-        params = {'vcn_id': vcn_id, 'compartment_id': compartment_id}
+        params = {'vcn_id': vcn_id, 'compartment_id': compartment}
         try:
             subnets, req_id = cache.get_or_refresh(
                 server_name="oci-mcp-network",
@@ -124,7 +155,7 @@ def create_vcn(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
+        vn_client = make_client(oci.core.VirtualNetworkClient)
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -180,7 +211,7 @@ def create_subnet(
 
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        vn_client = get_client(oci.core.VirtualNetworkClient, region=config.get("region"))
+        vn_client = make_client(oci.core.VirtualNetworkClient)
         try:
             endpoint = getattr(vn_client.base_client, "endpoint", "")
         except Exception:
@@ -528,7 +559,7 @@ def create_vcn_with_subnets_rest(
                 span.record_exception(e)
                 return {"error": f"Failed to construct signer: {e}"}
 
-        session = requests.Session()
+        session = _get_http_session()
 
         def post(path: str, payload: Dict) -> requests.Response:
             url = base_url + path
@@ -760,6 +791,9 @@ tools = [
         description="Create a VCN (plus IGW, NAT, route tables, public/private subnets) using OCI REST API with signed HTTP requests"
     ),
 ]
+
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
 
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps

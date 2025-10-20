@@ -1,0 +1,170 @@
+{
+  "timestamp": "2025-10-09T06:16:13.770839+00:00",
+  "ok": true,
+  "servers": {
+    "compute": {
+      "ok": true,
+      "result": {
+        "server": "oci-mcp-compute",
+        "ok": true,
+        "privacy": false,
+        "region": "eu-frankfurt-1",
+        "profile": "DEFAULT",
+        "tools": [
+          "healthcheck",
+          "doctor",
+          "list_instances",
+          "create_instance",
+          "start_instance",
+          "stop_instance",
+          "restart_instance",
+          "get_instance_metrics",
+          "get_instance_details_with_ips"
+        ]
+      }
+    },
+    "db": {
+      "ok": true,
+      "result": {
+        "server": "oci-mcp-db",
+        "ok": true,
+        "privacy": false,
+        "region": "eu-frankfurt-1",
+        "profile": "DEFAULT",
+        "tools": [
+          "healthcheck",
+          "doctor",
+          "list_autonomous_databases",
+          "list_db_systems",
+          "start_db_system",
+          "stop_db_system",
+          "restart_db_system",
+          "start_autonomous_database",
+          "stop_autonomous_database",
+          "restart_autonomous_database",
+          "get_db_cpu_snapshot",
+          "query_multicloud_costs",
+          "get_cost_summary_by_cloud",
+          "get_autonomous_database",
+          "get_db_metrics"
+        ]
+      }
+    },
+    "network": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "oci-mcp-network",
+        "pid": 27775
+      }
+    },
+    "security": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "oci-mcp-security",
+        "pid": 27775
+      }
+    },
+    "observability": {
+      "ok": true,
+      "result": {
+        "server": "oci-mcp-observability",
+        "ok": true,
+        "privacy": false,
+        "region": "eu-frankfurt-1",
+        "profile": "DEFAULT",
+        "tools": [
+          "list_la_namespaces",
+          "set_la_namespace",
+          "get_la_namespace",
+          "run_log_analytics_query",
+          "run_saved_search",
+          "emit_test_log",
+          "build_advanced_query",
+          "correlate_threat_intelligence",
+          "execute_logan_query",
+          "search_security_events",
+          "get_mitre_techniques",
+          "analyze_ip_activity",
+          "execute_statistical_analysis",
+          "execute_advanced_analytics",
+          "validate_query",
+          "get_documentation",
+          "check_oci_connection",
+          "quick_checks",
+          "oci_observability_get_recent_calls",
+          "oci_observability_clear_recent_calls",
+          "get_mcp_otel_capabilities",
+          "create_traced_operation",
+          "send_test_trace_notification",
+          "analyze_trace_correlation",
+          "get_observability_metrics_summary",
+          "diagnostics_loganalytics_stats",
+          "doctor",
+          "doctor_all"
+        ]
+      }
+    },
+    "cost": {
+      "ok": true,
+      "result": {
+        "server": "oci-mcp-cost-enhanced",
+        "ok": true,
+        "privacy": false,
+        "region": "eu-frankfurt-1",
+        "profile": "DEFAULT",
+        "tools": [
+          "doctor",
+          "healthcheck",
+          "cost_by_compartment_daily",
+          "service_cost_drilldown",
+          "cost_by_tag_key_value",
+          "monthly_trend_forecast",
+          "focus_etl_healthcheck",
+          "budget_status_and_actions",
+          "schedule_report_create_or_list",
+          "object_storage_costs_and_tiering",
+          "top_cost_spikes_explain",
+          "per_compartment_unit_cost",
+          "forecast_vs_universal_credits",
+          "list_templates"
+        ],
+        "usage_api_endpoint": "https://usageapi.eu-frankfurt-1.oci.oraclecloud.com/20200107"
+      }
+    },
+    "inventory": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "inventory",
+        "pid": 27775
+      }
+    },
+    "blockstorage": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "oci-mcp-blockstorage",
+        "pid": 27775
+      }
+    },
+    "loadbalancer": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "oci-mcp-loadbalancer",
+        "pid": 27775
+      }
+    },
+    "agents": {
+      "ok": true,
+      "result": {
+        "status": "ok",
+        "server": "oci-mcp-agents",
+        "pid": 27775
+      }
+    }
+  },
+  "note": "This smoke test imports each MCP server module and invokes its doctor/healthcheck via observability.doctor_all()"
+}

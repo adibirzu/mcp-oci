@@ -4,7 +4,7 @@ import os
 import socket
 import typing as t
 import warnings
-from typing import Optional
+import time
 
 
 class ObservabilityImportError(ImportError):
@@ -136,9 +136,6 @@ def is_prometheus_available() -> bool:
     available, _ = _lazy_import_prometheus()
     return available
 
-
-# Import time for duration measurement (always available)
-import time
 
 _tool_calls_counter = None
 _tool_duration_histogram = None

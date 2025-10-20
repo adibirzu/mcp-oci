@@ -18,19 +18,27 @@ set -euo pipefail
 SCRIPT_DIR=$(dirname "$0")
 PARENT1=$(dirname "$SCRIPT_DIR")
 PARENT2=$(dirname "$PARENT1")
-PARENT3=$(dirname "$PARENT2")
-cd "$PARENT3"
+# Project root is two levels up from this script (mcp-oci)
+cd "$PARENT2"
+# Ensure globbing returns empty instead of a literal when there are no matches
+shopt -s nullglob
 
 # Ensure src/ is on PYTHONPATH so servers can import src/mcp_oci_common
 export PYTHONPATH="$(pwd)/src:$(pwd):${PYTHONPATH:-}"
 
 PID_DIR="${PID_DIR:-/tmp}"
 
-SERVERS=("compute" "db" "network" "security" "observability" "cost" "inventory" "blockstorage" "loadbalancer" "loganalytics" "agents")
+# Dynamically discover servers from mcp_servers/ directories
+declare -a SERVERS=()
+for dir in mcp_servers/*; do
+  if [[ -f "$dir/server.py" ]]; then
+    SERVERS+=("$(basename "$dir")")
+  fi
+done
 
 usage() {
   echo "Usage:"
-  echo "  $0 [all | ${SERVERS[*]}] [--daemon]"
+  echo "  $0 [all | ${SERVERS[*]:-}] [--daemon]"
   echo "  $0 status <server>"
   echo "  $0 stop <server>"
   exit 1
@@ -104,7 +112,8 @@ launch_server() {
     export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-otlp}"
     export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-otlp}"
     # Prefer gRPC on localhost:4317 for local stack; falls back cleanly if overridden
-    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}"
+    # NOTE: gRPC exporters expect 'host:port' without http:// prefix
+    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-localhost:4317}"
     export OTEL_EXPORTER_OTLP_PROTOCOL="${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}"
     # Service metadata for better filtering
     export OTEL_SERVICE_NAME="mcp-oci-$server"
@@ -135,6 +144,13 @@ launch_server() {
     # Use IPv4 loopback by default for local docker-compose; override in k8s/CI via env
     export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://127.0.0.1:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
+    # Auto-disable Pyroscope if backend is unreachable to avoid client spam
+    if [[ "${ENABLE_PYROSCOPE}" =~ ^(1|true|yes|on)$ ]]; then
+      if ! curl -fsS "${PYROSCOPE_SERVER_ADDRESS}/" >/dev/null 2>&1; then
+        echo "Pyroscope not reachable at ${PYROSCOPE_SERVER_ADDRESS}; disabling profiling for ${server}." >&2
+        export ENABLE_PYROSCOPE="false"
+      fi
+    fi
 
     # Ensure metrics port aligns with UX expectations
     case "$server" in
@@ -151,9 +167,17 @@ launch_server() {
       *)            : ;;
     esac
 
+    # Default MCP transport configuration (overridable by env or flags)
+    export MCP_TRANSPORT="${MCP_TRANSPORT:-stdio}"   # stdio | http | sse | streamable-http
+    export MCP_HOST="${MCP_HOST:-127.0.0.1}"
+    # If not provided, default control port to METRICS_PORT to keep ports predictable
+    if [[ -z "${MCP_PORT:-}" ]]; then
+      export MCP_PORT="${METRICS_PORT:-8000}"
+    fi
+
     local entry="mcp_servers/$server/server.py"
     if [[ ! -f "$entry" ]]; then
-      echo "Unknown server or missing entrypoint: $server ($entry not found)"
+      echo "Unknown server or missing entrypoint: $server ($entry not found)" >&2
       exit 2
     fi
 
@@ -162,7 +186,7 @@ launch_server() {
         echo "$server already running (PID $(cat "$(pid_file "$server")")). Skipping."
         return 0
       fi
-      echo "Launching $server in daemon mode..."
+      echo "Launching $server in daemon mode..." >&2
       # Use poetry run if available, otherwise fallback to python
       mkdir -p logs
       local logfile="logs/mcp-${server}.log"
@@ -173,9 +197,9 @@ launch_server() {
       fi
       local pid=$!
       echo "$pid" > "$(pid_file "$server")"
-      echo "$server server launched with PID $pid (logs: $logfile)"
+      echo "$server server launched with PID $pid (logs: $logfile)" >&2
     else
-      echo "Launching $server in foreground..."
+      echo "Launching $server in foreground..." >&2
       if command -v poetry >/dev/null 2>&1; then
         exec poetry run python "$entry"
       else
@@ -200,7 +224,7 @@ case "$cmd" in
   stop)
     if [[ "${1:-}" == "all" ]]; then
       echo "Stopping all MCP servers..."
-      for server in "${SERVERS[@]}"; do
+      for server in "${SERVERS[@]:-}"; do
         stop_server "$server"
       done
     else
@@ -210,19 +234,27 @@ case "$cmd" in
     ;;
 
   all)
-    # Start all servers as daemons (no-op if already running)
-    for server in "${SERVERS[@]}"; do
+    # Start all discovered servers as daemons (no-op if already running)
+    for server in "${SERVERS[@]:-}"; do
       launch_server "$server" "daemon"
     done
-    echo "All MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
+    echo "All discovered MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
     ;;
 
   compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer|loganalytics|agents)
     mode="foreground"
-    if [[ "${1:-}" == "--daemon" ]]; then
-      mode="daemon"
-      shift || true
-    fi
+    # Parse optional flags: --daemon, --http, --sse, --stream|--streamable|--streamable-http, --host <host>, --port <port>
+    while [[ $# -gt 0 ]]; do
+      case "${1:-}" in
+        --daemon) mode="daemon"; shift ;;
+        --http) export MCP_TRANSPORT="http"; shift ;;
+        --sse) export MCP_TRANSPORT="sse"; shift ;;
+        --stream|--streamable|--streamable-http) export MCP_TRANSPORT="streamable-http"; shift ;;
+        --host) export MCP_HOST="${2:-127.0.0.1}"; shift 2 ;;
+        --port) export MCP_PORT="${2:-8000}"; shift 2 ;;
+        *) break ;;
+      esac
+    done
     launch_server "$cmd" "$mode"
     ;;
 
