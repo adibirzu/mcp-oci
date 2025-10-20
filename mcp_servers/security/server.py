@@ -119,13 +119,8 @@ def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]
             except Exception:
                 pass
             users = response.data
-<<<<<<< HEAD
             span.set_attribute("users.count", len(users))
             return [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
-=======
-            data = [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
-            return {'ok': True, 'data': data}
->>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing IAM users: {e}")
             span.record_exception(e)
@@ -157,13 +152,8 @@ def list_groups(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             groups = response.data
-<<<<<<< HEAD
             span.set_attribute("groups.count", len(groups))
             return [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
-=======
-            data = [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
-            return {'ok': True, 'data': data}
->>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing groups: {e}")
             span.record_exception(e)
@@ -195,13 +185,8 @@ def list_policies(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             policies = response.data
-<<<<<<< HEAD
             span.set_attribute("policies.count", len(policies))
             return [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
-=======
-            data = [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
-            return {'ok': True, 'data': data}
->>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing policies: {e}")
             span.record_exception(e)
