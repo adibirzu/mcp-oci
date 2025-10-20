@@ -4,7 +4,6 @@ Safe Serialization Fix for OCI MCP Servers
 Adds comprehensive serialization functions to handle OCI SDK objects
 """
 
-import os
 import re
 from pathlib import Path
 
@@ -146,7 +145,7 @@ def main():
             print(f"❌ Failed to fix {server_file.parent.name}")
 
     print("\\n" + "=" * 60)
-    print(f"🎉 Summary:")
+    print("🎉 Summary:")
     print(f"   ✅ Servers Fixed: {servers_fixed}")
     print(f"   ⏭️  Servers Skipped: {servers_skipped}")
     print(f"   📊 Total Servers: {len(server_files)}")

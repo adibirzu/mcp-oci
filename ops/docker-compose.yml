@@ -104,8 +104,11 @@ services:
       - "7946:7946"  # Memberlist
     volumes:
       - ./pyroscope:/var/lib/pyroscope
-      - ./pyroscope/pyroscope.yaml:/etc/pyroscope.yaml
-    command: ["--config.file=/etc/pyroscope.yaml"]
+    command:
+      - server
+      - --server.http-listen-port=4040
+      - --storage.backend=filesystem
+      - --storage.filesystem.path=/var/lib/pyroscope
     # Health check disabled - manual verification: curl http://localhost:4040
     restart: unless-stopped
     networks:
@@ -115,7 +118,8 @@ services:
     image: otel/opentelemetry-collector:latest
     container_name: otel-collector
     ports:
-      - "4317:4317"  # OTLP gRPC
+      - "4317:4317"  # OTLP gRPC (for host-to-Docker connections)
+      - "4319:4318"  # OTLP HTTP mapped to avoid conflict with Tempo
       - "8889:8889"  # Prometheus exporter
     volumes:
       - ./otel/otel-collector.yaml:/etc/otel-collector.yaml

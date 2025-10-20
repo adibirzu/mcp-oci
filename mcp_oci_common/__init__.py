@@ -1,5 +1,9 @@
 import os
-from .config import get_oci_config, get_compartment_id, allow_mutations
+from .config import (
+    get_oci_config,
+    get_compartment_id,
+    allow_mutations,
+)
 from .observability import add_oci_call_attributes
 from .validation import validate_and_log_tools
 
@@ -16,23 +20,29 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
         from mcp_oci_common import make_client
         client = make_client(oci.log_analytics.LogAnalyticsClient, profile="DEFAULT", region="eu-frankfurt-1")
     """
-    # Lazy import to avoid hard dependency at import time
+    # Prefer the shared cached factory (adds retries/timeouts and reuses clients)
     try:
-        import oci as _oci  # type: ignore
-    except Exception as _e:
-        raise RuntimeError("OCI SDK not available. Please install 'oci' package.") from _e
-
-    # Load config; supports instance principal fallback via get_oci_config()
-    cfg = get_oci_config(profile_name=profile)
-    if region:
-        cfg["region"] = region
-
-    signer = cfg.get("signer")
-    if signer is not None:
-        # Instance principals or other signer-based auth
-        return oci_client_class(cfg, signer=signer)
-    else:
-        return oci_client_class(cfg)
+        from .session import get_client as _get_client
+        return _get_client(oci_client_class, profile=profile, region=region)
+    except Exception:
+        # Fallback to legacy behavior if session module or kwargs not supported
+        import importlib.util as _importlib
+        if _importlib.find_spec("oci") is None:
+            raise RuntimeError("OCI SDK not available. Please install 'oci' package.")
+        cfg = get_oci_config(profile_name=profile)
+        if region:
+            cfg["region"] = region
+        signer = cfg.get("signer")
+        try:
+            if signer is not None:
+                return oci_client_class(cfg, signer=signer)
+            else:
+                return oci_client_class(cfg)
+        except TypeError:
+            # Safety if client signature mismatch
+            if signer is not None:
+                return oci_client_class(cfg, signer=signer)
+            return oci_client_class(cfg)
 
 # --- Global FastMCP run() defaults/monkey-patch for network transport ---
 # This enables running servers over network (e.g., WebSocket) without modifying each server.

@@ -7,10 +7,9 @@ and visualization data generation for OCI Log Analytics.
 """
 
 import json
-import re
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Any
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 
 
@@ -75,7 +74,7 @@ class ExadataQueryOptimizer:
         optimizations = []
 
         # 1. Enhanced Filtering Query
-        enhanced_query = f"""'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
+        enhanced_query = """'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
 and product_service = database and product_resourceId like '%pluggabledatabase%'
 and cost_attributedCost > 0
 | dedup product_resourceId, product_compartmentName
@@ -92,7 +91,7 @@ and cost_attributedCost > 0
         ))
 
         # 2. Compartment Aggregation Query
-        compartment_query = f"""'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
+        compartment_query = """'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
 and product_service = database and product_resourceId like '%pluggabledatabase%'
 and cost_attributedCost > 0
 | stats sum(cost_attributedCost) as total_cost, count as database_count,
@@ -108,7 +107,7 @@ avg(cost_attributedCost) as avg_cost by product_compartmentName
         ))
 
         # 3. Cost Bucket Analysis Query
-        bucket_query = f"""'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
+        bucket_query = """'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
 and product_service = database and product_resourceId like '%pluggabledatabase%'
 and cost_attributedCost > 0
 | eval cost_bucket = case(cost_attributedCost >= 3, "High (≥$3)",
@@ -125,7 +124,7 @@ cost_attributedCost >= 1, "Medium ($1-$3)", "Low (<$1)")
         ))
 
         # 4. Top Spenders Query
-        top_spenders_query = f"""'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
+        top_spenders_query = """'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
 and product_service = database and product_resourceId like '%pluggabledatabase%'
 and cost_attributedCost > 0
 | stats sum(cost_attributedCost) as total_cost by product_resourceId,
@@ -142,7 +141,7 @@ product_compartmentName, 'tags_orcl-cloud.resource_name'
         ))
 
         # 5. Time-based Trend Query
-        trend_query = f"""'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
+        trend_query = """'Upload Name' = vf_5 and 'Log Source' = VF_budget_noFocus
 and product_service = database and product_resourceId like '%pluggabledatabase%'
 and cost_attributedCost > 0
 | bucket 'Log Date' by 1d

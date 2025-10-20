@@ -8,7 +8,6 @@ const sidebars = {
       label: 'Clients',
       items: [
         'clients/overview',
-        'clients/claude-desktop',
         'clients/cursor',
         'clients/cline',
       ],

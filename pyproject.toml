@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Oracle Cloud Infrastructure MCP Servers for AI and Observability"
 authors = [ "Abir Zu <abirzu@example.com>" ]
 readme = "README.md"
-packages = [{include = "mcp_servers"}, {include = "mcp_oci_common"}]
+packages = [
+  {include = "mcp_servers"},
+  {include = "mcp_oci_common"}
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -84,6 +87,28 @@ all = [
     "opentelemetry-instrumentation-fastapi"
 ]
 
+# Expose CLI entry points
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+  "oci-python-sdk",
+  ".venv",
+  "dist",
+  "build",
+  "third_party",
+  # Non-core demo/ops and experimental UIs are excluded from strict lint
+  "ops",
+  "web3_ux",
+  "src/mcp_oci_fastmcp*",
+  "src/mcp_oci_fastmcp_rest*",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]

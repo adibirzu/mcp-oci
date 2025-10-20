@@ -15,10 +15,12 @@ export ENABLE_PYROSCOPE="true"
 export PYTHONDONTWRITEBYTECODE="1"
 export PYTHONUNBUFFERED="1"
 
-# If Pyroscope is not reachable locally, disable profiling to avoid noisy errors
-if ! curl -fsS "$PYROSCOPE_SERVER_ADDRESS" >/dev/null 2>&1; then
-  echo "[run-ux-local] Pyroscope not reachable at $PYROSCOPE_SERVER_ADDRESS; disabling profiling (ENABLE_PYROSCOPE=false)"
-  export ENABLE_PYROSCOPE="false"
+# Auto-disable Pyroscope if backend unreachable to avoid client error spam
+if [[ "${ENABLE_PYROSCOPE}" =~ ^(1|true|yes|on)$ ]]; then
+  if ! curl -fsS "${PYROSCOPE_SERVER_ADDRESS}/" >/dev/null 2>&1; then
+    echo "[run-ux-local] Pyroscope not reachable at ${PYROSCOPE_SERVER_ADDRESS}; disabling profiling (ENABLE_PYROSCOPE=false)"
+    export ENABLE_PYROSCOPE="false"
+  fi
 fi
 
 echo "Starting UX app with observability environment..."

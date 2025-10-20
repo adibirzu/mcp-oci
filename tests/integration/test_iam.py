@@ -8,4 +8,3 @@ def test_iam_list_users_minimal(tenancy_ocid, oci_profile, oci_region):
         compartment_id=tenancy_ocid
     )
     assert isinstance(out, list)
-

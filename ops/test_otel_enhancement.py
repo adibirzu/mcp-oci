@@ -5,11 +5,10 @@ Test script for OpenTelemetry MCP enhancement capabilities with dependency check
 
 import json
 import sys
-import os
 import time
 import warnings
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Add the parent directory to sys.path to import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,7 +47,7 @@ class MockSpanExporter:
         """Mock force flush."""
         return True
 
-from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer, MCPObservabilityEnhancer
+from mcp_oci_common.otel_mcp import create_mcp_otel_enhancer
 
 def test_dependency_availability():
     """Test OpenTelemetry dependency availability."""
@@ -289,7 +288,7 @@ def test_with_mock_exporter():
             span.end()
 
             print("✅ Mock exporter test completed successfully")
-            print(f"✅ Mock exporter captured spans (simulated)")
+            print("✅ Mock exporter captured spans (simulated)")
             return True
 
     except Exception as e:

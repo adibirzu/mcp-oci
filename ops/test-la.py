@@ -58,7 +58,6 @@ def main():
         comp = tenancy  # default to root tenancy if COMPARTMENT_OCID not set
 
     # Build query details for today's window (UTC midnight -> now)
-    from datetime import datetime, timezone, timedelta
     from oci.log_analytics.models import QueryDetails
     start_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     end_time = datetime.now(timezone.utc)

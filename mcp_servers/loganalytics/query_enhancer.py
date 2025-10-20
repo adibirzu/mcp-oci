@@ -9,9 +9,9 @@ improve query syntax compatibility.
 
 import re
 import json
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 @dataclass

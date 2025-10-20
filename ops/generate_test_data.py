@@ -6,7 +6,6 @@ Generate test data for the observability stack
 import time
 import random
 import requests
-import json
 import sys
 from pathlib import Path
 
@@ -16,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def generate_prometheus_metrics():
     """Generate test metrics that can be scraped by Prometheus"""
     from prometheus_client import Counter, Histogram, start_http_server, REGISTRY
-    from prometheus_client.core import CollectorRegistry
 
     # Clear existing metrics
     for collector in list(REGISTRY._collector_to_names.keys()):

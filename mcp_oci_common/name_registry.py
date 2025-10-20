@@ -90,7 +90,14 @@ class NameRegistry:
         with self._lock:
             for i in items:
                 iid = i.get("id") or i.get("_id")
-                name = i.get("display_name") or i.get("_display_name") or i.get("hostname") or i.get("_hostname") or i.get("name") or i.get("_name")
+                name = (
+                    i.get("display_name")
+                    or i.get("_display_name")
+                    or i.get("hostname")
+                    or i.get("_hostname")
+                    or i.get("name")
+                    or i.get("_name")
+                )
                 if not iid or not name:
                     continue
                 key = (compartment_id, name)

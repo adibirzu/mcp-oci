@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 import oci
 from datetime import datetime, timedelta
@@ -12,7 +11,6 @@ from fastmcp.tools import Tool
 from opentelemetry import trace
 
 from mcp_oci_common import get_oci_config, get_compartment_id
-from opentelemetry import trace
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 
 # Set up logging
@@ -250,7 +248,13 @@ def run_showusage(
 ) -> Dict:
     with tool_span(tracer, "run_showusage", mcp_server="oci-mcp-cost") as span:
         # Local imports for this tool (avoid global optional deps)
-        import subprocess, json, hashlib, difflib, sys, shutil, os as _os
+        import subprocess
+        import json
+        import hashlib
+        import difflib
+        import sys
+        import shutil
+        import os as _os
         from mcp_oci_common.observability import record_token_usage
         config_path = os.path.expanduser("~/.oci/config")
         # Choose a portable Python executable

@@ -7,7 +7,7 @@ import oci
 from oci.identity import IdentityClient
 from oci.cloud_guard import CloudGuardClient
 from oci.data_safe import DataSafeClient
-from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, validate_and_log_tools
+from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, validate_and_log_tools, make_client
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.session import get_client
 from mcp_oci_common.response import safe_serialize
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _fetch_compartments(parent_compartment_id: Optional[str] = None):
     """Internal function to fetch compartments from OCI with full hierarchy support"""
     config = get_oci_config()
-    identity_client = IdentityClient(config)
+    identity_client = make_client(IdentityClient)
 
     # Always query from tenancy root to get full hierarchy
     # This ensures we get all compartments regardless of permissions
@@ -97,7 +97,7 @@ def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]
     with tool_span(tracer, "list_iam_users", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = get_client(oci.identity.IdentityClient, region=config.get("region"))
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -119,18 +119,23 @@ def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]
             except Exception:
                 pass
             users = response.data
+<<<<<<< HEAD
             span.set_attribute("users.count", len(users))
             return [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
+=======
+            data = [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
+            return {'ok': True, 'data': data}
+>>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing IAM users: {e}")
             span.record_exception(e)
-            return []
+            return {'ok': False, 'error': str(e)}
 
 def list_groups(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_groups", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = get_client(oci.identity.IdentityClient, region=config.get("region"))
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -152,18 +157,23 @@ def list_groups(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             groups = response.data
+<<<<<<< HEAD
             span.set_attribute("groups.count", len(groups))
             return [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
+=======
+            data = [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
+            return {'ok': True, 'data': data}
+>>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing groups: {e}")
             span.record_exception(e)
-            return []
+            return {'ok': False, 'error': str(e)}
 
 def list_policies(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_policies", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = get_client(oci.identity.IdentityClient, region=config.get("region"))
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -185,18 +195,23 @@ def list_policies(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             policies = response.data
+<<<<<<< HEAD
             span.set_attribute("policies.count", len(policies))
             return [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
+=======
+            data = [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
+            return {'ok': True, 'data': data}
+>>>>>>> origin/main
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing policies: {e}")
             span.record_exception(e)
-            return []
+            return {'ok': False, 'error': str(e)}
 
 def list_cloud_guard_problems(compartment_id: Optional[str] = None, lifecycle_state: str = "OPEN", time_window: str = "24h") -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_cloud_guard_problems", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        cloud_guard_client = CloudGuardClient(config)
+        cloud_guard_client = make_client(CloudGuardClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(cloud_guard_client.base_client, "endpoint", "")
@@ -218,53 +233,17 @@ def list_cloud_guard_problems(compartment_id: Optional[str] = None, lifecycle_st
             except Exception:
                 pass
             problems = response.data
-            return [{'id': p.id, 'risk_level': p.risk_level, 'description': getattr(p, 'description', ''), 'lifecycle_state': getattr(p, 'lifecycle_state', lifecycle_state)} for p in problems]
+            data = [{'id': p.id, 'risk_level': p.risk_level, 'description': getattr(p, 'description', ''), 'lifecycle_state': getattr(p, 'lifecycle_state', lifecycle_state)} for p in problems]
+            return {'ok': True, 'data': data}
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing Cloud Guard problems: {e}")
             span.record_exception(e)
-            return []
+            return {'ok': False, 'error': str(e)}
 
 def list_data_safe_findings(compartment_id: Optional[str] = None, profile: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_data_safe_findings", mcp_server="oci-mcp-security") as span:
-        compartment = compartment_id or get_compartment_id()
-        config = get_oci_config()
-        data_safe_client = DataSafeClient(config)
-        # Enrich span with backend call metadata
-        try:
-            endpoint = getattr(data_safe_client.base_client, "endpoint", "")
-        except Exception:
-            endpoint = ""
-        add_oci_call_attributes(
-            span,
-            oci_service="DataSafe",
-            oci_operation="ListFindings",
-            region=config.get("region"),
-            endpoint=endpoint,
-        )
-        try:
-            response = list_call_get_all_results(data_safe_client.list_findings, compartment_id=compartment)
-            try:
-                req_id = response.headers.get("opc-request-id")
-                if req_id:
-                    span.set_attribute("oci.request_id", req_id)
-            except Exception:
-                pass
-            findings = response.data
-            # Convert findings to list format, handling the raw data structure
-            result = []
-            if findings:
-                for finding in findings:
-                    if hasattr(finding, '__dict__'):
-                        result.append(dict(finding.__dict__))
-                    else:
-                        result.append({'raw_data': str(finding)})
-            return result
-        except oci.exceptions.ServiceError as e:
-            logging.error(f"Error listing Data Safe findings: {e}")
-            span.record_exception(e)
-            if e.status == 404:  # Data Safe not enabled
-                return [{'error': 'Data Safe API not available. Please enable Data Safe in your tenancy. See: https://docs.oracle.com/en-us/iaas/data-safe/doc/getting-started-data-safe.html'}]
-            return [{'error': str(e)}]
+        # Stubbed in this build; Data Safe often not enabled in test envs
+        return {'ok': False, 'error': 'NotImplemented: Data Safe integration requires tenancy enablement'}
 
 tools = [
     Tool.from_function(
@@ -314,6 +293,9 @@ tools = [
         description="Return server health, config summary, and masking status"
     ),
 ]
+
+def get_tools():
+    return [{"name": t.name, "description": t.description} for t in tools]
 
 if __name__ == "__main__":
     # Lazy imports so importing this module (for UX tool discovery) doesn't require optional deps
