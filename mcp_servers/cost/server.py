@@ -199,7 +199,7 @@ def get_cost_summary(
                 operation="get_cost_summary",
                 params=params,
                 fetch_func=lambda: _fetch_cost_summary(time_window, granularity, compartment_id, region),
-                ttl_minutes=5,
+                ttl_seconds=300,
                 force_refresh=False
             )
             if req_id:
@@ -281,7 +281,7 @@ def get_usage_breakdown(
                 operation="get_usage_breakdown",
                 params=params,
                 fetch_func=lambda: _fetch_usage_breakdown(service, compartment_id, region),
-                ttl_minutes=5,
+                ttl_seconds=300,
                 force_refresh=False
             )
             if req_id:
