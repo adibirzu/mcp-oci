@@ -5,7 +5,7 @@ import pytest
 from mcp_servers.loganalytics.server import execute_query
 
 
-def test_loganalytics_run_query(oci_profile, oci_region, log_analytics_namespace):
+def test_loganalytics_execute_query(oci_profile, oci_region, log_analytics_namespace):
     if not log_analytics_namespace:
         pytest.skip("No Log Analytics namespace discovered; set TEST_LOGANALYTICS_NAMESPACE to force")
     # 1-hour window ending now

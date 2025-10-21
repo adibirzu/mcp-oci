@@ -79,6 +79,24 @@ def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Op
             else:
                 client = oci_client_class(cfg)
 
+        # Attach a sane default retry strategy to reduce transient failures and improve responsiveness
+        try:
+            from oci.retry import RetryStrategyBuilder  # type: ignore
+            max_attempts = int(os.getenv("OCI_RETRY_MAX_ATTEMPTS", "4"))
+            total_time_sec = int(os.getenv("OCI_RETRY_TOTAL_TIME_SEC", "30"))
+            retry_strategy = RetryStrategyBuilder() \
+                .add_max_attempts(max_attempts) \
+                .add_total_time(total_time_sec) \
+                .get_retry_strategy()
+            # Set on base client so all operations inherit unless overridden
+            try:
+                client.base_client.retry_strategy = retry_strategy  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        except Exception:
+            # Retry strategy attachment is best-effort
+            pass
+
         _client_cache[key] = client
         return client
 

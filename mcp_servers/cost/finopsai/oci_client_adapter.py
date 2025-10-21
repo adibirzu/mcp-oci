@@ -4,7 +4,8 @@ OCI Client Adapter for FinOpsAI integration with MCP-OCI architecture
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 import oci
-from mcp_oci_common import get_oci_config
+from mcp_oci_common import get_oci_config, get_compartment_id
+from mcp_oci_common.session import get_client
 
 
 @dataclass
@@ -56,7 +57,7 @@ def make_clients() -> OCIClients:
 
     # Create clients using the shared OCI config
     # Identity first (for home-region discovery)
-    identity = oci.identity.IdentityClient(config)
+    identity = get_client(oci.identity.IdentityClient)
 
     # Usage API must be called in the tenancy's home region; override if needed
     usage_cfg = dict(config)
@@ -67,9 +68,9 @@ def make_clients() -> OCIClients:
             usage_cfg['region'] = hr
     except Exception:
         pass
-    usage_api = oci.usage_api.UsageapiClient(usage_cfg)
-    budgets = oci.budget.BudgetClient(config)
-    object_storage = oci.object_storage.ObjectStorageClient(config)
+    usage_api = get_client(oci.usage_api.UsageapiClient, region=usage_cfg.get('region', config.get('region')))
+    budgets = get_client(oci.budget.BudgetClient)
+    object_storage = get_client(oci.object_storage.ObjectStorageClient)
 
     # Add tenancy information to config for FinOpsAI compatibility
     enhanced_config = dict(config)

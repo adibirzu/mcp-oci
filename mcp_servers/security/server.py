@@ -9,6 +9,8 @@ from oci.cloud_guard import CloudGuardClient
 from oci.data_safe import DataSafeClient
 from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, validate_and_log_tools, make_client
 from mcp_oci_common.cache import get_cache
+from mcp_oci_common.session import get_client
+from mcp_oci_common.response import safe_serialize
 from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
@@ -95,7 +97,7 @@ def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]
     with tool_span(tracer, "list_iam_users", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = make_client(IdentityClient)
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -117,8 +119,8 @@ def list_iam_users(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]
             except Exception:
                 pass
             users = response.data
-            data = [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
-            return {'ok': True, 'data': data}
+            span.set_attribute("users.count", len(users))
+            return [{'name': user.name, 'id': user.id, 'description': getattr(user, 'description', '')} for user in users]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing IAM users: {e}")
             span.record_exception(e)
@@ -128,7 +130,7 @@ def list_groups(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_groups", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = make_client(IdentityClient)
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -150,8 +152,8 @@ def list_groups(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             groups = response.data
-            data = [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
-            return {'ok': True, 'data': data}
+            span.set_attribute("groups.count", len(groups))
+            return [{'name': group.name, 'id': group.id, 'description': getattr(group, 'description', '')} for group in groups]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing groups: {e}")
             span.record_exception(e)
@@ -161,7 +163,7 @@ def list_policies(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
     with tool_span(tracer, "list_policies", mcp_server="oci-mcp-security") as span:
         compartment = compartment_id or get_compartment_id()
         config = get_oci_config()
-        identity_client = make_client(IdentityClient)
+        identity_client = make_client(oci.identity.IdentityClient)
         # Enrich span with backend call metadata
         try:
             endpoint = getattr(identity_client.base_client, "endpoint", "")
@@ -183,8 +185,8 @@ def list_policies(compartment_id: Optional[str] = None) -> List[Dict[str, Any]]:
             except Exception:
                 pass
             policies = response.data
-            data = [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
-            return {'ok': True, 'data': data}
+            span.set_attribute("policies.count", len(policies))
+            return [{'name': policy.name, 'id': policy.id, 'description': getattr(policy, 'description', '')} for policy in policies]
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing policies: {e}")
             span.record_exception(e)

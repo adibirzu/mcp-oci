@@ -18,7 +18,7 @@ export PYTHONUNBUFFERED="1"
 # Auto-disable Pyroscope if backend unreachable to avoid client error spam
 if [[ "${ENABLE_PYROSCOPE}" =~ ^(1|true|yes|on)$ ]]; then
   if ! curl -fsS "${PYROSCOPE_SERVER_ADDRESS}/" >/dev/null 2>&1; then
-    echo "Pyroscope not reachable at ${PYROSCOPE_SERVER_ADDRESS}; disabling profiling for UX."
+    echo "[run-ux-local] Pyroscope not reachable at ${PYROSCOPE_SERVER_ADDRESS}; disabling profiling (ENABLE_PYROSCOPE=false)"
     export ENABLE_PYROSCOPE="false"
   fi
 fi
@@ -26,6 +26,7 @@ fi
 echo "Starting UX app with observability environment..."
 echo "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT"
 echo "PYROSCOPE_SERVER_ADDRESS=$PYROSCOPE_SERVER_ADDRESS"
+echo "ENABLE_PYROSCOPE=$ENABLE_PYROSCOPE"
 
 cd "$(dirname "$0")/../"
 python -m uvicorn ux.app:app --host 127.0.0.1 --port 8010 --reload
