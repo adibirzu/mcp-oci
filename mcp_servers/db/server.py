@@ -74,7 +74,7 @@ def list_autonomous_databases(
         cache = get_cache()
         params = {'compartment_id': compartment_id, 'region': region}
         try:
-            dbs, req_id = cache.get_or_refresh(
+            result = cache.get_or_refresh(
                 server_name="oci-mcp-db",
                 operation="list_autonomous_databases",
                 params=params,
@@ -82,6 +82,11 @@ def list_autonomous_databases(
                 ttl_seconds=600,
                 force_refresh=False
             )
+            if result is None:
+                logging.error("Failed to fetch autonomous databases from cache or source.")
+                return []
+            
+            dbs, req_id = result
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             span.set_attribute("dbs.count", len(dbs))
