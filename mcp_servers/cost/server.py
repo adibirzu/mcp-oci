@@ -726,9 +726,11 @@ def forecast_vs_universal_credits(tenancy_ocid: str, months_ahead: int = 1, cred
         notes = []
         if credits_committed is not None:
             if forecast_amt > credits_committed * 1.05:
-                risk = "OVER"; notes.append("Forecast exceeds committed credits by >5%.")
+                risk = "OVER"
+                notes.append("Forecast exceeds committed credits by >5%.")
             elif forecast_amt < credits_committed * 0.85:
-                risk = "UNDER"; notes.append("Forecast under-consuming credits by >15%.")
+                risk = "UNDER"
+                notes.append("Forecast under-consuming credits by >15%.")
         out = ForecastCreditsOut(forecast={"monthsAhead": months_ahead, "amount": forecast_amt}, credits={"present": credits_committed is not None, "committed": credits_committed or 0.0}, risk=risk, notes=notes)
         return _envelope("Compared forecast vs. Universal Credits.", _safe_serialize(out))
 
