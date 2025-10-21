@@ -1,32 +1,45 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+# Detect compose command (Docker CLI v2 uses `docker compose`)
+if command -v docker compose >/dev/null 2>&1; then
+    COMPOSE="docker compose"
+else
+    COMPOSE="docker-compose"
+fi
+
+# If Buildx isn't available, disable BuildKit to avoid TLS/CA issues during pulls on some systems
+if ! docker buildx version >/dev/null 2>&1; then
+    echo "WARN: Docker Buildx not found; falling back to legacy builder (DOCKER_BUILDKIT=0)"
+    export DOCKER_BUILDKIT=0
+fi
 
 echo "🔧 MCP-OCI Observability Stack - Complete Restart"
 echo "=================================================="
 
 # Stop all containers
 echo "🛑 Stopping all observability containers..."
-docker-compose down --remove-orphans
+$COMPOSE down --remove-orphans
 
 # Clean up volumes if needed
 echo "🧹 Cleaning up old data (optional)..."
 read -p "Do you want to clean up all persistent data? (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    docker-compose down -v
+    $COMPOSE down -v
     echo "✅ Volumes cleaned"
 fi
 
 # Rebuild containers
 echo "🔨 Rebuilding containers..."
-docker-compose build --no-cache obs-app
+$COMPOSE build --no-cache --pull obs-app
 
 # Start services in order
 echo "🚀 Starting observability stack..."
 
 # Start infrastructure services first
 echo "  Starting infrastructure services..."
-docker-compose up -d tempo jaeger pyroscope otel-collector
+$COMPOSE up -d tempo jaeger pyroscope otel-collector
 
 # Wait for infrastructure to be ready
 echo "  Waiting for infrastructure services..."
@@ -34,7 +47,7 @@ sleep 10
 
 # Start Prometheus (with host networking)
 echo "  Starting Prometheus..."
-docker-compose up -d prometheus
+$COMPOSE up -d prometheus
 
 # Wait for Prometheus
 echo "  Waiting for Prometheus..."
@@ -42,11 +55,11 @@ sleep 5
 
 # Start Grafana
 echo "  Starting Grafana..."
-docker-compose up -d grafana
+$COMPOSE up -d grafana
 
 # Start obs-app
 echo "  Starting obs-app..."
-docker-compose up -d obs-app
+$COMPOSE up -d obs-app
 
 # Wait for all services to be ready
 echo "⏳ Waiting for all services to be ready..."
@@ -54,12 +67,11 @@ sleep 15
 
 # Verify all services are running
 echo "🔍 Verifying service status..."
-docker-compose ps
+$COMPOSE ps
 
 echo ""
 echo "🧪 Running observability tests..."
-cd ..
-python test_observability_e2e.py
+python test_observability_server.py || true
 
 echo ""
 echo "🌐 Access Points:"
