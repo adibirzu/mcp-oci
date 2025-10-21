@@ -49,6 +49,16 @@ pid_file() {
   echo "$PID_DIR/mcp-oci-${server}.pid"
 }
 
+normalize_server() {
+  local name="$1"
+  # Map aliases like 'mcp-observability' -> 'observability'
+  if [[ "$name" == mcp-* ]]; then
+    echo "${name#mcp-}"
+  else
+    echo "$name"
+  fi
+}
+
 is_running() {
   local server="$1"
   local pf
@@ -65,23 +75,27 @@ is_running() {
 
 print_status() {
   local server="$1"
-  if is_running "$server"; then
-    echo "$server is running (PID $(cat "$(pid_file "$server")"))"
+  local s
+  s="$(normalize_server "$server")"
+  if is_running "$s"; then
+    echo "$s is running (PID $(cat "$(pid_file "$s")"))"
     exit 0
   else
-    echo "$server is not running"
+    echo "$s is not running"
     exit 3
   fi
 }
 
 stop_server() {
   local server="$1"
+  local s
+  s="$(normalize_server "$server")"
   local pf
-  pf="$(pid_file "$server")"
-  if is_running "$server"; then
+  pf="$(pid_file "$s")"
+  if is_running "$s"; then
     local pid
     pid="$(cat "$pf")"
-    echo "Stopping $server (PID $pid)..."
+    echo "Stopping $s (PID $pid)..."
     kill "$pid" >/dev/null 2>&1 || true
     # Grace period
     for i in {1..20}; do
@@ -92,13 +106,13 @@ stop_server() {
       fi
     done
     if ps -p "$pid" >/dev/null 2>&1; then
-      echo "Force killing $server (PID $pid)"
+      echo "Force killing $s (PID $pid)"
       kill -9 "$pid" >/dev/null 2>&1 || true
     fi
     rm -f "$pf"
-    echo "$server stopped."
+    echo "$s stopped."
   else
-    echo "$server not running."
+    echo "$s not running."
   fi
 }
 
@@ -138,9 +152,10 @@ launch_server() {
     esac
 
     # Enable Pyroscope profiling (non-fatal if backend unavailable)
-    export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-true}"
+    # Default disabled to avoid noisy connection errors when no backend is present (e.g., OKE, CI)
+    export ENABLE_PYROSCOPE="${ENABLE_PYROSCOPE:-false}"
     export PYROSCOPE_APP_NAME="mcp-oci-$server"
-    # Use IPv4 loopback to avoid macOS IPv6 localhost resolution issues with Docker port publishing
+    # Use IPv4 loopback by default for local docker-compose; override in k8s/CI via env
     export PYROSCOPE_SERVER_ADDRESS="${PYROSCOPE_SERVER_ADDRESS:-http://127.0.0.1:4040}"
     export PYROSCOPE_SAMPLE_RATE="${PYROSCOPE_SAMPLE_RATE:-100}"
     # Auto-disable Pyroscope if backend is unreachable to avoid client spam
@@ -153,16 +168,16 @@ launch_server() {
 
     # Ensure metrics port aligns with UX expectations
     case "$server" in
-      compute)      export METRICS_PORT="${METRICS_PORT:-8001}" ;;
-      db)           export METRICS_PORT="${METRICS_PORT:-8002}" ;;
-      observability)export METRICS_PORT="${METRICS_PORT:-8003}" ;;
-      security)     export METRICS_PORT="${METRICS_PORT:-8004}" ;;
-      cost)         export METRICS_PORT="${METRICS_PORT:-8005}" ;;
-      network)      export METRICS_PORT="${METRICS_PORT:-8006}" ;;
-      blockstorage) export METRICS_PORT="${METRICS_PORT:-8007}" ;;
-      loadbalancer) export METRICS_PORT="${METRICS_PORT:-8008}" ;;
-      inventory)    export METRICS_PORT="${METRICS_PORT:-8009}" ;;
-      agents)       export METRICS_PORT="${METRICS_PORT:-8011}" ;;
+      compute)       export METRICS_PORT="${METRICS_PORT:-8001}" ;;
+      db)            export METRICS_PORT="${METRICS_PORT:-8002}" ;;
+      observability) export METRICS_PORT="${METRICS_PORT:-8003}" ;;
+      security)      export METRICS_PORT="${METRICS_PORT:-8004}" ;;
+      cost)          export METRICS_PORT="${METRICS_PORT:-8005}" ;;
+      network)       export METRICS_PORT="${METRICS_PORT:-8006}" ;;
+      blockstorage)  export METRICS_PORT="${METRICS_PORT:-8007}" ;;
+      loadbalancer)  export METRICS_PORT="${METRICS_PORT:-8008}" ;;
+      inventory)     export METRICS_PORT="${METRICS_PORT:-8009}" ;;
+      agents)        export METRICS_PORT="${METRICS_PORT:-8011}" ;;
       *)            : ;;
     esac
 
@@ -192,7 +207,8 @@ launch_server() {
       if command -v poetry >/dev/null 2>&1; then
         nohup poetry run python "$entry" >>"$logfile" 2>&1 &
       else
-        nohup python "$entry" >>"$logfile" 2>&1 &
+        PY_BIN="$( [ -x ".venv/bin/python" ] && echo ".venv/bin/python" || command -v python3 || command -v python )"
+        nohup "$PY_BIN" "$entry" >>"$logfile" 2>&1 &
       fi
       local pid=$!
       echo "$pid" > "$(pid_file "$server")"
@@ -202,7 +218,8 @@ launch_server() {
       if command -v poetry >/dev/null 2>&1; then
         exec poetry run python "$entry"
       else
-        exec python "$entry"
+        PY_BIN="$( [ -x ".venv/bin/python" ] && echo ".venv/bin/python" || command -v python3 || command -v python )"
+        exec "$PY_BIN" "$entry"
       fi
     fi
 }
@@ -213,8 +230,9 @@ if [[ $# -lt 1 ]]; then
 fi
 
 cmd="$1"; shift || true
+norm_cmd="$(normalize_server "$cmd")"
 
-case "$cmd" in
+case "$norm_cmd" in
   status)
     [[ $# -eq 1 ]] || usage
     print_status "$1"
@@ -254,7 +272,7 @@ case "$cmd" in
         *) break ;;
       esac
     done
-    launch_server "$cmd" "$mode"
+    launch_server "$norm_cmd" "$mode"
     ;;
 
   *)

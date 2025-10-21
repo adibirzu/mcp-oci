@@ -362,6 +362,35 @@ export TEMPO_RETENTION=7d
 export PYROSCOPE_STORAGE_PATH=/data/pyroscope
 ```
 
+## ⚡ Performance Tunables
+
+Client reuse and resilient I/O are enabled by default. You can tune behavior with the following environment variables:
+
+General OCI SDK (applies to all servers via shared client factory)
+- OCI_ENABLE_RETRIES=true|false (default true) — enable OCI SDK retry strategy when available
+- OCI_REQUEST_TIMEOUT=seconds — set both connect/read timeouts (float seconds)
+- OCI_REQUEST_TIMEOUT_CONNECT=seconds, OCI_REQUEST_TIMEOUT_READ=seconds — fine-grained timeouts
+
+Caching (shared disk+memory cache used by servers where applicable)
+- MCP_CACHE_DIR=/tmp/mcp-oci-cache (default)
+- MCP_CACHE_TTL=3600 — default TTL seconds for cache entries
+
+Log Analytics REST (applies to oci-mcp-loganalytics and wrappers)
+- LA_HTTP_POOL=16 — HTTP connection pool size
+- LA_HTTP_RETRIES=3 — automatic retries on 429/5xx
+- LA_HTTP_BACKOFF=0.2 — seconds backoff factor for retries
+- LA_HTTP_TIMEOUT=60 — per-request timeout in seconds
+
+Networking REST (applies to create_vcn_with_subnets_rest)
+- NET_HTTP_POOL=16 — HTTP connection pool size
+- NET_HTTP_RETRIES=3 — automatic retries on 429/5xx
+- NET_HTTP_BACKOFF=0.2 — seconds backoff factor for retries
+
+Notes
+- All servers reuse OCI SDK clients per (client class, profile, region) to reduce cold start and TLS overheads.
+- If a specific SDK client does not accept retry_strategy/timeout kwargs, the factory falls back gracefully.
+- Defaults are production-safe; increase *_HTTP_POOL for high concurrency workloads.
+
 ## 🔐 Security & Compliance
 
 ### Authentication Methods
