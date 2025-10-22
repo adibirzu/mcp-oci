@@ -6,6 +6,7 @@ from typing import Any, Dict
 try:
     from .privacy import privacy_enabled, redact_payload
 except Exception:  # pragma: no cover - defensive import
+
     def privacy_enabled() -> bool:  # type: ignore
         return False
 
@@ -104,18 +105,18 @@ def safe_serialize(obj):
         return None
 
     # Handle OCI SDK objects
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         try:
             # Try to convert OCI objects to dict
-            if hasattr(obj, 'to_dict'):
+            if hasattr(obj, "to_dict"):
                 return obj.to_dict()
-            elif hasattr(obj, '_data') and hasattr(obj._data, '__dict__'):
+            elif hasattr(obj, "_data") and hasattr(obj._data, "__dict__"):
                 return obj._data.__dict__
             else:
                 # Fallback to manual serialization of object attributes
                 result = {}
                 for key, value in obj.__dict__.items():
-                    if not key.startswith('_'):
+                    if not key.startswith("_"):
                         result[key] = safe_serialize(value)
                 return result
         except Exception as e:
