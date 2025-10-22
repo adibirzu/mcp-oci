@@ -1,47 +1,35 @@
-# MCP OCI Documentation
+# MCP-OCI Documentation Hub
 
-This documentation follows MCP best practices and FastMCP framework guidelines. See MCP protocol at https://modelcontextprotocol.io/ and FastMCP at https://gofastmcp.com/.
+This documentation follows the OCI MCP design guidelines (deterministic tools, structured errors, least-privilege defaults, explicit confirmation for destructive workflows). Familiarity with the [Model Context Protocol](https://modelcontextprotocol.io/) and [FastMCP](https://gofastmcp.com/) is recommended.
 
-Workflow at a glance
-- Install and verify: `make setup && mcp-oci doctor --profile DEFAULT --region us-phoenix-1`
-- Serve a service: `mcp-oci-serve iam --profile DEFAULT --region us-phoenix-1`
-- Call a tool: `mcp-oci call iam oci:iam:list-users --params '{"compartment_id":"ocid1.tenancy..."}'`
-- Mutating actions: use `dry_run=true` then `confirm=true`, or serve with `--require-confirm`.
-- Cost analytics: see `servers/usageapi` and `integrations` for showusage/showoci.
+## Quick workflow
 
-Sections
-- Servers (OCI services under `src/`)
-- Development (build, test, lint, fmt, vendor examples)
-- Security and Configuration
-- How-To guides (e.g., cost analysis)
-- Troubleshooting (common errors and client-specific guides)
+1. `make setup` – create virtualenv and install `.[dev]`
+2. `mcp-oci doctor --profile DEFAULT --region us-phoenix-1` – verify credentials
+3. `scripts/mcp-launchers/start-mcp-server.sh compute --daemon` – start a server
+4. `mcp-oci-serve compute --transport stdio` – expose a single service
+5. `scripts/docker/run-server.sh compute` – run the same server inside Docker
 
-## Performance and resiliency tunables
+## Documentation map
 
-Client reuse and resilient I/O are enabled by default. You can adjust behavior using environment variables:
+- **Server guides**: see the files under [docs/servers](servers) for per-service tools, environment variables, and runbooks.
+- **Deployment**: scripts under `ops/` cover Docker Compose, OKE manifests, and observability bootstrap.
+- **Common utilities**: shared client, cache, observability, and privacy layers live in [`mcp_oci_common`](../mcp_oci_common).
+- **Development**: the Makefile targets `fmt`, `lint`, `test`, and `dev` streamline local iteration.
 
-General OCI SDK (shared client factory)
-- OCI_ENABLE_RETRIES=true|false (default true) — enable OCI SDK retry strategy when supported
-- OCI_REQUEST_TIMEOUT=seconds — set both connect/read timeouts
-- OCI_REQUEST_TIMEOUT_CONNECT=seconds, OCI_REQUEST_TIMEOUT_READ=seconds — fine‑grained timeouts
+## Performance & resiliency tuning
 
-Caching (shared disk+memory cache)
-- MCP_CACHE_DIR=/tmp/mcp-oci-cache (default)
-- MCP_CACHE_TTL=3600 — default TTL seconds for cache entries
+- `OCI_ENABLE_RETRIES=true|false` – toggle OCI SDK retry strategy (default `true`).
+- `OCI_REQUEST_TIMEOUT_CONNECT` / `OCI_REQUEST_TIMEOUT_READ` – fine-grained timeouts (seconds).
+- `MCP_CACHE_TTL_{SERVICE}` – override cache TTL for a specific server (default `3600`).
+- `NET_HTTP_*` / `LA_HTTP_*` – size/retry tuning for Networking REST and Logging Analytics clients.
 
-Log Analytics REST (oci-mcp-loganalytics)
-- LA_HTTP_POOL=16 — HTTP connection pool size
-- LA_HTTP_RETRIES=3 — automatic retries on 429/5xx
-- LA_HTTP_BACKOFF=0.2 — per‑request backoff factor
-- LA_HTTP_TIMEOUT=60 — per‑request timeout seconds
+All servers reuse SDK clients per `(client class, profile, region)` to minimise TLS handshakes. When optional dependencies (Pyroscope, FastAPI instrumentation) are unavailable, servers degrade gracefully without affecting tool execution.
 
-Networking REST (create_vcn_with_subnets_rest)
-- NET_HTTP_POOL=16 — HTTP connection pool size
-- NET_HTTP_RETRIES=3 — automatic retries on 429/5xx
-- NET_HTTP_BACKOFF=0.2 — per‑request backoff factor
+## Testing strategy
 
-Notes
-- SDK clients are reused per (client class, profile, region) to minimize cold‑start/TLS overhead.
-- Defaults are production‑safe; increase *_HTTP_POOL for higher concurrency workloads.
+- **Unit**: faked OCI responses ensure tools return deterministic payloads without hitting live services.
+- **Integration**: optional scripts under `scripts/test_*` exercise live tenancy endpoints when credentials are available.
+- **Observability smoke**: `python test_observability_e2e.py` validates the OTLP pipeline and dashboards.
 
-See SERVERS.md in this folder for a full list of servers.
+Always run `make fmt lint test` before raising a PR.

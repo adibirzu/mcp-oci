@@ -1,14 +1,17 @@
 import os
+from pathlib import Path
 
 import pytest
 
 
 def pytest_collection_modifyitems(config, items):
-    # Skip entire integration suite unless explicitly enabled
+    # Skip integration suite unless explicitly enabled; do not affect unit tests.
     if os.environ.get("OCI_INTEGRATION") != "1":
         skip = pytest.mark.skip(reason="Set OCI_INTEGRATION=1 to run direct OCI integration tests")
         for item in items:
-            item.add_marker(skip)
+            item_path = Path(str(getattr(item, "fspath", "")))
+            if "tests" in item_path.parts and "integration" in item_path.parts:
+                item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

@@ -24,6 +24,7 @@ from opentelemetry.sdk.trace import TracerProvider, Span
 @dataclass
 class OTelAttribute:
     """OpenTelemetry attribute in OTLP/JSON format"""
+
     key: str
     value: Any
 
@@ -42,15 +43,13 @@ class OTelAttribute:
             value_type = "boolValue"
             value_data = self.value
 
-        return {
-            "key": self.key,
-            "value": {value_type: value_data}
-        }
+        return {"key": self.key, "value": {value_type: value_data}}
 
 
 @dataclass
 class OTelStatus:
     """OpenTelemetry status in OTLP/JSON format"""
+
     code: int = 0  # 0=UNSET, 1=OK, 2=ERROR
     message: Optional[str] = None
 
@@ -65,6 +64,7 @@ class OTelStatus:
 @dataclass
 class OTelSpan:
     """OpenTelemetry span in OTLP/JSON format"""
+
     trace_id: str
     span_id: str
     parent_span_id: Optional[str]
@@ -85,7 +85,7 @@ class OTelSpan:
             "startTimeUnixNano": str(self.start_time_unix_nano),
             "endTimeUnixNano": str(self.end_time_unix_nano),
             "attributes": [attr.to_dict() for attr in self.attributes],
-            "status": self.status.to_dict()
+            "status": self.status.to_dict(),
         }
 
         if self.parent_span_id:
@@ -97,6 +97,7 @@ class OTelSpan:
 @dataclass
 class OTelTraceNotification:
     """MCP OpenTelemetry trace notification"""
+
     method: str = "notifications/otel/trace"
     params: Dict[str, Any] = None
 
@@ -106,11 +107,7 @@ class OTelTraceNotification:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to MCP notification format"""
-        return {
-            "jsonrpc": "2.0",
-            "method": self.method,
-            "params": self.params
-        }
+        return {"jsonrpc": "2.0", "method": self.method, "params": self.params}
 
 
 class MCPTraceCollector:
@@ -120,7 +117,9 @@ class MCPTraceCollector:
         self.service_name = service_name
         self.collected_spans: List[OTelSpan] = []
 
-    def collect_span_from_otel(self, span: Span, trace_token: Optional[str] = None) -> OTelSpan:
+    def collect_span_from_otel(
+        self, span: Span, trace_token: Optional[str] = None
+    ) -> OTelSpan:
         """Convert OpenTelemetry span to MCP format"""
 
         # Extract span context
@@ -130,20 +129,22 @@ class MCPTraceCollector:
 
         # Get parent span ID if available
         parent_span_id = None
-        if hasattr(span, 'parent') and span.parent:
+        if hasattr(span, "parent") and span.parent:
             parent_span_id = f"{span.parent.span_id:016x}"
 
         # Convert attributes
         attributes = []
-        if hasattr(span, 'attributes') and span.attributes:
+        if hasattr(span, "attributes") and span.attributes:
             for key, value in span.attributes.items():
                 attributes.append(OTelAttribute(key=key, value=value))
 
         # Add MCP-specific attributes
-        attributes.extend([
-            OTelAttribute(key="mcp.service.name", value=self.service_name),
-            OTelAttribute(key="mcp.server.type", value="oci-mcp"),
-        ])
+        attributes.extend(
+            [
+                OTelAttribute(key="mcp.service.name", value=self.service_name),
+                OTelAttribute(key="mcp.server.type", value="oci-mcp"),
+            ]
+        )
 
         if trace_token:
             attributes.append(OTelAttribute(key="mcp.trace.token", value=trace_token))
@@ -151,7 +152,7 @@ class MCPTraceCollector:
         # Convert status
         status_code = 0  # UNSET
         status_message = None
-        if hasattr(span, 'status') and span.status:
+        if hasattr(span, "status") and span.status:
             if span.status.status_code == StatusCode.OK:
                 status_code = 1
             elif span.status.status_code == StatusCode.ERROR:
@@ -161,11 +162,13 @@ class MCPTraceCollector:
         status = OTelStatus(code=status_code, message=status_message)
 
         # Get timing
-        start_time = int(getattr(span, 'start_time', time.time()) * 1_000_000_000)  # Convert to nanoseconds
-        end_time = int(getattr(span, 'end_time', time.time()) * 1_000_000_000)
+        start_time = int(
+            getattr(span, "start_time", time.time()) * 1_000_000_000
+        )  # Convert to nanoseconds
+        end_time = int(getattr(span, "end_time", time.time()) * 1_000_000_000)
 
         # Get span name safely
-        span_name = getattr(span, 'name', 'unknown_operation')
+        span_name = getattr(span, "name", "unknown_operation")
 
         return OTelSpan(
             trace_id=trace_id,
@@ -175,29 +178,41 @@ class MCPTraceCollector:
             start_time_unix_nano=start_time,
             end_time_unix_nano=end_time,
             attributes=attributes,
-            status=status
+            status=status,
         )
 
-    def create_notification(self, spans: List[OTelSpan], trace_token: Optional[str] = None) -> OTelTraceNotification:
+    def create_notification(
+        self, spans: List[OTelSpan], trace_token: Optional[str] = None
+    ) -> OTelTraceNotification:
         """Create MCP trace notification"""
 
         params = {
-            "resourceSpans": [{
-                "resource": {
-                    "attributes": [
-                        OTelAttribute(key="service.name", value=self.service_name).to_dict(),
-                        OTelAttribute(key="service.version", value="1.0.0").to_dict(),
-                        OTelAttribute(key="mcp.server.name", value=self.service_name).to_dict()
-                    ]
-                },
-                "scopeSpans": [{
-                    "scope": {
-                        "name": "mcp-otel-enhancement",
-                        "version": "1.0.0"
+            "resourceSpans": [
+                {
+                    "resource": {
+                        "attributes": [
+                            OTelAttribute(
+                                key="service.name", value=self.service_name
+                            ).to_dict(),
+                            OTelAttribute(
+                                key="service.version", value="1.0.0"
+                            ).to_dict(),
+                            OTelAttribute(
+                                key="mcp.server.name", value=self.service_name
+                            ).to_dict(),
+                        ]
                     },
-                    "spans": [span.to_dict() for span in spans]
-                }]
-            }]
+                    "scopeSpans": [
+                        {
+                            "scope": {
+                                "name": "mcp-otel-enhancement",
+                                "version": "1.0.0",
+                            },
+                            "spans": [span.to_dict() for span in spans],
+                        }
+                    ],
+                }
+            ]
         }
 
         if trace_token:
@@ -212,11 +227,7 @@ class MCPObservabilityEnhancer:
     def __init__(self, service_name: str):
         self.service_name = service_name
         self.trace_collector = MCPTraceCollector(service_name)
-        self.capabilities = {
-            "otel": {
-                "traces": True
-            }
-        }
+        self.capabilities = {"otel": {"traces": True}}
         self.trace_handlers: List[callable] = []
 
         # Initialize OpenTelemetry with a proper TracerProvider
@@ -226,7 +237,7 @@ class MCPObservabilityEnhancer:
         """Initialize OpenTelemetry TracerProvider for real span creation"""
         # Set up a TracerProvider to ensure we get recording spans
         # Only initialize if no tracer provider is already set
-        if not hasattr(trace.get_tracer_provider(), '_resource'):
+        if not hasattr(trace.get_tracer_provider(), "_resource"):
             tracer_provider = TracerProvider()
             trace.set_tracer_provider(tracer_provider)
 
@@ -238,11 +249,13 @@ class MCPObservabilityEnhancer:
         """Get enhanced server capabilities including otel.traces"""
         return self.capabilities
 
-    def create_trace_span(self,
-                         name: str,
-                         trace_token: Optional[str] = None,
-                         attributes: Optional[Dict[str, Any]] = None,
-                         parent_span: Optional[Span] = None) -> Span:
+    def create_trace_span(
+        self,
+        name: str,
+        trace_token: Optional[str] = None,
+        attributes: Optional[Dict[str, Any]] = None,
+        parent_span: Optional[Span] = None,
+    ) -> Span:
         """Create traced span with MCP enhancement"""
 
         tracer = trace.get_tracer(self.service_name)
@@ -259,10 +272,7 @@ class MCPObservabilityEnhancer:
         if attributes:
             span_attributes.update(attributes)
 
-        span = tracer.start_span(
-            name=name,
-            attributes=span_attributes
-        )
+        span = tracer.start_span(name=name, attributes=span_attributes)
 
         return span
 
@@ -283,24 +293,31 @@ class MCPObservabilityEnhancer:
                 # Don't let trace handling break the main application
                 print(f"Warning: Trace handler failed: {e}")
 
-    def traced_operation(self,
-                        operation_name: str,
-                        trace_token: Optional[str] = None,
-                        attributes: Optional[Dict[str, Any]] = None):
+    def traced_operation(
+        self,
+        operation_name: str,
+        trace_token: Optional[str] = None,
+        attributes: Optional[Dict[str, Any]] = None,
+    ):
         """Decorator for traced MCP operations"""
 
         def decorator(func):
             def wrapper(*args, **kwargs):
                 # Extract trace token from request if not provided
                 request_trace_token = trace_token
-                if not trace_token and args and hasattr(args[0], 'meta') and args[0].meta:
-                    request_trace_token = args[0].meta.get('traceToken')
+                if (
+                    not trace_token
+                    and args
+                    and hasattr(args[0], "meta")
+                    and args[0].meta
+                ):
+                    request_trace_token = args[0].meta.get("traceToken")
 
                 # Create span
                 span = self.create_trace_span(
                     name=operation_name,
                     trace_token=request_trace_token,
-                    attributes=attributes
+                    attributes=attributes,
                 )
 
                 try:
@@ -325,6 +342,7 @@ class MCPObservabilityEnhancer:
                     self.send_trace_notification(span, request_trace_token)
 
             return wrapper
+
         return decorator
 
 
@@ -334,7 +352,9 @@ def create_mcp_otel_enhancer(service_name: str) -> MCPObservabilityEnhancer:
 
 
 # Example usage and integration helpers
-def enhance_mcp_server_with_otel(server_name: str, trace_endpoint: Optional[str] = None):
+def enhance_mcp_server_with_otel(
+    server_name: str, trace_endpoint: Optional[str] = None
+):
     """Enhance existing MCP server with OpenTelemetry capabilities"""
 
     enhancer = create_mcp_otel_enhancer(server_name)
@@ -350,7 +370,7 @@ def enhance_mcp_server_with_otel(server_name: str, trace_endpoint: Optional[str]
                     trace_endpoint,
                     json=notification,
                     headers={"Content-Type": "application/json"},
-                    timeout=5
+                    timeout=5,
                 )
             except Exception as e:
                 print(f"Failed to send trace notification: {e}")

@@ -23,17 +23,14 @@ test:
 
 
 CORE_SRC = \
+	src/mcp_oci_cli \
 	src/mcp_oci_compute \
-	src/mcp_oci_objectstorage \
-	src/mcp_oci_iam \
+	src/mcp_oci_fastmcp \
+	src/mcp_oci_functions \
+	src/mcp_oci_loadbalancer \
 	src/mcp_oci_networking \
-	src/mcp_oci_limits \
-	src/mcp_oci_budgets \
-	src/mcp_oci_monitoring \
-	src/mcp_oci_osub \
-	src/mcp_oci_introspect \
-	src/mcp_oci_serve \
-	src/mcp_oci_runtime
+	src/mcp_oci_streaming \
+	src/mcp_oci_usageapi
 
 lint:
 	$(RUFF) check $(CORE_SRC) mcp_oci_common || true
@@ -41,7 +38,17 @@ lint:
 
 fmt:
 	$(RUFF) check --fix $(CORE_SRC) mcp_oci_common || true
-	$(BLACK) $(CORE_SRC) mcp_oci_common
+	@FMT_TARGETS=""; \
+	for path in $(CORE_SRC) mcp_oci_common; do \
+		if [ -d $$path ]; then \
+			FMT_TARGETS="$$FMT_TARGETS $$path"; \
+		fi; \
+	done; \
+	if [ -n "$$FMT_TARGETS" ]; then \
+		$(BLACK) $$FMT_TARGETS; \
+	else \
+		echo "No Python packages found for formatting."; \
+	fi
 
 vendor-examples:
 	ORACLE_SDK_PATH?=
