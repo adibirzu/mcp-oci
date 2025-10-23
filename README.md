@@ -1,5 +1,9 @@
 # MCP-OCI: Oracle Cloud Infrastructure MCP Servers
 
+## Important Disclaimer
+
+All projects published under the GitHub account **adibirzu** are personal projects created and maintained independently by Adrian Birzu. They are not affiliated with, created by, or maintained by Oracle Corporation or any of its affiliates. These projects are developed to touch certain needs and do not represent official Oracle products, services, or endorsements.
+
 [![CI](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml/badge.svg)](https://github.com/adibirzu/mcp-oci/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/adibirzu/mcp-oci/branch/main/graph/badge.svg)](https://codecov.io/gh/adibirzu/mcp-oci)
 
