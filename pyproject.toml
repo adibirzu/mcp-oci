@@ -52,7 +52,12 @@ pytest-cov = "^4.0.0"
 requests = "*"  # Required for observability pipeline tests
 
 [tool.poetry.extras]
-oci = ["oci"]
+oci = [
+    "oci",
+    "opentelemetry-sdk",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp"
+]
 web = ["fastapi", "uvicorn"]
 ui = ["streamlit"]
 observability = [

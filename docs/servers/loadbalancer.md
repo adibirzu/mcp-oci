@@ -1,20 +1,33 @@
-# OCI Load Balancer Server
+# OCI Load Balancer MCP Server (`oci-mcp-loadbalancer`)
 
-Exposes `oci:loadbalancer:*` tools.
+## Overview
+- Purpose: Load balancer inventory, backend health, certificate helpers.
+- Default transport: stdio (set `MCP_TRANSPORT=http|sse|streamable-http` as needed)
+- Default metrics port: `8008` (override with `METRICS_PORT`)
 
 ## Tools
-- `oci:loadbalancer:list-load-balancers` — List Load Balancers in a compartment.
-- `oci:loadbalancer:get-backend-health` — Get backend set health.
+| Tool | Description |
+|------|-------------|
+| `create_load_balancer` | Create a new load balancer |
+| `doctor` | Return server health, config summary, and masking status |
+| `healthcheck` | Lightweight readiness/liveness check for the load balancer server |
+| `list_load_balancers` | List load balancers in a compartment |
 
-## Usage
-Serve:
-```
-mcp-oci-serve-loadbalancer --profile DEFAULT --region eu-frankfurt-1
-```
+## Running
+- Local launcher: `scripts/mcp-launchers/start-mcp-server.sh loadbalancer`
+- CLI entrypoint: `mcp-oci-serve loadbalancer`
+- Docker helper: `scripts/docker/run-server.sh loadbalancer`
+- Stop daemonised instance: `scripts/mcp-launchers/start-mcp-server.sh stop loadbalancer`
 
-## Parameters
-- list-load-balancers: `compartment_id` (required), `limit?`, `page?`.
-- get-backend-health: `load_balancer_id` (required), `backend_set_name` (required).
+## Configuration
+- Shared credentials resolved via `mcp_oci_common.get_oci_config()`
+- Respect privacy defaults (`MCP_OCI_PRIVACY=true`, disable with caution)
+- Service-specific hints:
+  - `ALLOW_MUTATIONS`
+  - `COMPARTMENT_OCID`
+  - `LB_HEALTH_WINDOW`
 
-## Responses
-- Responses include `opc_request_id` and `next_page` when available.
+## Testing notes
+- Unit: see `tests/unit/test_mcp_servers.py` (faked OCI responses).
+- Manual: `python -m mcp_servers.loadbalancer.server` launches the FastMCP runtime.
+

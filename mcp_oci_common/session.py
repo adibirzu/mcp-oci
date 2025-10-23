@@ -13,7 +13,9 @@ def _fqcn(klass: Type) -> str:
     return f"{klass.__module__}.{klass.__name__}"
 
 
-def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Optional[str] = None) -> Any:
+def get_client(
+    oci_client_class: Type, profile: Optional[str] = None, region: Optional[str] = None
+) -> Any:
     """
     Return a cached OCI SDK client instance for (class, profile, region).
     Lazily creates a client if not present. Safe for concurrent access in a single process.
@@ -26,7 +28,9 @@ def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Op
     try:
         import oci as _oci  # noqa: F401
     except Exception as _e:
-        raise RuntimeError("OCI SDK not available. Please install 'oci' package.") from _e
+        raise RuntimeError(
+            "OCI SDK not available. Please install 'oci' package."
+        ) from _e
 
     key = (_fqcn(oci_client_class), profile, region)
     with _client_lock:
@@ -40,12 +44,20 @@ def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Op
         # Build client kwargs with optional retries and timeouts (safe fallbacks)
         client_kwargs = {}
         try:
-            enable_retries = os.getenv("OCI_ENABLE_RETRIES", "true").lower() in ("1", "true", "yes", "on")
+            enable_retries = os.getenv("OCI_ENABLE_RETRIES", "true").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
             if enable_retries:
                 try:
                     import oci as _oci_mod  # noqa: F401
                     from oci import retry as _oci_retry  # type: ignore
-                    client_kwargs["retry_strategy"] = getattr(_oci_retry, "DEFAULT_RETRY_STRATEGY", None)
+
+                    client_kwargs["retry_strategy"] = getattr(
+                        _oci_retry, "DEFAULT_RETRY_STRATEGY", None
+                    )
                 except Exception:
                     # Retry strategy not available; proceed without
                     pass
@@ -82,12 +94,15 @@ def get_client(oci_client_class: Type, profile: Optional[str] = None, region: Op
         # Attach a sane default retry strategy to reduce transient failures and improve responsiveness
         try:
             from oci.retry import RetryStrategyBuilder  # type: ignore
+
             max_attempts = int(os.getenv("OCI_RETRY_MAX_ATTEMPTS", "4"))
             total_time_sec = int(os.getenv("OCI_RETRY_TOTAL_TIME_SEC", "30"))
-            retry_strategy = RetryStrategyBuilder() \
-                .add_max_attempts(max_attempts) \
-                .add_total_time(total_time_sec) \
+            retry_strategy = (
+                RetryStrategyBuilder()
+                .add_max_attempts(max_attempts)
+                .add_total_time(total_time_sec)
                 .get_retry_strategy()
+            )
             # Set on base client so all operations inherit unless overridden
             try:
                 client.base_client.retry_strategy = retry_strategy  # type: ignore[attr-defined]

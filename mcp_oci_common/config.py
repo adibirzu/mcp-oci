@@ -35,6 +35,7 @@ def _lazy_import_oci():
     """Lazy import of OCI SDK with informative error handling."""
     try:
         import oci
+
         return oci
     except ImportError as e:
         raise OCISDKImportError("OCI configuration", e)
@@ -44,17 +45,21 @@ def _lazy_import_instance_principals():
     """Lazy import of OCI instance principals with informative error handling."""
     try:
         from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
+
         return InstancePrincipalsSecurityTokenSigner
     except ImportError as e:
         raise OCISDKImportError("instance principals authentication", e)
+
 
 def _lazy_import_resource_principals():
     """Lazy import of OCI resource principals (OKE Workload Identity, Functions, etc.)."""
     try:
         from oci.auth.signers import get_resource_principals_signer
+
         return get_resource_principals_signer
     except ImportError as e:
         raise OCISDKImportError("resource principals authentication", e)
+
 
 def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -74,29 +79,35 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
     oci = _lazy_import_oci()
 
     # Honor explicit resource principal mode or detected OKE/Functions environment first
-    auth_mode = os.getenv('OCI_CLI_AUTH', '').lower()
-    if auth_mode in ('resource_principal', 'resource_principals', 'resource') or os.getenv('OCI_RESOURCE_PRINCIPAL_VERSION'):
+    auth_mode = os.getenv("OCI_CLI_AUTH", "").lower()
+    if auth_mode in (
+        "resource_principal",
+        "resource_principals",
+        "resource",
+    ) or os.getenv("OCI_RESOURCE_PRINCIPAL_VERSION"):
         try:
             get_rp_signer = _lazy_import_resource_principals()
             signer = get_rp_signer()
-            region = os.getenv('OCI_REGION') or getattr(signer, 'region', None)
+            region = os.getenv("OCI_REGION") or getattr(signer, "region", None)
             if not region:
                 # Region is required by SDK base_client; require OCI_REGION via ConfigMap/Secret in k8s
                 raise RuntimeError(
                     "Using Resource Principals requires OCI_REGION to be set in environment."
                 )
-            return {'region': region, 'signer': signer}
+            return {"region": region, "signer": signer}
         except OCISDKImportError:
             # Fall through to other mechanisms if SDK missing
             pass
         except Exception as e:
             # If resource principal was explicitly requested, fail fast with guidance
-            if auth_mode in ('resource_principal', 'resource_principals', 'resource'):
-                raise RuntimeError(f"Failed to initialize Resource Principals signer: {e}") from e
+            if auth_mode in ("resource_principal", "resource_principals", "resource"):
+                raise RuntimeError(
+                    f"Failed to initialize Resource Principals signer: {e}"
+                ) from e
             # Otherwise continue to next auth mechanisms
 
-    profile = profile_name or os.getenv('OCI_PROFILE', 'DEFAULT')
-    config_path = os.getenv('OCI_CONFIG_FILE', os.path.expanduser('~/.oci/config'))
+    profile = profile_name or os.getenv("OCI_PROFILE", "DEFAULT")
+    config_path = os.getenv("OCI_CONFIG_FILE", os.path.expanduser("~/.oci/config"))
 
     try:
         config = oci.config.from_file(file_location=config_path, profile_name=profile)
@@ -105,18 +116,22 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
             # Try Resource Principals first (OKE Workload Identity, Functions)
             get_rp_signer = _lazy_import_resource_principals()
             rp_signer = get_rp_signer()
-            rp_region = os.getenv('OCI_REGION') or getattr(rp_signer, 'region', None)
+            rp_region = os.getenv("OCI_REGION") or getattr(rp_signer, "region", None)
             if not rp_region:
                 # If region still missing, attempt instance principals next
-                raise RuntimeError("Resource Principals available but OCI_REGION not set")
-            return {'region': rp_region, 'signer': rp_signer}
+                raise RuntimeError(
+                    "Resource Principals available but OCI_REGION not set"
+                )
+            return {"region": rp_region, "signer": rp_signer}
         except Exception:
             # Fallback to Instance Principals
             try:
-                InstancePrincipalsSecurityTokenSigner = _lazy_import_instance_principals()
+                InstancePrincipalsSecurityTokenSigner = (
+                    _lazy_import_instance_principals()
+                )
                 signer = InstancePrincipalsSecurityTokenSigner()
-                config = {'region': signer.region}
-                config['signer'] = signer
+                config = {"region": signer.region}
+                config["signer"] = signer
             except OCISDKImportError:
                 # Re-raise SDK import errors
                 raise
@@ -145,16 +160,17 @@ Troubleshooting:
         ) from e
 
     # Override region from environment if provided
-    env_region = os.getenv('OCI_REGION')
+    env_region = os.getenv("OCI_REGION")
     if env_region:
-        config['region'] = env_region
+        config["region"] = env_region
 
     # Inject tenancy OCID if provided via environment (needed when using Resource Principals)
-    env_tenancy = os.getenv('TENANCY_OCID') or os.getenv('OCI_TENANCY')
+    env_tenancy = os.getenv("TENANCY_OCID") or os.getenv("OCI_TENANCY")
     if env_tenancy:
-        config['tenancy'] = env_tenancy
+        config["tenancy"] = env_tenancy
 
     return config
+
 
 def get_compartment_id() -> Optional[str]:
     """
@@ -163,7 +179,7 @@ def get_compartment_id() -> Optional[str]:
     Returns:
         Optional[str]: Compartment OCID if set, None otherwise
     """
-    return os.getenv('COMPARTMENT_OCID')
+    return os.getenv("COMPARTMENT_OCID")
 
 
 def allow_mutations() -> bool:
@@ -176,13 +192,14 @@ def allow_mutations() -> bool:
     Returns:
         bool: True if mutations are allowed, False otherwise
     """
-    env_value = os.getenv('ALLOW_MUTATIONS', 'true').lower()
-    return env_value == 'true'
+    env_value = os.getenv("ALLOW_MUTATIONS", "true").lower()
+    return env_value == "true"
 
 
 def is_oci_sdk_available() -> bool:
     """Check if OCI SDK is available without raising exceptions."""
     import importlib.util as _importlib
+
     return _importlib.find_spec("oci") is not None
 
 

@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class CacheEntry:
     def __init__(self, data: Any, ttl_seconds: int = 3600):  # Default 1 hour TTL
         self.data = data
@@ -19,7 +20,10 @@ class CacheEntry:
 
     def refresh_needed(self) -> bool:
         # Refresh if expired or older than 80% of TTL
-        return self.is_expired() or (time.time() - self.timestamp > self.ttl_seconds * 0.8)
+        return self.is_expired() or (
+            time.time() - self.timestamp > self.ttl_seconds * 0.8
+        )
+
 
 class MCPCache:
     def __init__(self, cache_dir: str = "/tmp/mcp-oci-cache", default_ttl: int = 3600):
@@ -32,16 +36,16 @@ class MCPCache:
         os.makedirs(cache_dir, exist_ok=True)
 
         # Start background refresh thread
-        self.refresh_thread = threading.Thread(target=self._background_refresh, daemon=True)
+        self.refresh_thread = threading.Thread(
+            target=self._background_refresh, daemon=True
+        )
         self.refresh_thread.start()
 
-    def _get_cache_key(self, server_name: str, operation: str, params: Dict[str, Any]) -> str:
+    def _get_cache_key(
+        self, server_name: str, operation: str, params: Dict[str, Any]
+    ) -> str:
         """Generate a unique cache key for the operation"""
-        key_data = {
-            'server': server_name,
-            'operation': operation,
-            'params': params
-        }
+        key_data = {"server": server_name, "operation": operation, "params": params}
         key_str = json.dumps(key_data, sort_keys=True)
         return hashlib.md5(key_str.encode()).hexdigest()
 
@@ -55,13 +59,13 @@ class MCPCache:
             return None
 
         try:
-            with open(cache_file, 'r') as f:
+            with open(cache_file, "r") as f:
                 data = json.load(f)
                 entry = CacheEntry(
-                    data=data['data'],
-                    ttl_seconds=data.get('ttl_seconds', self.default_ttl)
+                    data=data["data"],
+                    ttl_seconds=data.get("ttl_seconds", self.default_ttl),
                 )
-                entry.timestamp = data['timestamp']
+                entry.timestamp = data["timestamp"]
                 return entry if not entry.is_expired() else None
         except Exception as e:
             logger.warning(f"Failed to load cache from disk: {e}")
@@ -72,22 +76,24 @@ class MCPCache:
         try:
             cache_file = self._get_cache_file(cache_key)
             data = {
-                'data': entry.data,
-                'timestamp': entry.timestamp,
-                'ttl_seconds': entry.ttl_seconds
+                "data": entry.data,
+                "timestamp": entry.timestamp,
+                "ttl_seconds": entry.ttl_seconds,
             }
-            with open(cache_file, 'w') as f:
+            with open(cache_file, "w") as f:
                 try:
                     json.dump(data, f, default=str)
                 except TypeError:
                     # Fallback: stringify non-serializable payloads
                     safe = dict(data)
-                    safe['data'] = str(entry.data)
+                    safe["data"] = str(entry.data)
                     json.dump(safe, f)
         except Exception as e:
             logger.warning(f"Failed to save cache to disk: {e}")
 
-    def get(self, server_name: str, operation: str, params: Dict[str, Any]) -> Optional[Any]:
+    def get(
+        self, server_name: str, operation: str, params: Dict[str, Any]
+    ) -> Optional[Any]:
         """Get cached data if available and not expired"""
         cache_key = self._get_cache_key(server_name, operation, params)
 
@@ -134,7 +140,14 @@ class MCPCache:
             if os.path.exists(cache_file):
                 os.remove(cache_file)
 
-    def refresh_operation(self, server_name: str, operation: str, params: Dict[str, Any], fetch_func: Callable[[], Any], ttl_seconds: Optional[int] = None):
+    def refresh_operation(
+        self,
+        server_name: str,
+        operation: str,
+        params: Dict[str, Any],
+        fetch_func: Callable[[], Any],
+        ttl_seconds: Optional[int] = None,
+    ):
         """Refresh cached data by calling the fetch function"""
         try:
             logger.info(f"Refreshing cache for {server_name}.{operation}")
@@ -145,7 +158,15 @@ class MCPCache:
             logger.error(f"Failed to refresh cache for {server_name}.{operation}: {e}")
             return None
 
-    def get_or_refresh(self, server_name: str, operation: str, params: Dict[str, Any], fetch_func: Callable[[], Any], force_refresh: bool = False, ttl_seconds: Optional[int] = None) -> Any:
+    def get_or_refresh(
+        self,
+        server_name: str,
+        operation: str,
+        params: Dict[str, Any],
+        fetch_func: Callable[[], Any],
+        force_refresh: bool = False,
+        ttl_seconds: Optional[int] = None,
+    ) -> Any:
         """Get cached data or refresh if needed"""
         cache_key = self._get_cache_key(server_name, operation, params)
 
@@ -163,7 +184,9 @@ class MCPCache:
                         needs_refresh = True  # No cache exists
 
         if needs_refresh:
-            return self.refresh_operation(server_name, operation, params, fetch_func, ttl_seconds=ttl_seconds)
+            return self.refresh_operation(
+                server_name, operation, params, fetch_func, ttl_seconds=ttl_seconds
+            )
         else:
             return self.get(server_name, operation, params)
 
@@ -179,7 +202,9 @@ class MCPCache:
                             # We can't refresh here without knowing the fetch function
                             # Just mark for potential cleanup if expired
                             if entry.is_expired():
-                                logger.debug(f"Removing expired cache entry: {cache_key}")
+                                logger.debug(
+                                    f"Removing expired cache entry: {cache_key}"
+                                )
                                 # Remove from memory (disk will be checked on next access)
                                 del self.cache[cache_key]
 
@@ -187,8 +212,10 @@ class MCPCache:
                 logger.error(f"Background refresh error: {e}")
                 time.sleep(60)  # Wait a minute before retrying
 
+
 # Global cache instance
 _cache_instance = None
+
 
 def get_cache() -> MCPCache:
     """Get the global cache instance"""

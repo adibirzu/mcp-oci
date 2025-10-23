@@ -9,7 +9,7 @@ import logging
 from typing import List, Any
 
 # MCP tool name regex: only letters, digits, underscores, and hyphens, 1-64 characters
-MCP_TOOL_NAME_REGEX = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
+MCP_TOOL_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,11 @@ def validate_tools(tools: List[Any], server_name: str = "unknown") -> List[str]:
 
     for tool in tools:
         # Handle FastMCP Tool objects
-        if hasattr(tool, 'name'):
-            name = getattr(tool, 'name', '')
+        if hasattr(tool, "name"):
+            name = getattr(tool, "name", "")
         # Handle dictionary-based tools
         elif isinstance(tool, dict):
-            name = tool.get('name', '')
+            name = tool.get("name", "")
         else:
             errors.append(f"Tool is not a valid tool object in {server_name}")
             continue
@@ -58,7 +58,9 @@ def validate_tools(tools: List[Any], server_name: str = "unknown") -> List[str]:
             continue
 
         if not validate_tool_name(name):
-            errors.append(f"Tool name '{name}' in {server_name} violates MCP regex ^[a-zA-Z0-9_-]{{1,64}}$")
+            errors.append(
+                f"Tool name '{name}' in {server_name} violates MCP regex ^[a-zA-Z0-9_-]{{1,64}}$"
+            )
 
     return errors
 

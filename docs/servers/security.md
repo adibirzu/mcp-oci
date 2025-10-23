@@ -1,38 +1,36 @@
-# OCI Security (Well-Architected) Server
+# OCI Security MCP Server (`oci-mcp-security`)
 
-Aggregates security posture from Cloud Guard, Security Zones, Vulnerability Scanning, KMS, and IAM.
+## Overview
+- Purpose: IAM inventory, Cloud Guard problems, Data Safe findings.
+- Default transport: stdio (set `MCP_TRANSPORT=http|sse|streamable-http` as needed)
+- Default metrics port: `8004` (override with `METRICS_PORT`)
 
 ## Tools
-- `oci:security:list-cloud-guard-problems` — List Cloud Guard problems; filter by `risk_level`, `lifecycle_detail`.
-- `oci:security:list-security-zones` — List Security Zones in a compartment.
-- `oci:security:list-host-scan-results` — List VSS host scan results.
-- `oci:security:list-container-scan-results` — List VSS container scan results.
-- `oci:security:list-kms-keys` — List KMS keys for a vault using its management endpoint.
-- `oci:security:summary` — High-level summary counts across services.
+| Tool | Description |
+|------|-------------|
+| `doctor` | Return server health, config summary, and masking status |
+| `healthcheck` | Lightweight readiness/liveness check for the security server |
+| `list_cloud_guard_problems` | List Cloud Guard problems |
+| `list_compartments` | List all compartments in the tenancy |
+| `list_data_safe_findings` | List Data Safe findings (if enabled) |
+| `list_groups` | List IAM groups (read-only) |
+| `list_iam_users` | List IAM users (read-only) |
+| `list_policies` | List IAM policies (read-only) |
 
-## Usage
-Serve:
-```
-mcp-oci-serve-security --profile DEFAULT --region eu-frankfurt-1
-```
-Examples:
-```
-mcp-oci call security oci:security:list-cloud-guard-problems --params '{"compartment_id":"ocid1.compartment...","risk_level":"CRITICAL"}'
-mcp-oci call security oci:security:list-kms-keys --params '{"management_endpoint":"https://xxxxx-management.kms.eu-frankfurt-1.oraclecloud.com"}'
-mcp-oci call security oci:security:summary --params '{"compartment_id":"ocid1.compartment..."}'
-```
+## Running
+- Local launcher: `scripts/mcp-launchers/start-mcp-server.sh security`
+- CLI entrypoint: `mcp-oci-serve security`
+- Docker helper: `scripts/docker/run-server.sh security`
+- Stop daemonised instance: `scripts/mcp-launchers/start-mcp-server.sh stop security`
 
-## Notes
-- Some services may require enabling (e.g., Cloud Guard) or appropriate policies.
-- KMS `management_endpoint` can be obtained from your Vault details in the console.
+## Configuration
+- Shared credentials resolved via `mcp_oci_common.get_oci_config()`
+- Respect privacy defaults (`MCP_OCI_PRIVACY=true`, disable with caution)
+- Service-specific hints:
+  - `COMPARTMENT_OCID`
+  - `SECURITY_SCAN_ENABLED`
 
-## Parameters
-- list-cloud-guard-problems: `compartment_id` (required), `risk_level?`, `lifecycle_detail?`, `limit?`, `page?`.
-- list-security-zones: `compartment_id` (required), `limit?`, `page?`.
-- list-host-scan-results: `compartment_id?`, `limit?`, `page?`.
-- list-container-scan-results: `compartment_id?`, `limit?`, `page?`.
-- list-kms-keys: `management_endpoint` (required), `compartment_id?`, `limit?`, `page?`.
-- summary: `compartment_id` (required), `management_endpoint?`.
+## Testing notes
+- Unit: see `tests/unit/test_mcp_servers.py` (faked OCI responses).
+- Manual: `python -m mcp_servers.security.server` launches the FastMCP runtime.
 
-## Responses
-- Responses include `opc_request_id` and `next_page` when available.

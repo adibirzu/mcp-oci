@@ -27,7 +27,11 @@ def privacy_enabled() -> bool:
     Controlled via env var `MCP_OCI_PRIVACY` (true/1/on) or
     `MCP_OCI_PRIVACY_MASK` (back-compat).
     """
-    val = os.getenv("MCP_OCI_PRIVACY", os.getenv("MCP_OCI_PRIVACY_MASK", "")).strip().lower()
+    val = (
+        os.getenv("MCP_OCI_PRIVACY", os.getenv("MCP_OCI_PRIVACY_MASK", ""))
+        .strip()
+        .lower()
+    )
     return val in {"1", "true", "yes", "on", "enabled"}
 
 
@@ -38,6 +42,7 @@ def _mask_string(value: str) -> str:
     - Namespaces/other identifiers: if > 8 chars and key-tagged, callers can
       decide to pass through here, but we primarily rely on key-based masking.
     """
+
     def _mask_match(m: re.Match[str]) -> str:
         s = m.group(0)
         # Keep the first 14 chars (e.g., "ocid1.compartment") when available
@@ -84,4 +89,3 @@ def redact_payload(obj: Any) -> Any:
     except Exception:
         # Never fail masking – return original object on error
         return obj
-
