@@ -125,6 +125,27 @@ OCI_PROFILE=DEFAULT OCI_REGION=eu-frankfurt-1   scripts/docker/run-server.sh com
 
 The helper automatically mounts the workspace and `~/.oci` for credentials. `mcp-docker.json` references the same helper so MCP clients can launch servers in containers without manual flags.
 
+### Deploy to OCI Compute
+
+Provision an Oracle Linux VM (VM.Standard.E6.Flex 2 OCPUs / 16 GB RAM) with Docker, firewall rules, and streamable HTTP transport pre-configured:
+
+```bash
+cd ops/terraform/mcp_streamable
+./setup.sh            # gathers values from ~/.oci/config and previous runs
+terraform init
+terraform apply
+```
+
+Terraform creates a VCN, subnet, internet gateway, and an NSG that opens the MCP ports (7001–7011, 8000–8011) only to the source CIDR captured during setup, alongside a compute instance. If image discovery ever fails, you can set `image_id` manually in `terraform.tfvars.json`. After `apply`, SSH to the host and run the bootstrap helper to supply OCI environment values (defaults pre-filled from prior runs) and start the containers:
+
+```bash
+ssh opc@$(terraform output -raw instance_public_ip)
+cd ~/mcp-oci-cloud
+./bootstrap-mcp.sh
+```
+
+The bootstrap script prompts for `KEY=VALUE` pairs (e.g. `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID`), writes them to `.env`, enforces `MCP_TRANSPORT=streamable-http`, and starts the Docker composition exposing the MCP servers over streamable HTTP. OS firewall rules are configured automatically via cloud-init; the instance NSG is opened for the same ports.
+
 ### Observability stack
 
 ```bash
