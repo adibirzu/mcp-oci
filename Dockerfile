@@ -16,10 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc build-essential curl git libssl-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies via pip (avoid Poetry inside container to prevent build failures)
-COPY requirements.txt .
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Install Poetry and dependencies with all extras for full functionality
+RUN python -m pip install --upgrade pip && \
+    pip install poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi -E all
 
 # Copy the application code
 COPY . .

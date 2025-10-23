@@ -122,9 +122,9 @@ ensure_python_env() {
   # shellcheck disable=SC1091
   . .venv/bin/activate
   pip install -U pip
-  # Install project with extras needed for OCI servers
+  # Install project with all extras for full functionality (OCI + observability + web/ui)
   say "Installing project dependencies (editable) ..."
-  pip install -e .[oci]
+  pip install -e .[all]
   if [[ "${INSTALL_OCI_CLI_WITH_PIP:-}" == "1" ]]; then
     say "Installing OCI CLI via pip ..."
     pip install oci-cli
