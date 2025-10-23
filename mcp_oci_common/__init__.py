@@ -7,12 +7,25 @@ from .config import (
 from .observability import add_oci_call_attributes
 from .validation import validate_and_log_tools
 
+__all__ = [
+    "get_oci_config",
+    "get_compartment_id",
+    "allow_mutations",
+    "add_oci_call_attributes",
+    "validate_and_log_tools",
+    "with_oci_errors",
+    "make_client",
+]
+
+
 # Placeholder for with_oci_errors if needed
 def with_oci_errors(func):
     return func
 
 
-def make_client(oci_client_class, profile: str | None = None, region: str | None = None):
+def make_client(
+    oci_client_class, profile: str | None = None, region: str | None = None
+):
     """
     Factory for OCI SDK clients that supports both config-file auth and instance principals.
 
@@ -23,10 +36,12 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
     # Prefer the shared cached factory (adds retries/timeouts and reuses clients)
     try:
         from .session import get_client as _get_client
+
         return _get_client(oci_client_class, profile=profile, region=region)
     except Exception:
         # Fallback to legacy behavior if session module or kwargs not supported
         import importlib.util as _importlib
+
         if _importlib.find_spec("oci") is None:
             raise RuntimeError("OCI SDK not available. Please install 'oci' package.")
         cfg = get_oci_config(profile_name=profile)
@@ -44,6 +59,7 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
                 return oci_client_class(cfg, signer=signer)
             return oci_client_class(cfg)
 
+
 # --- Global FastMCP run() defaults/monkey-patch for network transport ---
 # This enables running servers over network (e.g., WebSocket) without modifying each server.
 # Behavior:
@@ -53,8 +69,10 @@ def make_client(oci_client_class, profile: str | None = None, region: str | None
 #   You can override via MCP_PORT or specific MCP_PORT_<SERVICE> envs (see port_map below)
 try:
     from fastmcp import FastMCP as _FastMCP  # type: ignore
+
     _orig_run = getattr(_FastMCP, "run", None)
     if callable(_orig_run):
+
         def _patched_run(self, *args, **kwargs):
             # Respect explicit parameters
             transport = kwargs.get("transport")
@@ -74,20 +92,34 @@ try:
                     except Exception:
                         port = None
                 else:
-                    server_name = os.getenv("FASTMCP_SERVER_NAME") or os.getenv("OTEL_SERVICE_NAME") or ""
+                    server_name = (
+                        os.getenv("FASTMCP_SERVER_NAME")
+                        or os.getenv("OTEL_SERVICE_NAME")
+                        or ""
+                    )
                     port_map = {
                         "oci-mcp-compute": int(os.getenv("MCP_PORT_COMPUTE", "7001")),
                         "oci-mcp-db": int(os.getenv("MCP_PORT_DB", "7002")),
-                        "oci-mcp-observability": int(os.getenv("MCP_PORT_OBSERVABILITY", "7003")),
+                        "oci-mcp-observability": int(
+                            os.getenv("MCP_PORT_OBSERVABILITY", "7003")
+                        ),
                         "oci-mcp-security": int(os.getenv("MCP_PORT_SECURITY", "7004")),
                         "oci-mcp-cost": int(os.getenv("MCP_PORT_COST", "7005")),
                         "oci-mcp-network": int(os.getenv("MCP_PORT_NETWORK", "7006")),
-                        "oci-mcp-blockstorage": int(os.getenv("MCP_PORT_BLOCKSTORAGE", "7007")),
-                        "oci-mcp-loadbalancer": int(os.getenv("MCP_PORT_LOADBALANCER", "7008")),
-                        "oci-mcp-inventory": int(os.getenv("MCP_PORT_INVENTORY", "7009")),
+                        "oci-mcp-blockstorage": int(
+                            os.getenv("MCP_PORT_BLOCKSTORAGE", "7007")
+                        ),
+                        "oci-mcp-loadbalancer": int(
+                            os.getenv("MCP_PORT_LOADBALANCER", "7008")
+                        ),
+                        "oci-mcp-inventory": int(
+                            os.getenv("MCP_PORT_INVENTORY", "7009")
+                        ),
                         "oci-mcp-agents": int(os.getenv("MCP_PORT_AGENTS", "7011")),
                     }
-                    port = port_map.get(server_name, int(os.getenv("MCP_PORT_DEFAULT", "7099")))
+                    port = port_map.get(
+                        server_name, int(os.getenv("MCP_PORT_DEFAULT", "7099"))
+                    )
                 if port is not None:
                     kwargs.setdefault("port", port)
 

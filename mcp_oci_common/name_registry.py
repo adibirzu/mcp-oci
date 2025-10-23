@@ -4,6 +4,7 @@ Purpose: Reduce redundant SDK/REST calls and let users refer to resources by
 human-friendly names. The registry is process-local and ephemeral; persistence
 is handled by the generic MCPCache if needed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,7 +36,12 @@ class NameRegistry:
         with self._lock:
             for c in items:
                 cid = c.get("id") or c.get("_id") or c.get("ocid")
-                name = c.get("name") or c.get("_name") or c.get("display_name") or c.get("_display_name")
+                name = (
+                    c.get("name")
+                    or c.get("_name")
+                    or c.get("display_name")
+                    or c.get("_display_name")
+                )
                 if not cid or not name:
                     continue
                 self.compartments_by_name[name] = cid
@@ -50,7 +56,12 @@ class NameRegistry:
         with self._lock:
             for v in items:
                 vid = v.get("id") or v.get("_id")
-                name = v.get("display_name") or v.get("_display_name") or v.get("name") or v.get("_name")
+                name = (
+                    v.get("display_name")
+                    or v.get("_display_name")
+                    or v.get("name")
+                    or v.get("_name")
+                )
                 if not vid or not name:
                     continue
                 self.vcns_by_name[(compartment_id, name)] = vid
@@ -63,7 +74,12 @@ class NameRegistry:
         with self._lock:
             for s in items:
                 sid = s.get("id") or s.get("_id")
-                name = s.get("display_name") or s.get("_display_name") or s.get("name") or s.get("_name")
+                name = (
+                    s.get("display_name")
+                    or s.get("_display_name")
+                    or s.get("name")
+                    or s.get("_name")
+                )
                 if not sid or not name:
                     continue
                 self.subnets_by_name[(compartment_id, name)] = sid
@@ -76,7 +92,12 @@ class NameRegistry:
         with self._lock:
             for n in items:
                 nid = n.get("id") or n.get("_id")
-                name = n.get("display_name") or n.get("_display_name") or n.get("name") or n.get("_name")
+                name = (
+                    n.get("display_name")
+                    or n.get("_display_name")
+                    or n.get("name")
+                    or n.get("_name")
+                )
                 if not nid or not name:
                     continue
                 self.nsgs_by_name[(compartment_id, name)] = nid
@@ -112,7 +133,9 @@ class NameRegistry:
         with self._lock:
             for u in items:
                 uid = u.get("id") or u.get("_id")
-                name = u.get("name") or u.get("_name") or u.get("login") or u.get("_login")
+                name = (
+                    u.get("name") or u.get("_name") or u.get("login") or u.get("_login")
+                )
                 if uid and name:
                     self.users_by_name[name] = uid
 
@@ -125,7 +148,12 @@ class NameRegistry:
         with self._lock:
             for c in items:
                 cid = c.get("id") or c.get("_id")
-                name = c.get("name") or c.get("_name") or c.get("display_name") or c.get("_display_name")
+                name = (
+                    c.get("name")
+                    or c.get("_name")
+                    or c.get("display_name")
+                    or c.get("_display_name")
+                )
                 if cid and name:
                     self.clusters_by_name[(compartment_id, name)] = cid
 
@@ -138,7 +166,12 @@ class NameRegistry:
         with self._lock:
             for a in items:
                 aid = a.get("id") or a.get("_id")
-                name = a.get("display_name") or a.get("_display_name") or a.get("name") or a.get("_name")
+                name = (
+                    a.get("display_name")
+                    or a.get("_display_name")
+                    or a.get("name")
+                    or a.get("_name")
+                )
                 if aid and name:
                     self.applications_by_name[(compartment_id, name)] = aid
 

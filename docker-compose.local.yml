@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  mcp-oci:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mcp-oci:local
+    container_name: mcp-oci-local
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    ports:
+      # Streamable HTTP ports
+      - "7001:7001"
+      - "7002:7002"
+      - "7003:7003"
+      - "7004:7004"
+      - "7005:7005"
+      - "7006:7006"
+      - "7007:7007"
+      - "7008:7008"
+      - "7009:7009"
+      - "7010:7010"
+      - "7011:7011"
+      # Main HTTP ports
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+      - "8003:8003"
+      - "8004:8004"
+      - "8005:8005"
+      - "8006:8006"
+      - "8007:8007"
+      - "8008:8008"
+      - "8009:8009"
+      - "8010:8010"
+      - "8011:8011"
+      # WebSocket port
+      - "9000:9000"
+      # gRPC port
+      - "50051:50051"
+      # Metrics port
+      - "9090:9090"
+    volumes:
+      - ./logs:/app/logs
+      - ~/.oci:/root/.oci:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

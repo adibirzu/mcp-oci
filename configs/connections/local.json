@@ -1,0 +1,105 @@
+{
+    "name": "MCP-OCI Local Development",
+    "description": "Local development configuration for MCP-OCI servers",
+    "environment": "local",
+    "version": "1.0.0",
+    "connections": {
+        "streamable_http": {
+            "compute": {
+                "url": "http://localhost:7001",
+                "name": "OCI Compute Server",
+                "capabilities": ["instance-management", "shape-management", "image-management"]
+            },
+            "database": {
+                "url": "http://localhost:7002",
+                "name": "OCI Database Server",
+                "capabilities": ["autonomous-db", "mysql", "nosql"]
+            },
+            "network": {
+                "url": "http://localhost:7003",
+                "name": "OCI Network Server",
+                "capabilities": ["vcn", "subnet", "security-groups", "load-balancer"]
+            },
+            "iam": {
+                "url": "http://localhost:7004",
+                "name": "OCI IAM Server",
+                "capabilities": ["users", "groups", "policies", "compartments"]
+            },
+            "observability": {
+                "url": "http://localhost:7005",
+                "name": "OCI Observability Server",
+                "capabilities": ["monitoring", "logging", "events", "alarms"]
+            },
+            "resource": {
+                "url": "http://localhost:7006",
+                "name": "OCI Resource Manager Server",
+                "capabilities": ["stacks", "jobs", "terraform"]
+            },
+            "cost": {
+                "url": "http://localhost:7007",
+                "name": "OCI Cost Management Server",
+                "capabilities": ["usage", "budgets", "cost-analysis"]
+            },
+            "identity": {
+                "url": "http://localhost:7008",
+                "name": "OCI Identity Server",
+                "capabilities": ["domains", "authentication", "federation"]
+            },
+            "oneagent": {
+                "url": "http://localhost:7009",
+                "name": "OCI OneAgent Server",
+                "capabilities": ["agent-management", "monitoring-agent"]
+            },
+            "logging": {
+                "url": "http://localhost:7010",
+                "name": "OCI Logging Server",
+                "capabilities": ["log-groups", "log-search", "log-analytics"]
+            },
+            "enhanced": {
+                "url": "http://localhost:7011",
+                "name": "OCI Enhanced Server",
+                "capabilities": ["ai-services", "data-science", "analytics"]
+            },
+            "main": {
+                "url": "http://localhost:8000",
+                "name": "Main Orchestrator",
+                "capabilities": ["orchestration", "health-check", "metrics"]
+            }
+        },
+        "websocket": {
+            "url": "ws://localhost:9000",
+            "name": "WebSocket Connection",
+            "capabilities": ["real-time", "bidirectional", "events"]
+        },
+        "grpc": {
+            "url": "localhost:50051",
+            "name": "gRPC Connection",
+            "capabilities": ["high-performance", "streaming", "service-mesh"]
+        },
+        "unix_socket": {
+            "path": "/tmp/mcp-oci.sock",
+            "name": "Unix Socket Connection",
+            "capabilities": ["local-only", "ipc", "high-throughput"]
+        }
+    },
+    "authentication": {
+        "type": "none",
+        "description": "No authentication for local development"
+    },
+    "monitoring": {
+        "metrics": "http://localhost:9090/metrics",
+        "health": "http://localhost:8000/health",
+        "ready": "http://localhost:8000/ready"
+    },
+    "logging": {
+        "level": "DEBUG",
+        "output": "./logs/mcp-local.log",
+        "format": "json"
+    },
+    "performance": {
+        "max_connections": 100,
+        "timeout_seconds": 30,
+        "retry_count": 3,
+        "retry_delay_ms": 1000
+    }
+}
