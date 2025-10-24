@@ -40,8 +40,15 @@ init_tracing(service_name="oci-mcp-cost-enhanced")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-cost-enhanced")
 
-# Initialize FinOpsAI clients
-clients = make_clients()
+# Initialize FinOpsAI clients lazily
+_clients = None
+
+def get_clients():
+    """Get or create FinOpsAI clients lazily"""
+    global _clients
+    if _clients is None:
+        _clients = make_clients()
+    return _clients
 
 # Create FastMCP app
 app = FastMCP("oci-mcp-cost-enhanced")
@@ -57,7 +64,7 @@ def doctor() -> Dict[str, Any]:
         cfg = get_oci_config()
         # Surface Usage API endpoint/region for diagnostics
         try:
-            endpoint = getattr(clients.usage_api.base_client, 'endpoint', None)
+            endpoint = getattr(get_clients().usage_api.base_client, 'endpoint', None)
         except Exception:
             endpoint = None
         # Best-effort tool listing without awaiting app coroutines
@@ -337,21 +344,21 @@ def _resolve_scope_compartments(scope_compartment_ocid: Optional[str], include_c
     # If it's already an OCID, pass through
     if isinstance(scope_compartment_ocid, str) and scope_compartment_ocid.startswith("ocid1.compartment."):
         if include_children:
-            tenancy = clients.config.get("tenancy")
-            comps = list_compartments_recursive(clients.identity, tenancy, parent_compartment_id=scope_compartment_ocid)
+            tenancy = get_clients().config.get("tenancy")
+            comps = list_compartments_recursive(get_clients().identity, tenancy, parent_compartment_id=scope_compartment_ocid)
             return [c["id"] for c in comps]
         return [scope_compartment_ocid]
 
     # Treat as compartment name: case-insensitive exact match preferred
     name = str(scope_compartment_ocid).strip()
-    tenancy = clients.config.get("tenancy")
-    all_comps = list_compartments_recursive(clients.identity, tenancy, parent_compartment_id=None) or []
+    tenancy = get_clients().config.get("tenancy")
+    all_comps = list_compartments_recursive(get_clients().identity, tenancy, parent_compartment_id=None) or []
     exact = [c for c in all_comps if str(c.get('name','')).lower() == name.lower()]
     chosen = exact[0] if exact else (all_comps[0] if all_comps else None)
     if not chosen:
         return None
     if include_children:
-        comps = list_compartments_recursive(clients.identity, tenancy, parent_compartment_id=chosen['id'])
+        comps = list_compartments_recursive(get_clients().identity, tenancy, parent_compartment_id=chosen['id'])
         return [c['id'] for c in comps]
     return [chosen['id']]
 
@@ -380,7 +387,7 @@ def _aggregate_usage_across_compartments(tenancy_ocid: str, comp_ids: List[str],
             "dimensions": dimensions
         }
         q.filter = filt
-        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        raw = request_summarized_usages(get_clients(), tenancy_ocid, q)
         # Merge
         aggregate["items"].extend(raw.get("items", []))
         aggregate["forecastItems"].extend(raw.get("forecastItems", []))
@@ -411,10 +418,10 @@ def cost_by_compartment_daily(tenancy_ocid: str, time_usage_started: str, time_u
         # Validate tenancy OCID; fallback to config tenancy if malformed
         def _valid_ten(ocid: Optional[str]) -> bool:
             return bool(ocid and isinstance(ocid, str) and ocid.startswith("ocid1.tenancy.") and len(ocid) > 24 and "..." not in ocid)
-        ten = tenancy_ocid if _valid_ten(tenancy_ocid) else clients.config.get("tenancy")
+        ten = tenancy_ocid if _valid_ten(tenancy_ocid) else get_clients().config.get("tenancy")
 
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
-        raw = _aggregate_usage_across_compartments(ten, comp_ids, base_query) if comp_ids else request_summarized_usages(clients, ten, base_query)
+        raw = _aggregate_usage_across_compartments(ten, comp_ids, base_query) if comp_ids else request_summarized_usages(get_clients(), ten, base_query)
 
         # Build rows (date, compartment, service, cost) to match schema
         rows = map_compartment_rows(raw.get("items", []))
@@ -441,15 +448,15 @@ def service_cost_drilldown(tenancy_ocid: str, time_start: str, time_end: str, to
     """Advanced service cost drilldown with compartment scoping"""
     with tool_span(tracer, "service_cost_drilldown", mcp_server="oci-mcp-cost-enhanced") as span:
         # Validate tenancy OCID strictly; fallback to config tenancy if malformed
-        ten = resolve_tenancy(tenancy_ocid, clients.config)
+        ten = resolve_tenancy(tenancy_ocid, get_clients().config)
         base = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["service"])
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
         try:
-            raw1 = _aggregate_usage_across_compartments(ten, comp_ids, base) if comp_ids else request_summarized_usages(clients, ten, base)
+            raw1 = _aggregate_usage_across_compartments(ten, comp_ids, base) if comp_ids else request_summarized_usages(get_clients(), ten, base)
         except oci.exceptions.ServiceError as e:
             # Enrich error with discovered home region and guidance
-            usage_region = getattr(getattr(clients.usage_api, 'base_client', None), 'region', None)
-            usage_endpoint = getattr(getattr(clients.usage_api, 'base_client', None), 'endpoint', None)
+            usage_region = getattr(getattr(get_clients().usage_api, 'base_client', None), 'region', None)
+            usage_endpoint = getattr(getattr(get_clients().usage_api, 'base_client', None), 'endpoint', None)
             guidance = {
                 "hint": "Usage API must be called in the tenancy home region and with tenantId=tenancy OCID",
                 "used_tenancy": ten,
@@ -477,7 +484,7 @@ def service_cost_drilldown(tenancy_ocid: str, time_start: str, time_end: str, to
             base2 = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end,
                               group_by=["compartmentName"],
                               filter={"operator": "AND", "dimensions": [{"key": "service", "value": svc_name}]})
-            raw2 = _aggregate_usage_across_compartments(ten, comp_ids, base2) if comp_ids else request_summarized_usages(clients, ten, base2)
+            raw2 = _aggregate_usage_across_compartments(ten, comp_ids, base2) if comp_ids else request_summarized_usages(get_clients(), ten, base2)
 
             comp_breakdown = {}
             for it in raw2.get("items", []):
@@ -527,7 +534,7 @@ def cost_by_tag_key_value(tenancy_ocid: str, time_start: str, time_end: str, def
             filter={"tags": [{"namespace": defined_tag_ns, "key": defined_tag_key, "value": defined_tag_value}]},
         )
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
-        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(get_clients(), tenancy_ocid, q)
         # Preserve tenancy currency as reported by Usage API
         currency = currency_from(raw)
         services = {}
@@ -562,7 +569,7 @@ def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid:
         if time_start >= time_end:
             raise ValueError(f"Invalid date range: {time_start} to {time_end}")
         q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
-        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        raw = request_summarized_usages(get_clients(), tenancy_ocid, q)
         series = []
         for it in raw.get("items", []):
             # Handle both possible field names from API response
@@ -610,11 +617,11 @@ def schedule_report_create_or_list(compartment_ocid: str, action: str = "LIST", 
         import oci
         if action.upper() == "CREATE" and schedule_payload:
             details = oci.usage_api.models.CreateScheduleDetails(**schedule_payload)
-            s = clients.usage_api.create_schedule(details).data
+            s = get_clients().usage_api.create_schedule(details).data
             schedules = [{"id": s.id, "name": s.name, "destination": s.result_location.target, "frequency": s.schedule_recurrences.split(" ")[0]}]
             out = SchedulesOut(action="CREATE", schedules=schedules)
             return _envelope("Created schedule.", _safe_serialize(out))
-        sch = clients.usage_api.list_schedules(compartment_id=compartment_ocid).data
+        sch = get_clients().usage_api.list_schedules(compartment_id=compartment_ocid).data
         schedules = [{"id": s.id, "name": s.name, "destination": s.result_location.target, "frequency": s.schedule_recurrences.split(" ")[0]} for s in sch]
         out = SchedulesOut(action="LIST", schedules=schedules)
         return _envelope("Listed schedules.", _safe_serialize(out))
@@ -625,7 +632,7 @@ def object_storage_costs_and_tiering(tenancy_ocid: str, time_start: str, time_en
     with tool_span(tracer, "object_storage_costs_and_tiering", mcp_server="oci-mcp-cost-enhanced") as span:
         q = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["service", "resourceName"], filter={"operator": "AND", "dimensions": [{"key": "service", "value": "Object Storage"}]})
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
-        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(get_clients(), tenancy_ocid, q)
         buckets = {}
         for it in raw.get("items", []):
             bucket = it.get("resourceName", "") or "(unknown)"
@@ -640,7 +647,7 @@ def top_cost_spikes_explain(tenancy_ocid: str, time_start: str, time_end: str, t
     with tool_span(tracer, "top_cost_spikes_explain", mcp_server="oci-mcp-cost-enhanced") as span:
         base = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end)
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
-        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base) if comp_ids else request_summarized_usages(clients, tenancy_ocid, base)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, base) if comp_ids else request_summarized_usages(get_clients(), tenancy_ocid, base)
         day_sum = {}
         for it in raw.get("items", []):
             # Handle both possible field names from API response
@@ -657,7 +664,7 @@ def top_cost_spikes_explain(tenancy_ocid: str, time_start: str, time_end: str, t
         out_items = []
         for date_str, delta in spikes:
             q_explain = UsageQuery(granularity="DAILY", time_start=date_str, time_end=date_str, group_by=["service", "compartmentName"])
-            raw2 = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q_explain) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q_explain)
+            raw2 = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q_explain) if comp_ids else request_summarized_usages(get_clients(), tenancy_ocid, q_explain)
             services, compartments = {}, {}
             for it in raw2.get("items", []):
                 amt = float(it.get("computedAmount") or it.get("computed_amount", 0.0))
@@ -683,7 +690,7 @@ def per_compartment_unit_cost(tenancy_ocid: str, time_start: str, time_end: str,
         cfg = UNIT_MAP.get(unit.upper(), UNIT_MAP["OCPU_HOUR"])
         q = UsageQuery(granularity="DAILY", time_start=time_start, time_end=time_end, group_by=["compartmentName", "service"])
         comp_ids = _resolve_scope_compartments(scope_compartment_ocid, include_children)
-        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(clients, tenancy_ocid, q)
+        raw = _aggregate_usage_across_compartments(tenancy_ocid, comp_ids, q) if comp_ids else request_summarized_usages(get_clients(), tenancy_ocid, q)
         rows_map = {}
         for it in raw.get("items", []):
             svc = it.get("service", "")
@@ -713,7 +720,7 @@ def forecast_vs_universal_credits(tenancy_ocid: str, months_ahead: int = 1, cred
         time_end = now.date().isoformat()
         time_start = f"{now.year-1}-01-01"
         q = UsageQuery(granularity="MONTHLY", time_start=time_start, time_end=time_end, forecast=True)
-        raw = request_summarized_usages(clients, tenancy_ocid, q)
+        raw = request_summarized_usages(get_clients(), tenancy_ocid, q)
         def _sf2(v):
             try:
                 return float(v or 0)
