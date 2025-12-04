@@ -65,6 +65,19 @@
                 "OCI_CONFIG_PROFILE": "DEFAULT"
             }
         },
+        "mcp-oci-inventory": {
+            "command": "python",
+            "args": [
+                "-m",
+                "mcp_servers.inventory"
+            ],
+            "env": {
+                "MCP_TRANSPORT": "stdio",
+                "OCI_CLI_AUTH": "api_key",
+                "OCI_CONFIG_FILE": "~/.oci/config",
+                "OCI_CONFIG_PROFILE": "DEFAULT"
+            }
+        },
         "mcp-oci-streamable-local": {
             "transport": {
                 "type": "sse",

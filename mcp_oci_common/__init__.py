@@ -74,12 +74,14 @@ try:
     if callable(_orig_run):
 
         def _patched_run(self, *args, **kwargs):
-            # Respect explicit parameters
+            # Respect explicit parameters; only accept known transports from env
             transport = kwargs.get("transport")
             if not transport:
-                transport = os.getenv("MCP_TRANSPORT")
-                if transport:
-                    kwargs["transport"] = transport
+                env_transport = os.getenv("MCP_TRANSPORT")
+                valid_transports = {"stdio", "http", "sse", "streamable-http"}
+                # Ignore invalid values like "all" to avoid crashes under Claude/clients
+                if env_transport in valid_transports:
+                    kwargs["transport"] = env_transport
 
             if kwargs.get("transport") and kwargs["transport"] != "stdio":
                 # Network mode: set sane defaults

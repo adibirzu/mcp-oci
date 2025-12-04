@@ -18,6 +18,7 @@ from mcp_oci_common import get_oci_config, get_compartment_id, validate_and_log_
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.session import get_client
 from mcp_oci_common.cache import get_cache
+from mcp_oci_common.local_cache import get_local_cache
 
 # FinOpsAI integration imports
 from .finopsai.oci_client_adapter import make_clients, list_compartments_recursive
@@ -88,6 +89,133 @@ def doctor() -> Dict[str, Any]:
 @app.tool("healthcheck", description="Lightweight readiness/liveness check for the cost server")
 def healthcheck() -> Dict[str, Any]:
     return {"status": "ok", "server": "oci-mcp-cost-enhanced", "pid": os.getpid()}
+
+@app.tool("get_tenancy_info", description="Get comprehensive tenancy information including home region, subscribed regions, and resource counts from local cache")
+def get_tenancy_info() -> Dict[str, Any]:
+    """Get comprehensive tenancy information with local cache enrichment"""
+    with tool_span(tracer, "get_tenancy_info", mcp_server="oci-mcp-cost-enhanced") as span:
+        try:
+            local_cache = get_local_cache()
+
+            # Get tenancy details from cache
+            tenancy_details = local_cache.get_tenancy_details()
+            cache_stats = local_cache.get_cache_statistics()
+
+            # Also get live tenancy data from OCI
+            cfg = get_oci_config()
+            identity_client = get_client(oci.identity.IdentityClient)
+
+            live_tenancy = identity_client.get_tenancy(cfg.get('tenancy')).data
+
+            result = {
+                'tenancy': {
+                    'id': live_tenancy.id,
+                    'name': live_tenancy.name,
+                    'description': live_tenancy.description,
+                    'home_region': tenancy_details.get('home_region'),
+                    'subscribed_regions': tenancy_details.get('subscribed_regions', [])
+                },
+                'cache_info': {
+                    'available': cache_stats.get('available', False),
+                    'age_minutes': cache_stats.get('age_minutes'),
+                    'needs_refresh': cache_stats.get('needs_refresh', True),
+                    'resource_counts': cache_stats.get('resources', {})
+                },
+                'current_region': cfg.get('region'),
+                'profile': os.getenv('OCI_PROFILE', 'DEFAULT')
+            }
+
+            return _envelope(
+                f"Tenancy: {live_tenancy.name} (Home: {tenancy_details.get('home_region', 'N/A')})",
+                result
+            )
+
+        except Exception as e:
+            logging.error(f"Error getting tenancy info: {e}")
+            span.record_exception(e)
+            return _envelope("Error retrieving tenancy information", {'error': str(e)})
+
+@app.tool("get_cache_stats", description="Get local cache statistics including age, resource counts, and refresh status")
+def get_cache_stats() -> Dict[str, Any]:
+    """Get local cache statistics"""
+    with tool_span(tracer, "get_cache_stats", mcp_server="oci-mcp-cost-enhanced") as span:
+        try:
+            local_cache = get_local_cache()
+            stats = local_cache.get_cache_statistics()
+
+            return _envelope(
+                f"Cache age: {stats.get('age_minutes', 0):.1f} minutes, Resources: {sum(stats.get('resources', {}).values())}",
+                stats
+            )
+
+        except Exception as e:
+            logging.error(f"Error getting cache stats: {e}")
+            span.record_exception(e)
+            return _envelope("Error retrieving cache statistics", {'error': str(e)})
+
+@app.tool("refresh_local_cache", description="Trigger a refresh of the local resource cache (runs build-local-cache.py)")
+def refresh_local_cache() -> Dict[str, Any]:
+    """Trigger local cache refresh"""
+    with tool_span(tracer, "refresh_local_cache", mcp_server="oci-mcp-cost-enhanced") as span:
+        try:
+            import subprocess
+            import sys
+
+            # Get script path
+            script_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                'scripts',
+                'build-local-cache.py'
+            )
+
+            if not os.path.exists(script_path):
+                return _envelope(
+                    "Cache builder script not found",
+                    {'error': f'Script not found at {script_path}'}
+                )
+
+            # Run the cache builder
+            result = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+
+            if result.returncode == 0:
+                # Reload cache
+                from mcp_oci_common.local_cache import reload_cache
+                reload_cache()
+
+                local_cache = get_local_cache()
+                stats = local_cache.get_cache_statistics()
+
+                return _envelope(
+                    f"Cache refreshed successfully. Resources: {sum(stats.get('resources', {}).values())}",
+                    {
+                        'success': True,
+                        'output': result.stdout[-500:] if len(result.stdout) > 500 else result.stdout,
+                        'cache_stats': stats
+                    }
+                )
+            else:
+                return _envelope(
+                    "Cache refresh failed",
+                    {
+                        'success': False,
+                        'error': result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
+                    }
+                )
+
+        except subprocess.TimeoutExpired:
+            return _envelope(
+                "Cache refresh timed out",
+                {'error': 'Cache refresh exceeded 5 minute timeout'}
+            )
+        except Exception as e:
+            logging.error(f"Error refreshing cache: {e}")
+            span.record_exception(e)
+            return _envelope("Error refreshing cache", {'error': str(e)})
 
 def _safe_serialize(obj) -> Dict[str, Any]:
     """Safely serialize objects with fallbacks for complex types"""
@@ -757,6 +885,10 @@ if __name__ == "__main__":
     # Validate MCP tool names at startup
     tool_names = [
         "doctor",
+        "healthcheck",
+        "get_tenancy_info",
+        "get_cache_stats",
+        "refresh_local_cache",
         "cost_by_compartment_daily",
         "service_cost_drilldown",
         "cost_by_tag_key_value",
