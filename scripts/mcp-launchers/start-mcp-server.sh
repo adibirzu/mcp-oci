@@ -182,11 +182,41 @@ launch_server() {
     esac
 
     # Default MCP transport configuration (overridable by env or flags)
+    # In daemon mode default to network transport to avoid blocking on stdio
+    if [[ "$mode" == "daemon" && -z "${MCP_TRANSPORT:-}" ]]; then
+      export MCP_TRANSPORT="http"
+    fi
     export MCP_TRANSPORT="${MCP_TRANSPORT:-stdio}"   # stdio | http | sse | streamable-http
     export MCP_HOST="${MCP_HOST:-127.0.0.1}"
-    # If not provided, default control port to METRICS_PORT to keep ports predictable
-    if [[ -z "${MCP_PORT:-}" ]]; then
-      export MCP_PORT="${METRICS_PORT:-8000}"
+    
+    # Compute default MCP_PORT:
+    # - For network transports use per-service stable ports (avoid clashing with Prometheus METRICS_PORT)
+    # - For stdio, keep legacy behavior (MCP_PORT follows METRICS_PORT) if unset
+    if [[ "${MCP_TRANSPORT}" != "stdio" ]]; then
+      if [[ -z "${MCP_PORT:-}" ]]; then
+        case "$server" in
+          compute)       export MCP_PORT="${MCP_PORT_COMPUTE:-7001}" ;;
+          db)            export MCP_PORT="${MCP_PORT_DB:-7002}" ;;
+          observability) export MCP_PORT="${MCP_PORT_OBSERVABILITY:-7003}" ;;
+          security)      export MCP_PORT="${MCP_PORT_SECURITY:-7004}" ;;
+          cost)          export MCP_PORT="${MCP_PORT_COST:-7005}" ;;
+          network)       export MCP_PORT="${MCP_PORT_NETWORK:-7006}" ;;
+          blockstorage)  export MCP_PORT="${MCP_PORT_BLOCKSTORAGE:-7007}" ;;
+          loadbalancer)  export MCP_PORT="${MCP_PORT_LOADBALANCER:-7008}" ;;
+          inventory)     export MCP_PORT="${MCP_PORT_INVENTORY:-7009}" ;;
+          agents)        export MCP_PORT="${MCP_PORT_AGENTS:-7011}" ;;
+          *)             export MCP_PORT="${MCP_PORT_DEFAULT:-7099}" ;;
+        esac
+      fi
+      # Avoid metrics collision: if METRICS_PORT equals MCP_PORT, disable metrics before Python starts
+      if [[ -n "${METRICS_PORT:-}" && "${METRICS_PORT}" == "${MCP_PORT}" ]]; then
+        export METRICS_PORT="-1"
+      fi
+    else
+      # stdio mode fallback: if not provided, default control port to METRICS_PORT to keep ports predictable
+      if [[ -z "${MCP_PORT:-}" ]]; then
+        export MCP_PORT="${METRICS_PORT:-8000}"
+      fi
     fi
 
     local entry="mcp_servers/$server/server.py"

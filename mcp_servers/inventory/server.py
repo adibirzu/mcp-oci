@@ -13,6 +13,7 @@ from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, 
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.config import get_oci_config
 from mcp_oci_common.validation import validate_and_log_tools
+from mcp_oci_common.local_cache import get_local_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
@@ -77,6 +78,137 @@ def healthcheck() -> Dict:
     Returns static metadata without touching OCI or network.
     """
     return {"status": "ok", "server": "inventory", "pid": os.getpid()}
+
+def get_tenancy_info_inventory() -> Dict:
+    """
+    Get comprehensive tenancy information with local cache enrichment for inventory server
+    """
+    with tool_span(tracer, "get_tenancy_info_inventory", mcp_server="oci-mcp-inventory") as span:
+        try:
+            local_cache = get_local_cache()
+
+            # Get tenancy details from cache
+            tenancy_details = local_cache.get_tenancy_details()
+            cache_stats = local_cache.get_cache_statistics()
+
+            # Also get live tenancy data from OCI
+            cfg = get_oci_config()
+            import oci
+            identity_client = oci.identity.IdentityClient(cfg)
+
+            live_tenancy = identity_client.get_tenancy(cfg.get('tenancy')).data
+
+            result = {
+                'tenancy': {
+                    'id': live_tenancy.id,
+                    'name': live_tenancy.name,
+                    'description': live_tenancy.description,
+                    'home_region': tenancy_details.get('home_region'),
+                    'subscribed_regions': tenancy_details.get('subscribed_regions', [])
+                },
+                'cache_info': {
+                    'available': cache_stats.get('available', False),
+                    'age_minutes': cache_stats.get('age_minutes'),
+                    'needs_refresh': cache_stats.get('needs_refresh', True),
+                    'resource_counts': cache_stats.get('resources', {})
+                },
+                'current_region': cfg.get('region'),
+                'profile': os.getenv('OCI_PROFILE', 'DEFAULT')
+            }
+
+            return _safe_serialize(result)
+
+        except Exception as e:
+            logging.error(f"Error getting tenancy info: {e}")
+            span.record_exception(e)
+            return {'error': str(e)}
+
+def get_cache_stats_inventory() -> Dict:
+    """Get local cache statistics for inventory server"""
+    with tool_span(tracer, "get_cache_stats_inventory", mcp_server="oci-mcp-inventory") as span:
+        try:
+            local_cache = get_local_cache()
+            stats = local_cache.get_cache_statistics()
+            return _safe_serialize(stats)
+        except Exception as e:
+            logging.error(f"Error getting cache stats: {e}")
+            span.record_exception(e)
+            return {'error': str(e)}
+
+def refresh_local_cache_inventory() -> Dict:
+    """Trigger local cache refresh for inventory server"""
+    with tool_span(tracer, "refresh_local_cache_inventory", mcp_server="oci-mcp-inventory") as span:
+        try:
+            import subprocess
+
+            # Get script path
+            script_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                'scripts',
+                'build-local-cache.py'
+            )
+
+            if not os.path.exists(script_path):
+                return {'error': f'Script not found at {script_path}'}
+
+            # Run the cache builder
+            result = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+
+            if result.returncode == 0:
+                # Reload cache
+                from mcp_oci_common.local_cache import reload_cache
+                reload_cache()
+
+                local_cache = get_local_cache()
+                stats = local_cache.get_cache_statistics()
+
+                return {
+                    'success': True,
+                    'output': result.stdout[-500:] if len(result.stdout) > 500 else result.stdout,
+                    'cache_stats': stats
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': result.stderr[-500:] if len(result.stderr) > 500 else result.stderr
+                }
+
+        except subprocess.TimeoutExpired:
+            return {'error': 'Cache refresh exceeded 5 minute timeout'}
+        except Exception as e:
+            logging.error(f"Error refreshing cache: {e}")
+            span.record_exception(e)
+            return {'error': str(e)}
+
+def enrich_with_cache_data(data: List[Dict]) -> List[Dict]:
+    """
+    Enrich resource data with names from local cache
+
+    Args:
+        data: List of resource dictionaries
+
+    Returns:
+        Enriched list with human-readable names added
+    """
+    try:
+        local_cache = get_local_cache()
+        if not local_cache.is_available():
+            return data
+
+        enriched = []
+        for item in data:
+            enriched_item = local_cache.enrich_with_names(item)
+            enriched.append(enriched_item)
+
+        return enriched
+    except Exception as e:
+        logging.debug(f"Error enriching data with cache: {e}")
+        return data
 
 def run_showoci(
     profile: Optional[str] = None,
@@ -572,6 +704,21 @@ tools = [
         description="Return server health, config summary, and masking status"
     ),
     Tool.from_function(
+        fn=get_tenancy_info_inventory,
+        name="get_tenancy_info",
+        description="Get comprehensive tenancy information including home region, subscribed regions, and resource counts from local cache"
+    ),
+    Tool.from_function(
+        fn=get_cache_stats_inventory,
+        name="get_cache_stats",
+        description="Get local cache statistics including age, resource counts, and refresh status"
+    ),
+    Tool.from_function(
+        fn=refresh_local_cache_inventory,
+        name="refresh_local_cache",
+        description="Trigger a refresh of the local resource cache (runs build-local-cache.py)"
+    ),
+    Tool.from_function(
         fn=run_showoci,
         name="run_showoci",
         description="Run ShowOCI inventory report with optional diff for changes"
@@ -629,7 +776,11 @@ if __name__ == "__main__":
     # Expose Prometheus /metrics regardless of DEBUG (configurable via METRICS_PORT)
     if _start_http_server:
         try:
-            _start_http_server(int(os.getenv("METRICS_PORT", "8009")))
+            mp = os.getenv("METRICS_PORT", "8009")
+            # Skip metrics if disabled or conflicting with MCP port
+            mcp_port = os.getenv("MCP_PORT")
+            if mp not in ("-1", "", None) and (mcp_port is None or mp != mcp_port):
+                _start_http_server(int(mp))
         except Exception:
             pass
 
