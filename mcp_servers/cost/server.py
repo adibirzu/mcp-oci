@@ -54,6 +54,90 @@ def get_clients():
 # Create FastMCP app
 app = FastMCP("oci-mcp-cost-enhanced")
 
+
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+@app.resource("server://manifest")
+def server_manifest() -> str:
+    """
+    Server manifest resource for capability discovery.
+    
+    Returns server metadata, available skills, and tool categorization.
+    MCP clients can cache this to reduce repeated tool discovery calls.
+    """
+    import json
+    manifest = {
+        "name": "OCI MCP Server",
+        "version": "2.0.0",
+        "description": "OCI Infrastructure MCP Server with cost analysis, inventory audit, and network diagnostics",
+        "capabilities": {
+            "skills": [
+                "cost-analysis",
+                "inventory-audit",
+                "network-diagnostics"
+            ],
+            "tools": {
+                "tier1_instant": [
+                    "doctor",
+                    "healthcheck",
+                    "get_tenancy_info",
+                    "get_cache_stats",
+                    "list_templates"
+                ],
+                "tier2_api": [
+                    "get_cost_summary",
+                    "get_usage_breakdown",
+                    "cost_by_compartment_daily",
+                    "service_cost_drilldown",
+                    "cost_by_tag_key_value",
+                    "monthly_trend_forecast",
+                    "budget_status_and_actions",
+                    "schedule_report_create_or_list",
+                    "object_storage_costs_and_tiering",
+                    "top_cost_spikes_explain",
+                    "per_compartment_unit_cost",
+                    "forecast_vs_universal_credits",
+                    "detect_cost_anomaly"
+                ],
+                "tier3_heavy": [
+                    "focus_etl_healthcheck"
+                ],
+                "tier4_admin": [
+                    "refresh_local_cache"
+                ]
+            }
+        },
+        "usage_guide": """
+Start with Tier 1 tools for instant responses (< 100ms):
+1. Use doctor() to verify configuration and masking status
+2. Use healthcheck() for basic server status
+3. Use get_tenancy_info() for tenancy overview
+4. Use get_cache_stats() to check cache freshness
+
+Then use Tier 2 tools for API-based analysis (1-10s):
+1. Use get_cost_summary() for quick cost overview
+2. Use service_cost_drilldown() for top services and compartments
+3. Use monthly_trend_forecast() for trend analysis
+4. Use top_cost_spikes_explain() to investigate anomalies
+
+Skills provide high-level workflows:
+- cost-analysis: Trend detection, anomaly identification, forecasting
+- inventory-audit: Resource discovery, capacity planning, compliance
+- network-diagnostics: Topology mapping, security assessment, connectivity
+""",
+        "environment_variables": [
+            "OCI_PROFILE",
+            "OCI_CONFIG_FILE",
+            "OTEL_SERVICE_NAME",
+            "METRICS_PORT",
+            "DEBUG"
+        ]
+    }
+    return json.dumps(manifest, indent=2)
+
+
 def _envelope(human: str, machine: Any) -> Dict[str, Any]:
     """Envelope response with summary and data"""
     return {"summary": human, "data": machine}
