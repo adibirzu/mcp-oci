@@ -4,6 +4,16 @@ __pycache__/
 *.class
 *.so
 .Python
+
+# Virtual environments
+.venv/
+.venv311/
+.venv*/
+venv/
+ENV/
+env/
+
+# Build artifacts
 build/
 develop-eggs/
 dist/
