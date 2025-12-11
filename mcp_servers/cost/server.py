@@ -808,7 +808,7 @@ def monthly_trend_forecast(tenancy_ocid: str, months_back: int = 6, budget_ocid:
 def focus_etl_healthcheck(tenancy_ocid: str, days_back: int = 14) -> Dict[str, Any]:
     """FOCUS ETL health check for compliance reporting"""
     with tool_span(tracer, "focus_etl_healthcheck", mcp_server="oci-mcp-cost-enhanced") as span:
-        days = list_focus_days(clients, tenancy_ocid, days_back)
+        days = list_focus_days(get_clients(), tenancy_ocid, days_back)
         gaps = [d["date"] for d in days if not d["present"]]
         out = FocusHealthOut(days=days, gaps=gaps)
         return _envelope("Checked Object Storage for FOCUS partitions.", _safe_serialize(out))
@@ -818,7 +818,7 @@ def budget_status_and_actions(compartment_ocid: str, recursive_children: bool = 
     """List budgets and alert rules in a compartment; optional recursive children"""
     with tool_span(tracer, "budget_status_and_actions", mcp_server="oci-mcp-cost-enhanced") as span:
         from .finopsai.tools.budgets import list_budgets_and_rules
-        budgets = list_budgets_and_rules(clients, compartment_ocid)
+        budgets = list_budgets_and_rules(get_clients(), compartment_ocid)
         out = BudgetStatusOut(budgets=budgets, compartment_ocid=compartment_ocid, recursive_children=recursive_children)
         return _envelope("Budget status and alert rules retrieved.", _safe_serialize(out))
 
@@ -957,6 +957,69 @@ def forecast_vs_universal_credits(tenancy_ocid: str, months_ahead: int = 1, cred
 def list_templates() -> Dict[str, Any]:
     """List available FinOpsAI templates and their input contracts"""
     return TEMPLATES
+
+
+# =============================================================================
+# Skill-Based Tools (High-Level Agent Operations)
+# =============================================================================
+
+@app.tool("skill_analyze_cost_trend", description="Analyze cost trends over time with forecasting and recommendations. Returns trend direction, change percentage, forecast, and actionable recommendations.")
+def skill_analyze_cost_trend_tool(
+    tenancy_ocid: str,
+    months_back: int = 6,
+    budget_ocid: Optional[str] = None
+) -> Dict[str, Any]:
+    """Skill: Analyze cost trends with forecasting"""
+    try:
+        from mcp_servers.skills.tools_skills import skill_analyze_cost_trend
+        return skill_analyze_cost_trend(tenancy_ocid, months_back, budget_ocid)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.tool("skill_detect_cost_anomalies", description="Detect cost anomalies and spikes with root cause explanations. Returns severity-classified anomalies with service/compartment breakdown.")
+def skill_detect_cost_anomalies_tool(
+    tenancy_ocid: str,
+    time_start: str,
+    time_end: str,
+    threshold: float = 2.0,
+    top_n: int = 10
+) -> Dict[str, Any]:
+    """Skill: Detect cost anomalies with explanations"""
+    try:
+        from mcp_servers.skills.tools_skills import skill_detect_cost_anomalies
+        return skill_detect_cost_anomalies(tenancy_ocid, time_start, time_end, threshold, top_n)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.tool("skill_get_service_breakdown", description="Get detailed service cost breakdown with optimization potential. Returns top services by cost with compartment details and recommendations.")
+def skill_get_service_breakdown_tool(
+    tenancy_ocid: str,
+    time_start: str,
+    time_end: str,
+    top_n: int = 10
+) -> Dict[str, Any]:
+    """Skill: Get service cost breakdown"""
+    try:
+        from mcp_servers.skills.tools_skills import skill_get_service_breakdown
+        return skill_get_service_breakdown(tenancy_ocid, time_start, time_end, top_n)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.tool("skill_generate_cost_optimization_report", description="Generate comprehensive cost optimization report combining trend analysis, anomaly detection, service breakdown, and prioritized recommendations.")
+def skill_generate_cost_optimization_report_tool(
+    tenancy_ocid: str,
+    days_back: int = 30
+) -> Dict[str, Any]:
+    """Skill: Generate full cost optimization report"""
+    try:
+        from mcp_servers.skills.tools_skills import skill_generate_cost_optimization_report
+        return skill_generate_cost_optimization_report(tenancy_ocid, days_back)
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # Helper defined earlier via utils.resolve_compartments
 
