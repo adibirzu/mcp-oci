@@ -6,10 +6,33 @@ interface for skills. They handle connection management and data transformation.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+def _unwrap_tool(func: Any) -> Callable:
+    """
+    Unwrap a FastMCP decorated tool to get the underlying callable function.
+    
+    FastMCP's @app.tool() decorator wraps functions in FunctionTool objects.
+    This helper extracts the original function for direct invocation.
+    """
+    # If it's already callable and not a tool wrapper, return as-is
+    if callable(func) and not hasattr(func, 'fn') and not hasattr(func, '_fn'):
+        return func
+    # Try common FastMCP FunctionTool attribute names
+    if hasattr(func, 'fn') and callable(func.fn):
+        return func.fn
+    if hasattr(func, '_fn') and callable(func._fn):
+        return func._fn
+    if hasattr(func, 'func') and callable(func.func):
+        return func.func
+    if hasattr(func, '_func') and callable(func._func):
+        return func._func
+    # If we can't unwrap, return the original (will fail later with clear error)
+    return func
 
 
 class CostClientAdapter:
@@ -79,7 +102,8 @@ class CostClientAdapter:
         if not self._cost_module:
             return {"error": "Cost module not available"}
         try:
-            return self._cost_module.cost_by_compartment_daily(
+            func = _unwrap_tool(self._cost_module.cost_by_compartment_daily)
+            return func(
                 tenancy_ocid=tenancy_ocid,
                 time_usage_started=time_start,
                 time_usage_ended=time_end,
@@ -103,7 +127,8 @@ class CostClientAdapter:
         if not self._cost_module:
             return {"error": "Cost module not available"}
         try:
-            return self._cost_module.service_cost_drilldown(
+            func = _unwrap_tool(self._cost_module.service_cost_drilldown)
+            return func(
                 tenancy_ocid=tenancy_ocid,
                 time_start=time_start,
                 time_end=time_end,
@@ -123,7 +148,8 @@ class CostClientAdapter:
         if not self._cost_module:
             return {"error": "Cost module not available"}
         try:
-            return self._cost_module.monthly_trend_forecast(
+            func = _unwrap_tool(self._cost_module.monthly_trend_forecast)
+            return func(
                 tenancy_ocid=tenancy_ocid,
                 months_back=months_back,
                 budget_ocid=budget_ocid
@@ -162,7 +188,8 @@ class CostClientAdapter:
         if not self._cost_module:
             return {"error": "Cost module not available"}
         try:
-            return self._cost_module.top_cost_spikes_explain(
+            func = _unwrap_tool(self._cost_module.top_cost_spikes_explain)
+            return func(
                 tenancy_ocid=tenancy_ocid,
                 time_start=time_start,
                 time_end=time_end,
@@ -396,3 +423,186 @@ class NetworkClientAdapter:
         except Exception as e:
             logger.error(f"Error creating subnet: {e}")
             return {"error": str(e)}
+
+
+class ComputeClientAdapter:
+    """Adapter wrapping compute server tools for skills."""
+    
+    def __init__(self):
+        """Initialize the compute client adapter."""
+        self._compute_module = None
+        self._load_compute_module()
+    
+    def _load_compute_module(self):
+        """Lazily load compute server module."""
+        try:
+            from mcp_servers.compute import server as compute_server
+            self._compute_module = compute_server
+        except ImportError:
+            logger.warning("Compute server module not available")
+            self._compute_module = None
+    
+    def list_instances(
+        self,
+        compartment_id: Optional[str] = None,
+        region: Optional[str] = None,
+        lifecycle_state: Optional[str] = None
+    ) -> List[Dict]:
+        """List compute instances."""
+        if not self._compute_module:
+            return []
+        try:
+            return self._compute_module.list_instances(
+                compartment_id=compartment_id,
+                region=region,
+                lifecycle_state=lifecycle_state
+            )
+        except Exception as e:
+            logger.error(f"Error listing instances: {e}")
+            return []
+    
+    def get_instance_metrics(
+        self,
+        instance_id: str,
+        window: str = "1h"
+    ) -> Dict[str, Any]:
+        """Get instance metrics."""
+        if not self._compute_module:
+            return {"error": "Compute module not available"}
+        try:
+            return self._compute_module.get_instance_metrics(
+                instance_id=instance_id,
+                window=window
+            )
+        except Exception as e:
+            logger.error(f"Error getting instance metrics: {e}")
+            return {"error": str(e)}
+    
+    def get_instance_details_with_ips(
+        self,
+        instance_id: str
+    ) -> Dict[str, Any]:
+        """Get detailed instance information with IPs."""
+        if not self._compute_module:
+            return {"error": "Compute module not available"}
+        try:
+            return self._compute_module.get_instance_details_with_ips(instance_id)
+        except Exception as e:
+            logger.error(f"Error getting instance details: {e}")
+            return {"error": str(e)}
+
+
+class SecurityClientAdapter:
+    """Adapter wrapping security server tools for skills."""
+    
+    def __init__(self):
+        """Initialize the security client adapter."""
+        self._security_module = None
+        self._load_security_module()
+    
+    def _load_security_module(self):
+        """Lazily load security server module."""
+        try:
+            from mcp_servers.security import server as security_server
+            self._security_module = security_server
+        except ImportError:
+            logger.warning("Security server module not available")
+            self._security_module = None
+    
+    def list_cloud_guard_problems(
+        self,
+        compartment_id: Optional[str] = None
+    ) -> List[Dict]:
+        """List Cloud Guard problems."""
+        if not self._security_module:
+            return []
+        try:
+            return self._security_module.list_cloud_guard_problems(
+                compartment_id=compartment_id
+            )
+        except Exception as e:
+            logger.error(f"Error listing Cloud Guard problems: {e}")
+            return []
+    
+    def get_cloud_guard_risk_score(
+        self,
+        compartment_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get Cloud Guard risk score."""
+        if not self._security_module:
+            return {"error": "Security module not available"}
+        try:
+            return self._security_module.get_cloud_guard_risk_score(
+                compartment_id=compartment_id
+            )
+        except Exception as e:
+            logger.error(f"Error getting risk score: {e}")
+            return {"error": str(e)}
+    
+    def list_users(
+        self,
+        compartment_id: Optional[str] = None
+    ) -> List[Dict]:
+        """List IAM users."""
+        if not self._security_module:
+            return []
+        try:
+            return self._security_module.list_users(compartment_id=compartment_id)
+        except Exception as e:
+            logger.error(f"Error listing users: {e}")
+            return []
+    
+    def list_groups(
+        self,
+        compartment_id: Optional[str] = None
+    ) -> List[Dict]:
+        """List IAM groups."""
+        if not self._security_module:
+            return []
+        try:
+            return self._security_module.list_groups(compartment_id=compartment_id)
+        except Exception as e:
+            logger.error(f"Error listing groups: {e}")
+            return []
+    
+    def list_policies(
+        self,
+        compartment_id: Optional[str] = None
+    ) -> List[Dict]:
+        """List IAM policies."""
+        if not self._security_module:
+            return []
+        try:
+            return self._security_module.list_policies(compartment_id=compartment_id)
+        except Exception as e:
+            logger.error(f"Error listing policies: {e}")
+            return []
+
+
+# =============================================================================
+# Factory Functions for Getting Client Adapters
+# =============================================================================
+
+def get_cost_client_adapter() -> CostClientAdapter:
+    """Get a cost client adapter instance."""
+    return CostClientAdapter()
+
+
+def get_inventory_client_adapter() -> InventoryClientAdapter:
+    """Get an inventory client adapter instance."""
+    return InventoryClientAdapter()
+
+
+def get_network_client_adapter() -> NetworkClientAdapter:
+    """Get a network client adapter instance."""
+    return NetworkClientAdapter()
+
+
+def get_compute_client_adapter() -> ComputeClientAdapter:
+    """Get a compute client adapter instance."""
+    return ComputeClientAdapter()
+
+
+def get_security_client_adapter() -> SecurityClientAdapter:
+    """Get a security client adapter instance."""
+    return SecurityClientAdapter()

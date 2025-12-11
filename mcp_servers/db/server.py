@@ -716,6 +716,30 @@ def doctor() -> dict:
     except Exception as e:
         return {"server": "oci-mcp-db", "ok": False, "error": str(e)}
 
+# =============================================================================
+# Import Skill Tools for Agent Access
+# =============================================================================
+try:
+    from mcp_servers.skills.tools_skills import (
+        skill_analyze_cost_trend,
+        skill_detect_cost_anomalies,
+        skill_get_service_breakdown,
+        skill_generate_cost_optimization_report,
+        skill_run_infrastructure_discovery,
+        skill_generate_capacity_report,
+        skill_detect_infrastructure_changes,
+        skill_generate_infrastructure_audit,
+        skill_analyze_network_topology,
+        skill_assess_network_security,
+        skill_diagnose_network_connectivity,
+        skill_generate_network_report,
+    )
+    SKILLS_AVAILABLE = True
+except ImportError:
+    SKILLS_AVAILABLE = False
+    logging.warning("Skills module not available - skill tools will not be registered")
+
+
 tools = [
     Tool.from_function(
         fn=healthcheck,
@@ -793,6 +817,76 @@ tools = [
         description="Get performance metrics for a database resource"
     ),
 ]
+
+# Add skill tools if available
+if SKILLS_AVAILABLE:
+    skill_tools = [
+        # Cost Analysis Skills
+        Tool.from_function(
+            fn=skill_analyze_cost_trend,
+            name="skill_analyze_cost_trend",
+            description="Analyze cost trends over time with forecasting. Returns trend direction, change percentage, forecast, and recommendations."
+        ),
+        Tool.from_function(
+            fn=skill_detect_cost_anomalies,
+            name="skill_detect_cost_anomalies",
+            description="Detect cost anomalies and spikes with root cause explanations. Returns severity-classified anomalies with service/compartment breakdown."
+        ),
+        Tool.from_function(
+            fn=skill_get_service_breakdown,
+            name="skill_get_service_breakdown",
+            description="Get detailed service cost breakdown with optimization potential. Returns top services by cost with compartment details."
+        ),
+        Tool.from_function(
+            fn=skill_generate_cost_optimization_report,
+            name="skill_generate_cost_optimization_report",
+            description="Generate comprehensive cost optimization report combining trend analysis, anomaly detection, and service breakdown."
+        ),
+        # Inventory Audit Skills
+        Tool.from_function(
+            fn=skill_run_infrastructure_discovery,
+            name="skill_run_infrastructure_discovery",
+            description="Run full infrastructure discovery with health assessment. Returns complete resource inventory with tagging compliance."
+        ),
+        Tool.from_function(
+            fn=skill_generate_capacity_report,
+            name="skill_generate_capacity_report",
+            description="Generate compute capacity planning report with utilization analysis. Returns capacity score and optimization recommendations."
+        ),
+        Tool.from_function(
+            fn=skill_detect_infrastructure_changes,
+            name="skill_detect_infrastructure_changes",
+            description="Detect infrastructure changes using diff mode. Returns additions, removals, and change categorization."
+        ),
+        Tool.from_function(
+            fn=skill_generate_infrastructure_audit,
+            name="skill_generate_infrastructure_audit",
+            description="Generate comprehensive infrastructure audit report combining discovery, capacity, and change detection."
+        ),
+        # Network Diagnostics Skills
+        Tool.from_function(
+            fn=skill_analyze_network_topology,
+            name="skill_analyze_network_topology",
+            description="Analyze network topology including VCNs and subnets. Returns topology insights and CIDR overlap detection."
+        ),
+        Tool.from_function(
+            fn=skill_assess_network_security,
+            name="skill_assess_network_security",
+            description="Assess network security posture with scoring. Returns security score, findings, and public exposure summary."
+        ),
+        Tool.from_function(
+            fn=skill_diagnose_network_connectivity,
+            name="skill_diagnose_network_connectivity",
+            description="Diagnose network connectivity configuration. Returns VCN connectivity analysis and accessibility assessment."
+        ),
+        Tool.from_function(
+            fn=skill_generate_network_report,
+            name="skill_generate_network_report",
+            description="Generate comprehensive network diagnostic report combining topology, security, and connectivity analysis."
+        ),
+    ]
+    tools.extend(skill_tools)
+    logging.info(f"Added {len(skill_tools)} skill tools to MCP server")
 
 def get_tools():
     return [{"name": t.name, "description": t.description} for t in tools]
