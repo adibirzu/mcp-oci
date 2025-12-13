@@ -387,12 +387,13 @@ for tool in all_tools:
 logger.info(f"Unified MCP Server initialized with {len(all_tools)} total tools")
 
 
-if __name__ == "__main__":
+def main():
+    """Run the MCP server with transport selection based on environment variables."""
     # Validate MCP tool names at startup
     if not validate_and_log_tools(all_tools, "oci-mcp-unified"):
         logging.error("MCP tool validation failed. Server will not start.")
         exit(1)
-    
+
     # Start Prometheus metrics server
     try:
         from prometheus_client import start_http_server as _start_http_server
@@ -401,6 +402,31 @@ if __name__ == "__main__":
         logger.info(f"Prometheus metrics on port {port}")
     except Exception:
         pass
-    
-    logger.info(f"Starting unified server with {len(all_tools)} tools")
-    app.run()
+
+    transport = os.getenv("MCP_TRANSPORT", os.getenv("FASTMCP_TRANSPORT", "stdio")).lower()
+    http_host = os.getenv("MCP_HTTP_HOST", "0.0.0.0")
+    http_port = int(os.getenv("MCP_HTTP_PORT", os.getenv("FASTMCP_PORT", "8002")))
+
+    logger.info(
+        f"Starting unified server with {len(all_tools)} tools, "
+        f"transport={transport}, host={http_host}, port={http_port}"
+    )
+
+    if transport == "http":
+        logger.info("Starting MCP server in HTTP mode")
+        try:
+            app.run(transport="http", host=http_host, port=http_port)
+            return
+        except (ValueError, NotImplementedError) as e:
+            logger.warning(f"HTTP transport not available ({e}), falling back to stdio")
+
+    # Default: stdio transport for local usage
+    try:
+        app.run(transport="stdio")
+    except Exception as exc:
+        logger.exception("Failed to start MCP server (stdio)", exc_info=exc)
+        raise
+
+
+if __name__ == "__main__":
+    main()

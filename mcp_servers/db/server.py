@@ -907,7 +907,7 @@ if __name__ == "__main__":
     # Expose Prometheus /metrics regardless of DEBUG (configurable via METRICS_PORT)
     if _start_http_server:
         try:
-            mp = os.getenv("METRICS_PORT", "8002")
+            mp = os.getenv("METRICS_PORT", "10002")
             # Skip metrics if disabled or conflicting with MCP port
             mcp_port = os.getenv("MCP_PORT")
             if mp not in ("-1", "", None) and (mcp_port is None or mp != mcp_port):

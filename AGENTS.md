@@ -1,5 +1,17 @@
 # Repository Guidelines
 
+## Skills Layer
+
+The MCP-OCI server includes a composable skills layer following the [skillz pattern](https://github.com/intellectronica/skillz):
+
+| Skill | Purpose | Key Methods |
+|-------|---------|-------------|
+| `CostAnalysisSkill` | Cost analysis, trending, optimization | `analyze_cost_trend`, `detect_anomalies`, `generate_optimization_report` |
+| `InventoryAuditSkill` | Resource discovery, capacity planning | `run_full_discovery`, `generate_capacity_report`, `generate_audit_report` |
+| `NetworkDiagnosticsSkill` | Network topology, security assessment | `analyze_topology`, `assess_security`, `generate_network_report` |
+
+Skills documentation: `mcp_servers/skills/SKILLS_GUIDE.md`
+
 ## Design Guidelines (OCI MCP)
 - Reference (adapted): AWS MCP Design Guidelines — https://github.com/awslabs/mcp/blob/main/DESIGN_GUIDELINES.md
 - Scope per service: map servers/tools to OCI services (e.g., IAM, Compute, Object Storage) with least-privilege defaults.
