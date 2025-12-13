@@ -169,7 +169,7 @@ launch_server() {
     # Ensure metrics port aligns with UX expectations
     case "$server" in
       compute)       export METRICS_PORT="${METRICS_PORT:-8001}" ;;
-      db)            export METRICS_PORT="${METRICS_PORT:-8002}" ;;
+      db)            export METRICS_PORT="${METRICS_PORT:-10002}" ;;
       observability) export METRICS_PORT="${METRICS_PORT:-8003}" ;;
       security)      export METRICS_PORT="${METRICS_PORT:-8004}" ;;
       cost)          export METRICS_PORT="${METRICS_PORT:-8005}" ;;
