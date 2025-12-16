@@ -7,6 +7,38 @@ from .config import (
 from .observability import add_oci_call_attributes
 from .validation import validate_and_log_tools
 
+# OCI APM (Application Performance Monitoring) integration
+try:
+    from .oci_apm import (
+        init_oci_apm_tracing,
+        get_apm_tracer,
+        get_apm_status,
+        send_test_span,
+        shutdown_apm,
+        trace_tool,
+    )
+    _OCI_APM_AVAILABLE = True
+except ImportError:
+    _OCI_APM_AVAILABLE = False
+
+# Smart resolver imports (optional, won't break if not available)
+try:
+    from .smart_resolver import (
+        resolve_compartment,
+        get_compartment_info,
+        search_compartments,
+        list_all_compartments,
+        get_resolver,
+        smart_compartment_id,
+        smart_time_range,
+        smart_time_range_iso,
+        CompartmentResolver,
+        CompartmentInfo,
+    )
+    _SMART_RESOLVER_AVAILABLE = True
+except ImportError:
+    _SMART_RESOLVER_AVAILABLE = False
+
 __all__ = [
     "get_oci_config",
     "get_compartment_id",
@@ -15,6 +47,24 @@ __all__ = [
     "validate_and_log_tools",
     "with_oci_errors",
     "make_client",
+    # Smart resolver exports
+    "resolve_compartment",
+    "get_compartment_info",
+    "search_compartments",
+    "list_all_compartments",
+    "get_resolver",
+    "smart_compartment_id",
+    "smart_time_range",
+    "smart_time_range_iso",
+    "CompartmentResolver",
+    "CompartmentInfo",
+    # OCI APM exports
+    "init_oci_apm_tracing",
+    "get_apm_tracer",
+    "get_apm_status",
+    "send_test_span",
+    "shutdown_apm",
+    "trace_tool",
 ]
 
 
