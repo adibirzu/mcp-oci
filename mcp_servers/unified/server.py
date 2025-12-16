@@ -169,17 +169,17 @@ except ImportError as e:
 # Import Compute Server Tools
 try:
     from mcp_servers.compute.server import (
-        list_instances, get_instance, start_instance, stop_instance, 
-        terminate_instance, list_shapes, get_compute_capacity
+        list_instances, start_instance, stop_instance, restart_instance,
+        create_instance, get_instance_metrics, get_instance_details_with_ips
     )
     compute_tools = [
         Tool.from_function(fn=list_instances, name="compute_list_instances", description="List compute instances"),
-        Tool.from_function(fn=get_instance, name="compute_get_instance", description="Get instance details"),
+        Tool.from_function(fn=get_instance_details_with_ips, name="compute_get_instance", description="Get detailed instance information including IP addresses"),
         Tool.from_function(fn=start_instance, name="compute_start_instance", description="Start a compute instance"),
         Tool.from_function(fn=stop_instance, name="compute_stop_instance", description="Stop a compute instance"),
-        Tool.from_function(fn=terminate_instance, name="compute_terminate_instance", description="Terminate a compute instance"),
-        Tool.from_function(fn=list_shapes, name="compute_list_shapes", description="List available compute shapes"),
-        Tool.from_function(fn=get_compute_capacity, name="compute_get_capacity", description="Get compute capacity in compartment"),
+        Tool.from_function(fn=restart_instance, name="compute_restart_instance", description="Restart a compute instance"),
+        Tool.from_function(fn=create_instance, name="compute_create_instance", description="Create a new compute instance"),
+        Tool.from_function(fn=get_instance_metrics, name="compute_get_metrics", description="Get CPU metrics for a compute instance"),
     ]
     all_tools.extend(compute_tools)
     logger.info(f"Loaded {len(compute_tools)} compute tools")
@@ -191,17 +191,16 @@ except AttributeError as e:
 # Import Network Server Tools
 try:
     from mcp_servers.network.server import (
-        list_vcns, list_subnets, get_vcn, get_subnet,
-        create_vcn, create_subnet, summarize_public_endpoints
+        list_vcns, list_subnets, create_vcn, create_subnet,
+        summarize_public_endpoints, create_vcn_with_subnets
     )
     network_tools = [
         Tool.from_function(fn=list_vcns, name="network_list_vcns", description="List VCNs in compartment"),
-        Tool.from_function(fn=list_subnets, name="network_list_subnets", description="List subnets in compartment"),
-        Tool.from_function(fn=get_vcn, name="network_get_vcn", description="Get VCN details"),
-        Tool.from_function(fn=get_subnet, name="network_get_subnet", description="Get subnet details"),
+        Tool.from_function(fn=list_subnets, name="network_list_subnets", description="List subnets in a VCN"),
         Tool.from_function(fn=create_vcn, name="network_create_vcn", description="Create a new VCN"),
         Tool.from_function(fn=create_subnet, name="network_create_subnet", description="Create a new subnet"),
         Tool.from_function(fn=summarize_public_endpoints, name="network_public_endpoints", description="Summarize public endpoints"),
+        Tool.from_function(fn=create_vcn_with_subnets, name="network_create_vcn_with_subnets", description="Create VCN with public/private subnets, gateways, route tables"),
     ]
     all_tools.extend(network_tools)
     logger.info(f"Loaded {len(network_tools)} network tools")
@@ -213,15 +212,16 @@ except AttributeError as e:
 # Import Security Server Tools
 try:
     from mcp_servers.security.server import (
-        list_cloud_guard_problems, get_cloud_guard_risk_score,
-        list_users, list_groups, list_policies
+        list_cloud_guard_problems, list_compartments,
+        list_iam_users, list_groups, list_policies, list_data_safe_findings
     )
     security_tools = [
         Tool.from_function(fn=list_cloud_guard_problems, name="security_cloud_guard_problems", description="List Cloud Guard problems"),
-        Tool.from_function(fn=get_cloud_guard_risk_score, name="security_risk_score", description="Get Cloud Guard risk score"),
-        Tool.from_function(fn=list_users, name="security_list_users", description="List IAM users"),
+        Tool.from_function(fn=list_compartments, name="security_list_compartments", description="List all compartments in the tenancy"),
+        Tool.from_function(fn=list_iam_users, name="security_list_users", description="List IAM users"),
         Tool.from_function(fn=list_groups, name="security_list_groups", description="List IAM groups"),
         Tool.from_function(fn=list_policies, name="security_list_policies", description="List IAM policies"),
+        Tool.from_function(fn=list_data_safe_findings, name="security_data_safe_findings", description="List Data Safe findings"),
     ]
     all_tools.extend(security_tools)
     logger.info(f"Loaded {len(security_tools)} security tools")
@@ -250,12 +250,11 @@ except AttributeError as e:
 # Import Block Storage Server Tools
 try:
     from mcp_servers.blockstorage.server import (
-        list_volumes, get_volume, list_boot_volumes
+        list_volumes, create_volume
     )
     blockstorage_tools = [
-        Tool.from_function(fn=list_volumes, name="blockstorage_list_volumes", description="List block volumes"),
-        Tool.from_function(fn=get_volume, name="blockstorage_get_volume", description="Get volume details"),
-        Tool.from_function(fn=list_boot_volumes, name="blockstorage_list_boot_volumes", description="List boot volumes"),
+        Tool.from_function(fn=list_volumes, name="blockstorage_list_volumes", description="List block storage volumes"),
+        Tool.from_function(fn=create_volume, name="blockstorage_create_volume", description="Create a new block storage volume"),
     ]
     all_tools.extend(blockstorage_tools)
     logger.info(f"Loaded {len(blockstorage_tools)} block storage tools")
@@ -267,11 +266,11 @@ except AttributeError as e:
 # Import Load Balancer Server Tools
 try:
     from mcp_servers.loadbalancer.server import (
-        list_load_balancers, get_load_balancer
+        list_load_balancers, create_load_balancer
     )
     lb_tools = [
         Tool.from_function(fn=list_load_balancers, name="lb_list", description="List load balancers"),
-        Tool.from_function(fn=get_load_balancer, name="lb_get", description="Get load balancer details"),
+        Tool.from_function(fn=create_load_balancer, name="lb_create", description="Create a new load balancer"),
     ]
     all_tools.extend(lb_tools)
     logger.info(f"Loaded {len(lb_tools)} load balancer tools")
@@ -283,11 +282,15 @@ except AttributeError as e:
 # Import Log Analytics Server Tools
 try:
     from mcp_servers.loganalytics.server import (
-        execute_logan_query, list_log_sources
+        execute_query, search_security_events, get_mitre_techniques,
+        validate_query, check_oci_connection
     )
     logan_tools = [
-        Tool.from_function(fn=execute_logan_query, name="logan_execute_query", description="Execute Log Analytics query"),
-        Tool.from_function(fn=list_log_sources, name="logan_list_sources", description="List log sources"),
+        Tool.from_function(fn=execute_query, name="logan_execute_query", description="Execute Log Analytics query with security analysis"),
+        Tool.from_function(fn=search_security_events, name="logan_search_security", description="Search for security events using patterns"),
+        Tool.from_function(fn=get_mitre_techniques, name="logan_mitre_techniques", description="Search for MITRE ATT&CK techniques in logs"),
+        Tool.from_function(fn=validate_query, name="logan_validate_query", description="Validate and enhance Log Analytics query syntax"),
+        Tool.from_function(fn=check_oci_connection, name="logan_check_connection", description="Check Log Analytics connection"),
     ]
     all_tools.extend(logan_tools)
     logger.info(f"Loaded {len(logan_tools)} log analytics tools")
