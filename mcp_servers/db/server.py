@@ -252,11 +252,11 @@ def restart_db_system(db_system_id: str) -> Dict:
             span.record_exception(e)
             return {'error': str(e)}
 
-def start_autonomous_database(db_id: str) -> Dict:
+def start_autonomous_database(database_id: str) -> Dict:
     with tool_span(tracer, "start_autonomous_database", mcp_server="oci-mcp-db") as span:
         if not allow_mutations():
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
-        
+
         config = get_oci_config()
         database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
@@ -271,7 +271,7 @@ def start_autonomous_database(db_id: str) -> Dict:
             endpoint=endpoint,
         )
         try:
-            response = database_client.start_autonomous_database(db_id)
+            response = database_client.start_autonomous_database(database_id)
             try:
                 req_id = response.headers.get("opc-request-id")
                 if req_id:
@@ -284,11 +284,11 @@ def start_autonomous_database(db_id: str) -> Dict:
             span.record_exception(e)
             return {'error': str(e)}
 
-def stop_autonomous_database(db_id: str) -> Dict:
+def stop_autonomous_database(database_id: str) -> Dict:
     with tool_span(tracer, "stop_autonomous_database", mcp_server="oci-mcp-db") as span:
         if not allow_mutations():
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
-        
+
         config = get_oci_config()
         database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
@@ -303,7 +303,7 @@ def stop_autonomous_database(db_id: str) -> Dict:
             endpoint=endpoint,
         )
         try:
-            response = database_client.stop_autonomous_database(db_id)
+            response = database_client.stop_autonomous_database(database_id)
             try:
                 req_id = response.headers.get("opc-request-id")
                 if req_id:
@@ -316,11 +316,11 @@ def stop_autonomous_database(db_id: str) -> Dict:
             span.record_exception(e)
             return {'error': str(e)}
 
-def restart_autonomous_database(db_id: str) -> Dict:
+def restart_autonomous_database(database_id: str) -> Dict:
     with tool_span(tracer, "restart_autonomous_database", mcp_server="oci-mcp-db") as span:
         if not allow_mutations():
             return {'error': 'Mutations not allowed (set ALLOW_MUTATIONS=true)'}
-        
+
         config = get_oci_config()
         database_client = get_client(oci.database.DatabaseClient, region=config.get("region"))
         try:
@@ -335,7 +335,7 @@ def restart_autonomous_database(db_id: str) -> Dict:
             endpoint=endpoint,
         )
         try:
-            response = database_client.restart_autonomous_database(db_id)
+            response = database_client.restart_autonomous_database(database_id)
             try:
                 req_id = response.headers.get("opc-request-id")
                 if req_id:
@@ -348,7 +348,7 @@ def restart_autonomous_database(db_id: str) -> Dict:
             span.record_exception(e)
             return {'error': str(e)}
 
-def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
+def get_db_cpu_snapshot(database_id: str, window: str = "1h") -> Dict:
     with tool_span(tracer, "get_db_cpu_snapshot", mcp_server="oci-mcp-db") as span:
         config = get_oci_config()
         monitoring_client = get_client(oci.monitoring.MonitoringClient, region=config.get("region"))
@@ -364,11 +364,11 @@ def get_db_cpu_snapshot(db_id: str, window: str = "1h") -> Dict:
             region=config.get("region"),
             endpoint=endpoint,
         )
-        
+
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(hours=1) if window == "1h" else end_time - timedelta(days=1)
-        
-        query = f'CpuUtilization[1m]{{resourceId="{db_id}"}}.mean()'
+
+        query = f'CpuUtilization[1m]{{resourceId="{database_id}"}}.mean()'
         
         try:
             response = monitoring_client.summarize_metrics_data(
@@ -576,11 +576,11 @@ def get_cost_summary_by_cloud(
                 "error": str(e)
             }
 
-def get_autonomous_database(db_id: str) -> Dict[str, Any]:
+def get_autonomous_database(database_id: str) -> Dict[str, Any]:
     """Get detailed information about an Autonomous Database
 
     Args:
-        db_id: The OCID of the Autonomous Database
+        database_id: The OCID of the Autonomous Database
     """
     with tool_span(tracer, "get_autonomous_database", mcp_server="oci-mcp-db") as span:
         config = get_oci_config()
@@ -600,7 +600,7 @@ def get_autonomous_database(db_id: str) -> Dict[str, Any]:
         )
 
         try:
-            response = database_client.get_autonomous_database(db_id)
+            response = database_client.get_autonomous_database(database_id)
             db = response.data
 
             return {
@@ -623,11 +623,11 @@ def get_autonomous_database(db_id: str) -> Dict[str, Any]:
                 "error": str(e)
             }
 
-def get_db_metrics(db_id: str, metric_name: str = "CpuUtilization", window: str = "1h") -> Dict[str, Any]:
+def get_db_metrics(database_id: str, metric_name: str = "CpuUtilization", window: str = "1h") -> Dict[str, Any]:
     """Get metrics for a database resource
 
     Args:
-        db_id: The OCID of the database
+        database_id: The OCID of the database
         metric_name: Metric to retrieve (CpuUtilization, StorageUtilization, etc.)
         window: Time window (1h, 6h, 24h, 7d)
     """
@@ -653,7 +653,7 @@ def get_db_metrics(db_id: str, metric_name: str = "CpuUtilization", window: str 
         window_hours = {"1h": 1, "6h": 6, "24h": 24, "7d": 168}.get(window, 1)
         start_time = end_time - timedelta(hours=window_hours)
 
-        query = f'{metric_name}[1m]{{resourceId="{db_id}"}}.mean()'
+        query = f'{metric_name}[1m]{{resourceId="{database_id}"}}.mean()'
 
         try:
             response = monitoring_client.summarize_metrics_data(

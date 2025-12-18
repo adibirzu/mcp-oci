@@ -87,7 +87,7 @@
         "mcp-oci-streamable-cloud": {
             "transport": {
                 "type": "sse",
-                "baseUrl": "http://130.61.72.91:8000"
+                "baseUrl": "http://<PUBLIC_IP_OR_HOST>:8000"
             }
         }
     }

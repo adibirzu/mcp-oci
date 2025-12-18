@@ -4,7 +4,7 @@
 
 ```bash
 # Navigate to project root
-cd /Users/abirzu/dev/mcp-oci
+cd <REPO_ROOT>
 
 # Run cache builder
 python scripts/build-local-cache.py
@@ -82,7 +82,7 @@ await mcpClient.call_tool("refresh_local_cache", {});
 crontab -e
 
 # Add this line to refresh every 6 hours
-0 */6 * * * cd /Users/abirzu/dev/mcp-oci && python scripts/build-local-cache.py >> ~/.mcp-oci/cache/refresh.log 2>&1
+0 */6 * * * cd <REPO_ROOT> && python scripts/build-local-cache.py >> ~/.mcp-oci/cache/refresh.log 2>&1
 ```
 
 ## Common Options

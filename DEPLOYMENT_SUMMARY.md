@@ -51,9 +51,9 @@ All scripts are located in `/scripts/deploy/` and are executable:
 
 ### 4. **Cloud Infrastructure** ☁️
 
-#### OCI Compute Instance (Already Deployed)
-- **Instance ID**: ocid1.instance.oc1.eu-frankfurt-1.antheljrttkvkkicp6xi6wk5jxs2bqeqib6j6b3wbr2n2ebbpvc5vqe5memq
-- **Public IP**: 130.61.72.91
+#### OCI Compute Instance (Example)
+- **Instance ID**: ocid1.instance.oc1..example
+- **Public IP**: <public-ip>
 - **Shape**: VM.Standard.E4.Flex (2 OCPU, 32GB RAM)
 - **Region**: eu-frankfurt-1
 - **Status**: Created and initializing
@@ -94,17 +94,17 @@ All scripts are located in `/scripts/deploy/` and are executable:
 ### For Cloud Deployment
 
 #### Access Methods:
-1. **Direct HTTP**: `http://130.61.72.91:7001-7011,8000-8011`
-2. **WebSocket**: `ws://130.61.72.91:9000`
-3. **gRPC**: `130.61.72.91:50051`
-4. **SSH Access**: `ssh opc@130.61.72.91`
+1. **Direct HTTP**: `http://<PUBLIC_IP>:7001-7011,8000-8011`
+2. **WebSocket**: `ws://<PUBLIC_IP>:9000`
+3. **gRPC**: `<PUBLIC_IP>:50051`
+4. **SSH Access**: `ssh opc@<PUBLIC_IP>`
 
 ## Quick Start Commands
 
 ### Local Development
 ```bash
 # Quick start with Docker
-cd /Users/abirzu/dev/mcp-oci
+cd <REPO_ROOT>
 ./scripts/deploy/local-deploy.sh docker all
 
 # Check health
@@ -121,7 +121,7 @@ cd ops/terraform/mcp_streamable
 terraform apply
 
 # Test cloud instance (once ready)
-./scripts/deploy/health-check.sh all 130.61.72.91
+./scripts/deploy/health-check.sh all <PUBLIC_IP>
 ```
 
 ### Claude Desktop Integration
@@ -214,7 +214,7 @@ oci compute instance get --instance-id <instance-id>
 oci network security-list list --compartment-id <compartment-id>
 
 # Review cloud-init logs (once SSH works)
-ssh opc@130.61.72.91 "sudo cat /var/log/mcp-oci-cloud-init.log"
+ssh opc@<PUBLIC_IP> "sudo cat /var/log/mcp-oci-cloud-init.log"
 ```
 
 ### If Local Deployment Fails:

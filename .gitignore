@@ -78,6 +78,7 @@ ops/pyroscope/*
 ops/grafana/data/*
 ops/prometheus/data/*
 ops/tempo/data/*
+ops/secret_scan*.json
 
 # Test results
 test-results/
@@ -85,10 +86,20 @@ verification_results/
 
 # Documentation builds
 docs/_build/
+docs/docusaurus/node_modules/
+
+# Terraform (never commit state)
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
 
 # Local development
 .local/
 *.local
+.env.local
+usage_resources*.csv
 
 # OS generated
 .DS_Store
