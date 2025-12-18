@@ -53,7 +53,7 @@ def _safe_serialize(obj):
 
 def find_mcp_servers():
     """Find all MCP server files"""
-    servers_dir = Path("/Users/abirzu/dev/mcp-oci/mcp_servers")
+    servers_dir = Path(__file__).resolve().parent / "mcp_servers"
     server_files = []
 
     for server_dir in servers_dir.iterdir():

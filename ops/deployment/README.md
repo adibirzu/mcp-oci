@@ -70,13 +70,13 @@ cp configs/claude-desktop-config.json ~/Library/Application\ Support/Claude/clau
 
 #### OCI Compute Instance
 The cloud deployment was already set up via Terraform:
-- Instance IP: 130.61.72.91
+- Instance IP: <PUBLIC_IP>
 - Shape: VM.Standard.E4.Flex (2 OCPU, 32GB RAM)
 - Region: eu-frankfurt-1
 
 Access the instance:
 ```bash
-ssh -i ~/.ssh/id_rsa opc@130.61.72.91
+ssh -i ~/.ssh/id_rsa opc@<PUBLIC_IP>
 ```
 
 #### Container Instance
@@ -193,7 +193,7 @@ MCP_MAX_CONNECTIONS=1000
 
 # Specific checks
 ./scripts/deploy/health-check.sh http localhost
-./scripts/deploy/health-check.sh websocket 130.61.72.91
+./scripts/deploy/health-check.sh websocket <PUBLIC_IP>
 ./scripts/deploy/health-check.sh metrics localhost
 ```
 

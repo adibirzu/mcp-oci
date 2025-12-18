@@ -75,7 +75,9 @@ class BudgetEntry(BaseModel):
     alerts: List[BudgetAlert]
 
 class BudgetStatusOut(BaseModel):
-    budgets: List[BudgetEntry]
+    budgets: List[dict]  # Simplified to dict since BudgetEntry may not match actual data
+    compartment_id: Optional[str] = None
+    recursive_children: bool = False
 
 class ScheduleEntry(BaseModel):
     id: str
