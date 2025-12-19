@@ -12,6 +12,13 @@ from mcp_oci_common.session import get_client
 # Optional dependencies: load dotenv if available; import oracledb lazily
 try:
     from dotenv import load_dotenv as _load_dotenv
+    try:
+        from pathlib import Path
+
+        _repo_root = Path(__file__).resolve().parents[2]
+        _load_dotenv(_repo_root / ".env.local")
+    except Exception:
+        pass
     _load_dotenv()
 except Exception:
     _load_dotenv = None

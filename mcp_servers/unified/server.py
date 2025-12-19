@@ -20,6 +20,16 @@ import os
 import logging
 from typing import Dict, Any, List, Optional
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # Set up logging first
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -73,10 +83,14 @@ def server_manifest() -> str:
             "services": [
                 "cost", "database", "compute", "network", 
                 "security", "inventory", "blockstorage", 
-                "loadbalancer", "loganalytics"
+                "loadbalancer", "loganalytics", "objectstorage"
             ],
             "skills": [
-                "cost-analysis", "inventory-audit", "network-diagnostics"
+                "cost-analysis",
+                "inventory-audit",
+                "network-diagnostics",
+                "compute-management",
+                "security-posture"
             ]
         },
         "tools": tool_names
@@ -279,6 +293,35 @@ except ImportError as e:
 except AttributeError as e:
     logger.warning(f"Load balancer server missing functions: {e}")
 
+# Import Object Storage Server Tools
+try:
+    from mcp_servers.objectstorage.server import (
+        list_buckets,
+        get_bucket,
+        list_objects,
+        get_bucket_usage,
+        get_storage_report,
+        list_db_backups,
+        get_backup_details,
+        create_preauthenticated_request,
+    )
+    objectstorage_tools = [
+        Tool.from_function(fn=list_buckets, name="objectstorage_list_buckets", description="List Object Storage buckets"),
+        Tool.from_function(fn=get_bucket, name="objectstorage_get_bucket", description="Get Object Storage bucket details"),
+        Tool.from_function(fn=list_objects, name="objectstorage_list_objects", description="List objects in a bucket"),
+        Tool.from_function(fn=get_bucket_usage, name="objectstorage_get_bucket_usage", description="Get usage summary for a bucket"),
+        Tool.from_function(fn=get_storage_report, name="objectstorage_storage_report", description="Get storage report across buckets"),
+        Tool.from_function(fn=list_db_backups, name="objectstorage_list_db_backups", description="List database backup artifacts in Object Storage"),
+        Tool.from_function(fn=get_backup_details, name="objectstorage_get_backup_details", description="Get backup artifact details"),
+        Tool.from_function(fn=create_preauthenticated_request, name="objectstorage_create_par", description="Create a pre-authenticated request (PAR)"),
+    ]
+    all_tools.extend(objectstorage_tools)
+    logger.info(f"Loaded {len(objectstorage_tools)} object storage tools")
+except ImportError as e:
+    logger.warning(f"Could not import object storage tools: {e}")
+except AttributeError as e:
+    logger.warning(f"Object storage server missing functions: {e}")
+
 # Import Log Analytics Server Tools
 try:
     from mcp_servers.loganalytics.server import (
@@ -407,27 +450,32 @@ def main():
         pass
 
     transport = os.getenv("MCP_TRANSPORT", os.getenv("FASTMCP_TRANSPORT", "stdio")).lower()
-    http_host = os.getenv("MCP_HTTP_HOST", "0.0.0.0")
-    http_port = int(os.getenv("MCP_HTTP_PORT", os.getenv("FASTMCP_PORT", "8002")))
+    host = os.getenv("MCP_HOST", os.getenv("MCP_HTTP_HOST", "0.0.0.0"))
+    try:
+        port = int(os.getenv("MCP_PORT", os.getenv("MCP_HTTP_PORT", os.getenv("FASTMCP_PORT", "7010"))))
+    except Exception:
+        port = 7010
 
     logger.info(
         f"Starting unified server with {len(all_tools)} tools, "
-        f"transport={transport}, host={http_host}, port={http_port}"
+        f"transport={transport}, host={host}, port={port}"
     )
 
-    if transport == "http":
-        logger.info("Starting MCP server in HTTP mode")
-        try:
-            app.run(transport="http", host=http_host, port=http_port)
-            return
-        except (ValueError, NotImplementedError) as e:
-            logger.warning(f"HTTP transport not available ({e}), falling back to stdio")
+    valid_transports = {"stdio", "http", "sse", "streamable-http"}
+    if transport not in valid_transports:
+        logger.warning("Unknown transport '%s'; falling back to stdio", transport)
+        transport = "stdio"
 
-    # Default: stdio transport for local usage
     try:
+        if transport == "stdio":
+            app.run(transport="stdio")
+        else:
+            app.run(transport=transport, host=host, port=port)
+    except (ValueError, NotImplementedError) as exc:
+        logger.warning("Transport '%s' not available (%s); falling back to stdio", transport, exc)
         app.run(transport="stdio")
     except Exception as exc:
-        logger.exception("Failed to start MCP server (stdio)", exc_info=exc)
+        logger.exception("Failed to start MCP server", exc_info=exc)
         raise
 
 

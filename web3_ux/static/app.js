@@ -179,7 +179,7 @@ async function checkPreflight(){
     const discHint = document.getElementById('discHint');
     const capHint = document.getElementById('capHint');
     const obsHint = document.getElementById('obsHint');
-    const hintText = cid ? 'Using COMPARTMENT_OCID from .env' : '';
+    const hintText = cid ? 'Using COMPARTMENT_OCID from .env.local' : '';
     if(discHint) discHint.textContent = hintText;
     if(capHint) capHint.textContent = hintText;
     if(obsHint) obsHint.textContent = hintText;

@@ -9,7 +9,7 @@ Set the following environment variables, then run pytest (or use the Makefile ta
 export OCI_INTEGRATION=1
 export TEST_OCI_PROFILE=DEFAULT
 export TEST_OCI_REGION=eu-frankfurt-1
-export TEST_OCI_TENANCY_OCID=ocid1.tenancy.oc1... # Your tenancy OCID
+export TEST_OCI_TENANCY_OCID=[Link to Secure Variable: OCI_TENANCY_OCID] # Your tenancy OCID
 pytest -q
 ```
 or

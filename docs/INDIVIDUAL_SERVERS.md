@@ -41,7 +41,7 @@ This document provides detailed information about each MCP server, including ava
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export ALLOW_MUTATIONS=true  # Enable write operations
@@ -53,13 +53,13 @@ export MCP_CACHE_TTL_COMPUTE=3600  # Cache duration in seconds
 
 ```python
 # List all instances in compartment
-instances = list_instances(compartment_id="ocid1.compartment.oc1..example")
+instances = list_instances(compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]")
 
 # Get specific instance details
-details = get_instance_details(instance_id="ocid1.instance.oc1..example")
+details = get_instance_details(instance_id="[Link to Secure Variable: OCI_INSTANCE_OCID]")
 
 # Start instance with confirmation
-start_instance(instance_id="ocid1.instance.oc1..example", confirm=True)
+start_instance(instance_id="[Link to Secure Variable: OCI_INSTANCE_OCID]", confirm=True)
 ```
 
 ---
@@ -86,7 +86,7 @@ start_instance(instance_id="ocid1.instance.oc1..example", confirm=True)
 
 ```bash
 # Required
-export TENANCY_OCID=ocid1.tenancy.oc1..example
+export TENANCY_OCID=[Link to Secure Variable: OCI_TENANCY_OCID]
 export OCI_REGION=us-ashburn-1
 
 # Optional
@@ -100,7 +100,7 @@ export METRICS_PORT=8005
 ```python
 # Get service cost breakdown
 costs = service_cost_drilldown(
-    tenancy_ocid="ocid1.tenancy.oc1..example",
+    tenancy_ocid="[Link to Secure Variable: OCI_TENANCY_OCID]",
     time_start="2024-01-01",
     time_end="2024-01-31",
     top_n=10
@@ -108,7 +108,7 @@ costs = service_cost_drilldown(
 
 # Analyze cost by tags
 tag_costs = cost_by_tag_key_value(
-    tenancy_ocid="ocid1.tenancy.oc1..example",
+    tenancy_ocid="[Link to Secure Variable: OCI_TENANCY_OCID]",
     time_start="2024-01-01",
     time_end="2024-01-31",
     defined_tag_ns="FinOps",
@@ -142,7 +142,7 @@ tag_costs = cost_by_tag_key_value(
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export SECURITY_SCAN_ENABLED=true
@@ -156,13 +156,13 @@ export METRICS_PORT=8004
 ```python
 # Scan compute instances for vulnerabilities
 scan_results = scan_compute_vulnerabilities(
-    compartment_id="ocid1.compartment.oc1..example",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     severity_filter="HIGH,CRITICAL"
 )
 
 # Check compliance against framework
 compliance = compliance_scan(
-    compartment_id="ocid1.compartment.oc1..example",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     framework="PCI"
 )
 ```
@@ -193,7 +193,7 @@ compliance = compliance_scan(
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export ALLOW_MUTATIONS=true
@@ -226,7 +226,7 @@ export METRICS_PORT=8006
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional for wallet-based connections
 export ORACLE_DB_USER=ADMIN
@@ -260,7 +260,7 @@ export METRICS_PORT=8002
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export ALLOW_MUTATIONS=true
@@ -292,7 +292,7 @@ export METRICS_PORT=8007
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export OCI_MONITORING_NAMESPACE=custom_metrics
@@ -323,7 +323,7 @@ export METRICS_PORT=8003
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export INCLUDE_CHILD_COMPARTMENTS=true
@@ -355,7 +355,7 @@ export METRICS_PORT=8009
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export ALLOW_MUTATIONS=true
@@ -387,11 +387,11 @@ export METRICS_PORT=8008
 ```bash
 # Required
 export OCI_REGION=us-ashburn-1
-export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Optional
 export GAI_AGENT_ENDPOINT=http://localhost:8088/agents/chat
-export GAI_AGENT_API_KEY=your-api-key
+export GAI_AGENT_API_KEY=[Link to Secure Variable: GAI_AGENT_API_KEY]
 export METRICS_PORT=8011
 ```
 

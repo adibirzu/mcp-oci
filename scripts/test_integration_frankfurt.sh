@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Load local overrides if present
-if [ -f .env ]; then
+if [ -f .env.local ]; then
   # shellcheck disable=SC1091
-  source .env
+  source .env.local
 fi
 
 export OCI_INTEGRATION=${OCI_INTEGRATION:-1}

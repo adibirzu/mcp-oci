@@ -18,7 +18,7 @@
    cd ~/mcp-oci-cloud
    ./bootstrap-mcp.sh
    ```
-   Supply the required `KEY=VALUE` pairs when prompted (e.g. `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID`). Existing values are shown as defaults on subsequent runs; the script enforces `MCP_TRANSPORT=streamable-http`, writes `.env`, and starts the Docker composition.
+   Supply the required `KEY=VALUE` pairs when prompted (e.g. `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID`). Existing values are shown as defaults on subsequent runs; the script enforces `MCP_TRANSPORT=streamable-http`, writes `.env.local`, and starts the Docker composition.
 
 Security posture:
 - Cloud-init opens `firewalld` ports 7001–7011 and 8000–8011 and the attached NSG mirrors those rules.
@@ -41,21 +41,21 @@ Security posture:
 
 ## 3. Docker Local (on VM)
 1. Build: `docker build -t mcp-oci .`.
-2. Run: `docker run -d -p 8000-8010:8000-8010 --env OCI_CLI_AUTH=instance_principal --env COMPARTMENT_OCID=your-compartment mcp-oci`.
+2. Run: `docker run -d -p 8000-8010:8000-8010 --env OCI_CLI_AUTH=instance_principal --env COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID] mcp-oci`.
 3. Access: Localhost:8000-8010.
 
 ## 4. OCI Container Instances
 1. Build and push to OCIR: `docker build -t your-repo/mcp-oci . && docker push your-repo/mcp-oci`.
-2. Run deploy script: `bash scripts/deploy-oci.sh --type container --tenancy your-tenancy --compartment your-compartment --region your-region`.
+2. Run deploy script: `bash scripts/deploy-oci.sh --type container --tenancy [Link to Secure Variable: OCI_TENANCY_OCID] --compartment [Link to Secure Variable: OCI_COMPARTMENT_OCID] --region [Link to Secure Variable: OCI_REGION]`.
 3. Access: Via OCI networking (add ingress rules if needed).
 
 ## 5. OKE (CLI)
-1. Run deploy script: `bash scripts/deploy-oci.sh --type oke --tenancy your-tenancy --compartment your-compartment --region your-region --vcn-id your-vcn --subnet-id your-subnet --availability-domain your-ad`.
+1. Run deploy script: `bash scripts/deploy-oci.sh --type oke --tenancy [Link to Secure Variable: OCI_TENANCY_OCID] --compartment [Link to Secure Variable: OCI_COMPARTMENT_OCID] --region [Link to Secure Variable: OCI_REGION] --vcn-id [Link to Secure Variable: OCI_VCN_OCID] --subnet-id [Link to Secure Variable: OCI_SUBNET_OCID] --availability-domain [Link to Secure Variable: OCI_AVAILABILITY_DOMAIN]`.
 2. Access: kubectl port-forward svc/mcp-oci-service 8000:8000 -n default.
 
 ## 6. OKE (Terraform)
 1. Update ops/terraform/vars.tf with your values.
-2. Run deploy script: `bash scripts/deploy-oci.sh --type oke --use-terraform true --tenancy your-tenancy --compartment your-compartment --region your-region --vcn-id your-vcn --subnet-id your-subnet --availability-domain your-ad`.
+2. Run deploy script: `bash scripts/deploy-oci.sh --type oke --use-terraform true --tenancy [Link to Secure Variable: OCI_TENANCY_OCID] --compartment [Link to Secure Variable: OCI_COMPARTMENT_OCID] --region [Link to Secure Variable: OCI_REGION] --vcn-id [Link to Secure Variable: OCI_VCN_OCID] --subnet-id [Link to Secure Variable: OCI_SUBNET_OCID] --availability-domain [Link to Secure Variable: OCI_AVAILABILITY_DOMAIN]`.
 3. Access: Same as CLI OKE.
 
 **Test Auth**: `oci os bucket list --auth security=instance_principal`.

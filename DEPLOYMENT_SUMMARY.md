@@ -47,12 +47,12 @@ All scripts are located in `/scripts/deploy/` and are executable:
 
 #### Environment Templates
 - `.env.local` - Auto-generated local settings
-- `.env.cloud` - Cloud deployment variables
+- OCI Vault injected environment variables - Cloud/production deployments
 
 ### 4. **Cloud Infrastructure** ☁️
 
 #### OCI Compute Instance (Example)
-- **Instance ID**: ocid1.instance.oc1..example
+- **Instance ID**: [Link to Secure Variable: OCI_INSTANCE_OCID]
 - **Public IP**: <public-ip>
 - **Shape**: VM.Standard.E4.Flex (2 OCPU, 32GB RAM)
 - **Region**: eu-frankfurt-1

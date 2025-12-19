@@ -56,7 +56,7 @@ Environment configuration
 - Configure OCI in your shell or system:
   - export OCI_PROFILE=DEFAULT
   - export OCI_REGION=eu-frankfurt-1
-  - Optional: export COMPARTMENT_OCID=ocid1.compartment.oc1..example
+  - Optional: export COMPARTMENT_OCID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
   - Optional: export MCP_OCI_PRIVACY=true
   - Optional OTLP: export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 - If your VS Code environment does not inherit your shell, set these variables in your OS environment or a devcontainer.

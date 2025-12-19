@@ -6,6 +6,19 @@ import typing as t
 import warnings
 import time
 
+# Load .env.local early, before any environment variable access
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+    
+    # Find repo root (3 levels up from mcp_oci_common/)
+    _repo_root = Path(__file__).resolve().parents[2]
+    # Load .env.local first (highest priority)
+    load_dotenv(_repo_root / ".env.local", override=False)
+except Exception:
+    # dotenv not available or path issues - continue without it
+    pass
+
 
 class ObservabilityImportError(ImportError):
     """Custom exception for observability dependency import failures with actionable guidance."""
@@ -57,25 +70,56 @@ def _lazy_import_opentelemetry():
         from opentelemetry import trace, metrics
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
-        )
         from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-            OTLPMetricExporter,
-        )
         from opentelemetry.sdk.resources import Resource
+
+        # Prefer HTTP/protobuf exporters when available (OCI APM endpoint is HTTP).
+        # Fall back to gRPC exporters (typical localhost collector setups).
+        OTLPSpanExporterGrpc = None
+        OTLPMetricExporterGrpc = None
+        OTLPSpanExporterHttp = None
+        OTLPMetricExporterHttp = None
+
+        try:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore
+                OTLPSpanExporter as _OTLPSpanExporterHttp,
+            )
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import (  # type: ignore
+                OTLPMetricExporter as _OTLPMetricExporterHttp,
+            )
+
+            OTLPSpanExporterHttp = _OTLPSpanExporterHttp
+            OTLPMetricExporterHttp = _OTLPMetricExporterHttp
+        except Exception:
+            # HTTP exporters are optional
+            pass
+
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (  # type: ignore
+                OTLPSpanExporter as _OTLPSpanExporterGrpc,
+            )
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (  # type: ignore
+                OTLPMetricExporter as _OTLPMetricExporterGrpc,
+            )
+
+            OTLPSpanExporterGrpc = _OTLPSpanExporterGrpc
+            OTLPMetricExporterGrpc = _OTLPMetricExporterGrpc
+        except Exception:
+            # gRPC exporters are optional
+            pass
 
         _otel_modules = {
             "trace": trace,
             "metrics": metrics,
             "TracerProvider": TracerProvider,
             "BatchSpanProcessor": BatchSpanProcessor,
-            "OTLPSpanExporter": OTLPSpanExporter,
             "MeterProvider": MeterProvider,
             "PeriodicExportingMetricReader": PeriodicExportingMetricReader,
-            "OTLPMetricExporter": OTLPMetricExporter,
+            "OTLPSpanExporterGrpc": OTLPSpanExporterGrpc,
+            "OTLPMetricExporterGrpc": OTLPMetricExporterGrpc,
+            "OTLPSpanExporterHttp": OTLPSpanExporterHttp,
+            "OTLPMetricExporterHttp": OTLPMetricExporterHttp,
             "Resource": Resource,
         }
         _OTEL_AVAILABLE = True
@@ -189,6 +233,75 @@ def _normalize_otlp_endpoint(ep: str | None) -> str | None:
     return ep
 
 
+def _otel_tracing_enabled() -> bool:
+    return os.getenv("OTEL_TRACING_ENABLED", "true").lower() == "true"
+
+
+def _infer_otlp_transport(endpoint: str) -> str:
+    # OCI APM endpoints are HTTPS URLs with a path like /20200101/opentelemetry.
+    if endpoint.startswith("http://") or endpoint.startswith("https://"):
+        return "http"
+    return "grpc"
+
+
+def _get_otlp_export_config(endpoint: str | None) -> tuple[str, str, dict[str, str] | None]:
+    """
+    Determine OTLP exporter transport + endpoint + headers.
+
+    Priority:
+    1) explicit `endpoint` argument
+    2) OCI APM env vars (OCI_APM_ENDPOINT) - takes precedence when available
+    3) OTEL_EXPORTER_OTLP_ENDPOINT env var
+    4) Local collector fallback (only if OCI APM not configured and local not disabled)
+    """
+    ep = endpoint
+    headers: dict[str, str] | None = None
+
+    # Prioritize OCI APM configuration
+    if _otel_tracing_enabled():
+        oci_ep = os.getenv("OCI_APM_ENDPOINT")
+        oci_key = os.getenv("OCI_APM_PRIVATE_DATA_KEY")
+        if oci_ep and oci_key:
+            # OCI APM takes precedence
+            ep = oci_ep
+            headers = {"Authorization": f"dataKey {oci_key}"}
+            # Ensure we use HTTP protocol for OCI APM
+            transport = _infer_otlp_transport(ep)
+            return transport, ep, headers
+
+    # Fall back to explicit OTEL endpoint if OCI APM not configured
+    if not ep:
+        ep = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+    # If local OTEL is disabled and no endpoint configured, disable tracing
+    if not ep and os.getenv("OTEL_DISABLE_LOCAL", "false").lower() == "true":
+        return "none", "", None
+
+    # Final fallback to local collector (only if not disabled)
+    if not ep:
+        if os.getenv("OTEL_DISABLE_LOCAL", "false").lower() != "true":
+            # Keep backwards compatibility with local collector defaults.
+            ep = "localhost:4317"
+        else:
+            # Local disabled and no endpoint - disable tracing
+            return "none", "", None
+
+    transport = _infer_otlp_transport(ep)
+
+    # Allow explicit OTLP headers (overrides OCI APM headers if set)
+    raw_headers = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
+    if raw_headers:
+        parsed: dict[str, str] = {}
+        for part in raw_headers.split(","):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                parsed[k.strip()] = v.strip()
+        if parsed:
+            headers = parsed
+
+    return transport, ep, headers
+
+
 def _build_resource(service_name: str, service_namespace: str | None = None):
     """Build OpenTelemetry resource with lazy import and graceful fallback."""
     otel_available, otel_modules = _lazy_import_opentelemetry()
@@ -224,6 +337,9 @@ def init_tracing(
     This is idempotent: calling it multiple times will not re-create providers.
     Returns None if OpenTelemetry is not available.
     """
+    if not _otel_tracing_enabled():
+        return None
+
     otel_available, otel_modules = _lazy_import_opentelemetry()
     if not otel_available:
         warnings.warn(
@@ -236,21 +352,43 @@ def init_tracing(
     trace = otel_modules["trace"]
     TracerProvider = otel_modules["TracerProvider"]
     BatchSpanProcessor = otel_modules["BatchSpanProcessor"]
-    OTLPSpanExporter = otel_modules["OTLPSpanExporter"]
 
     current_provider = trace.get_tracer_provider()
     if isinstance(current_provider, TracerProvider):
         # Already initialized; return tracer for the requested service name.
         return trace.get_tracer(service_name)
 
-    exporter_endpoint = _normalize_otlp_endpoint(
-        endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
-    )
+    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint)
+    
+    # If transport is "none", tracing is disabled
+    if transport == "none":
+        warnings.warn(
+            f"Tracing disabled for {service_name}: No OTLP endpoint configured and local OTEL disabled",
+            UserWarning,
+            stacklevel=2,
+        )
+        return None
+    
     resource = _build_resource(service_name, service_namespace)
 
     try:
         provider = TracerProvider(resource=resource)
-        span_exporter = OTLPSpanExporter(endpoint=exporter_endpoint, insecure=insecure)
+        if transport == "http":
+            exporter_cls = otel_modules.get("OTLPSpanExporterHttp")
+            if not exporter_cls:
+                raise RuntimeError(
+                    "HTTP OTLP exporter not installed. Install `opentelemetry-exporter-otlp-proto-http`."
+                )
+            span_exporter = exporter_cls(endpoint=exporter_endpoint, headers=headers)
+        else:
+            exporter_cls = otel_modules.get("OTLPSpanExporterGrpc")
+            if not exporter_cls:
+                raise RuntimeError(
+                    "gRPC OTLP exporter not installed. Install `opentelemetry-exporter-otlp-proto-grpc`."
+                )
+            span_exporter = exporter_cls(
+                endpoint=_normalize_otlp_endpoint(exporter_endpoint), insecure=insecure
+            )
         provider.add_span_processor(BatchSpanProcessor(span_exporter))
         trace.set_tracer_provider(provider)
         return trace.get_tracer(service_name)
@@ -274,6 +412,9 @@ def init_metrics(
     This is idempotent: calling it multiple times will not re-create providers.
     Returns None if OpenTelemetry is not available.
     """
+    if not _otel_tracing_enabled():
+        return None
+
     otel_available, otel_modules = _lazy_import_opentelemetry()
     if not otel_available:
         warnings.warn(
@@ -286,20 +427,33 @@ def init_metrics(
     metrics = otel_modules["metrics"]
     MeterProvider = otel_modules["MeterProvider"]
     PeriodicExportingMetricReader = otel_modules["PeriodicExportingMetricReader"]
-    OTLPMetricExporter = otel_modules["OTLPMetricExporter"]
 
     current_provider = metrics.get_meter_provider()
     if isinstance(current_provider, MeterProvider):
         # Already initialized; return meter for the requested name.
         return metrics.get_meter(meter_name)
 
-    exporter_endpoint = _normalize_otlp_endpoint(
-        endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
-    )
+    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint)
 
     try:
+        if transport == "http":
+            exporter_cls = otel_modules.get("OTLPMetricExporterHttp")
+            if not exporter_cls:
+                raise RuntimeError(
+                    "HTTP OTLP metric exporter not installed. Install `opentelemetry-exporter-otlp-proto-http`."
+                )
+            metric_exporter = exporter_cls(endpoint=exporter_endpoint, headers=headers)
+        else:
+            exporter_cls = otel_modules.get("OTLPMetricExporterGrpc")
+            if not exporter_cls:
+                raise RuntimeError(
+                    "gRPC OTLP metric exporter not installed. Install `opentelemetry-exporter-otlp-proto-grpc`."
+                )
+            metric_exporter = exporter_cls(
+                endpoint=_normalize_otlp_endpoint(exporter_endpoint), insecure=insecure
+            )
         metric_reader = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=exporter_endpoint, insecure=insecure)
+            metric_exporter
         )
         provider = MeterProvider(
             resource=_build_resource(meter_name), metric_readers=[metric_reader]

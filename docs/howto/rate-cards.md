@@ -6,7 +6,7 @@ This guide shows how to discover your subscription IDs and retrieve list prices 
 Serve the OSUB server and list subscriptions for your tenancy:
 ```
 mcp-oci-serve-osub --profile DEFAULT --region eu-frankfurt-1
-mcp-oci call osub oci:osub:list-subscriptions --params '{"tenancy_id":"ocid1.tenancy..."}'
+mcp-oci call osub oci:osub:list-subscriptions --params '{"tenancy_id":"[Link to Secure Variable: OCI_TENANCY_OCID]"}'
 ```
 Copy a `subscriptionId` from the output.
 
@@ -14,7 +14,7 @@ Copy a `subscriptionId` from the output.
 With a subscription ID, list rate cards:
 ```
 mcp-oci-serve-usageapi --profile DEFAULT --region eu-frankfurt-1
-mcp-oci call usageapi oci:usageapi:list-rate-cards --params '{"subscription_id":"ocid1.subscription..."}'
+mcp-oci call usageapi oci:usageapi:list-rate-cards --params '{"subscription_id":"[Link to Secure Variable: OCI_SUBSCRIPTION_OCID]"}'
 ```
 Optional filters:
 - Time window: `time_from`, `time_to` (midnight UTC recommended); example: `"2025-01-01T00:00:00Z"`

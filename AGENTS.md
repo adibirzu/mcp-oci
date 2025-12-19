@@ -9,6 +9,8 @@ The MCP-OCI server includes a composable skills layer following the [skillz patt
 | `CostAnalysisSkill` | Cost analysis, trending, optimization | `analyze_cost_trend`, `detect_anomalies`, `generate_optimization_report` |
 | `InventoryAuditSkill` | Resource discovery, capacity planning | `run_full_discovery`, `generate_capacity_report`, `generate_audit_report` |
 | `NetworkDiagnosticsSkill` | Network topology, security assessment | `analyze_topology`, `assess_security`, `generate_network_report` |
+| `ComputeManagementSkill` | Fleet health, performance insights, rightsizing | `assess_fleet_health`, `analyze_instance_performance`, `recommend_rightsizing`, `generate_fleet_report` |
+| `SecurityPostureSkill` | Cloud Guard + IAM posture analysis | `assess_cloud_guard_posture`, `assess_iam_security`, `generate_security_report` |
 
 Skills documentation: `mcp_servers/skills/SKILLS_GUIDE.md`
 

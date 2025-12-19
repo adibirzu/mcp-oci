@@ -83,8 +83,7 @@ cd /Users/abirzu/dev/mcp-oci
 
 ### Environment Variables
 - `.env.local` - Local development
-- `.env.cloud` - Cloud deployment
-- `.env.production` - Production settings
+- OCI Vault injected environment variables - Cloud/production deployments
 
 ### Connection Configurations
 - `configs/connections/local.json`

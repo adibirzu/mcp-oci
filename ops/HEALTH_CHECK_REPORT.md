@@ -80,7 +80,7 @@ Verified trace from `oci-mcp-cost-enhanced`:
 
 ### Fixed Issues ✅
 
-1. **`.env` file** - Changed from `http://localhost:4317` to `localhost:4317`
+1. **`.env.local` file** - Changed from `http://localhost:4317` to `localhost:4317`
 2. **`start-mcp-server.sh`** - Changed default from `http://localhost:4317` to `localhost:4317`
 3. **`ops/run-local.sh`** - Changed default from `http://localhost:4317` to `localhost:4317`
 4. **`docker-compose.yml`** - Added port mappings for host access

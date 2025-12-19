@@ -147,12 +147,12 @@ PORT=3002                           # HTTP server port
 # LLM Provider Configuration
 LLM_PROVIDER=anthropic              # anthropic, openai
 LLM_MODEL=claude-sonnet-4-20250514  # Model to use
-ANTHROPIC_API_KEY=sk-ant-...        # Anthropic API key
-OPENAI_API_KEY=sk-...               # OpenAI API key (alternative)
+ANTHROPIC_API_KEY=[Link to Secure Variable: ANTHROPIC_API_KEY]        # Anthropic API key
+OPENAI_API_KEY=[Link to Secure Variable: OPENAI_API_KEY]              # OpenAI API key (alternative)
 
 # Slack Bot Configuration
-SLACK_BOT_TOKEN=xoxb-...            # Slack bot token
-SLACK_APP_TOKEN=xapp-...            # Slack app token (Socket Mode)
+SLACK_BOT_TOKEN=[Link to Secure Variable: SLACK_BOT_TOKEN]            # Slack bot token
+SLACK_APP_TOKEN=[Link to Secure Variable: SLACK_APP_TOKEN]            # Slack app token (Socket Mode)
 SLACK_SIGNING_SECRET=...            # Slack signing secret
 SLACK_BOT_ENABLED=true              # Enable/disable Slack bot
 
@@ -161,8 +161,8 @@ MCP_OCI_PYTHON=/path/to/python      # Python interpreter for MCP servers
 MCP_OCI_PATH=/path/to/mcp-oci       # Path to MCP servers repository
 
 # OpenTelemetry / OCI APM
-OCI_APM_ENDPOINT=https://...        # OCI APM endpoint
-OCI_APM_PRIVATE_DATA_KEY=...        # OCI APM private data key
+OCI_APM_ENDPOINT=[Link to Secure Variable: OCI_APM_ENDPOINT]
+OCI_APM_PRIVATE_DATA_KEY=[Link to Secure Variable: OCI_APM_PRIVATE_DATA_KEY]
 OTEL_SERVICE_NAME=oci-ops-agent     # Service name in traces
 OTEL_TRACING_ENABLED=true           # Enable/disable tracing
 ```
