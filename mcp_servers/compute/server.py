@@ -13,6 +13,16 @@ from mcp_oci_common.session import get_client
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations, validate_and_log_tools
 from mcp_oci_common.cache import get_cache
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 
@@ -22,7 +32,7 @@ init_tracing(service_name="oci-mcp-compute")
 init_metrics()
 tracer = trace.get_tracer("oci-mcp-compute")
 
-def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str] = None, lifecycle_state: Optional[str] = None):
+def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str] = None, lifecycle_state: Optional[str] = None, include_volumes: bool = True, include_ips: bool = True):
     """Internal function to fetch instances from OCI"""
     config = get_oci_config()
     if region:
@@ -49,28 +59,47 @@ def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str]
     response = list_call_get_all_results(compute_client.list_instances, **kwargs)
     instances = response.data
 
-    # Enhance instance data with IP addresses
+    # Enhance instance data with IP addresses and volumes
     enhanced_instances = []
     for inst in instances:
+        instance_compartment = getattr(inst, 'compartment_id', compartment)
         instance_data = {
             'id': inst.id,
             'display_name': inst.display_name,
             'lifecycle_state': inst.lifecycle_state,
             'shape': inst.shape,
             'availability_domain': getattr(inst, 'availability_domain', ''),
-            'compartment_id': getattr(inst, 'compartment_id', compartment),
-            'time_created': getattr(inst, 'time_created', '').isoformat() if hasattr(inst, 'time_created') and inst.time_created else ''
+            'compartment_id': instance_compartment,
+            'time_created': getattr(inst, 'time_created', '').isoformat() if hasattr(inst, 'time_created') and inst.time_created else '',
+            'region': config.get('region', '')
         }
 
-        # Add IP addresses if instance is running
-        if inst.lifecycle_state == 'RUNNING':
-            ip_info = _get_instance_ips(inst.id)
-            instance_data.update({
-                'private_ip': ip_info.get('primary_private_ip'),
-                'public_ip': ip_info.get('primary_public_ip'),
-                'all_private_ips': ip_info.get('private_ips', []),
-                'all_public_ips': ip_info.get('public_ips', [])
-            })
+        # Add shape configuration if available
+        if hasattr(inst, 'shape_config'):
+            shape_config = inst.shape_config
+            instance_data['shape_config'] = {
+                'ocpus': getattr(shape_config, 'ocpus', None),
+                'memory_in_gbs': getattr(shape_config, 'memory_in_gbs', None),
+                'baseline_ocpu_utilization': getattr(shape_config, 'baseline_ocpu_utilization', None)
+            }
+
+        # Add IP addresses if requested and instance is running
+        if include_ips:
+            if inst.lifecycle_state == 'RUNNING':
+                ip_info = _get_instance_ips(inst.id)
+                instance_data.update({
+                    'private_ip': ip_info.get('primary_private_ip'),
+                    'public_ip': ip_info.get('primary_public_ip'),
+                    'all_private_ips': ip_info.get('private_ips', []),
+                    'all_public_ips': ip_info.get('public_ips', [])
+                })
+            else:
+                instance_data.update({
+                    'private_ip': None,
+                    'public_ip': None,
+                    'all_private_ips': [],
+                    'all_public_ips': []
+                })
         else:
             instance_data.update({
                 'private_ip': None,
@@ -78,6 +107,21 @@ def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str]
                 'all_private_ips': [],
                 'all_public_ips': []
             })
+
+        # Add volume information (boot volumes and block volumes) if requested
+        if include_volumes:
+            volumes_info = _get_instance_volumes(inst.id, instance_compartment)
+            instance_data['boot_volumes'] = volumes_info.get('boot_volumes', [])
+            instance_data['block_volumes'] = volumes_info.get('block_volumes', [])
+            
+            # Calculate total volume size for quick reference
+            total_boot_size = sum(bv.get('size_in_gbs', 0) for bv in volumes_info.get('boot_volumes', []))
+            total_block_size = sum(bv.get('size_in_gbs', 0) for bv in volumes_info.get('block_volumes', []))
+            instance_data['total_volume_size_gb'] = total_boot_size + total_block_size
+        else:
+            instance_data['boot_volumes'] = []
+            instance_data['block_volumes'] = []
+            instance_data['total_volume_size_gb'] = 0
 
         enhanced_instances.append(instance_data)
 
@@ -87,6 +131,8 @@ def list_instances(
     compartment_id: Optional[str] = None,
     region: Optional[str] = None,
     lifecycle_state: Optional[str] = None,
+    include_volumes: bool = True,
+    include_ips: bool = True,
     force_refresh: bool = False
 ) -> List[Dict]:
     with tool_span(tracer, "list_instances", mcp_server="oci-mcp-compute") as span:
@@ -96,7 +142,9 @@ def list_instances(
         params = {
             'compartment_id': compartment_id,
             'region': region,
-            'lifecycle_state': lifecycle_state
+            'lifecycle_state': lifecycle_state,
+            'include_volumes': include_volumes,
+            'include_ips': include_ips
         }
 
         try:
@@ -105,7 +153,7 @@ def list_instances(
                 server_name="oci-mcp-compute",
                 operation="list_instances",
                 params=params,
-                fetch_func=lambda: _fetch_instances(compartment_id, region, lifecycle_state),
+                fetch_func=lambda: _fetch_instances(compartment_id, region, lifecycle_state, include_volumes, include_ips),
                 force_refresh=force_refresh
             )
 
@@ -326,6 +374,82 @@ def _safe_serialize(obj):
         except Exception:
             return {"unknown_type": str(type(obj))}
 
+def _get_instance_volumes(instance_id: str, compartment_id: str) -> Dict[str, Any]:
+    """Get boot volumes and block volumes attached to an instance"""
+    try:
+        config = get_oci_config()
+        compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
+        blockstorage_client = get_client(oci.core.BlockstorageClient, region=config.get("region"))
+
+        volumes_info = {
+            'boot_volumes': [],
+            'block_volumes': []
+        }
+
+        # Get boot volume attachments
+        try:
+            boot_volume_attachments = list_call_get_all_results(
+                compute_client.list_boot_volume_attachments,
+                compartment_id=compartment_id,
+                instance_id=instance_id
+            ).data
+
+            for attachment in boot_volume_attachments:
+                if attachment.lifecycle_state == 'ATTACHED':
+                    try:
+                        boot_volume = blockstorage_client.get_boot_volume(attachment.boot_volume_id).data
+                        volumes_info['boot_volumes'].append({
+                            'id': boot_volume.id,
+                            'display_name': boot_volume.display_name,
+                            'size_in_gbs': boot_volume.size_in_gbs,
+                            'vpus_per_gb': getattr(boot_volume, 'vpus_per_gb', None),
+                            'lifecycle_state': boot_volume.lifecycle_state,
+                            'attachment_id': attachment.id,
+                            'attachment_type': attachment.attachment_type
+                        })
+                    except Exception as e:
+                        logging.warning(f"Error getting boot volume {attachment.boot_volume_id}: {e}")
+                        continue
+        except Exception as e:
+            logging.warning(f"Error listing boot volume attachments for {instance_id}: {e}")
+
+        # Get block volume attachments
+        try:
+            volume_attachments = list_call_get_all_results(
+                compute_client.list_volume_attachments,
+                compartment_id=compartment_id,
+                instance_id=instance_id
+            ).data
+
+            for attachment in volume_attachments:
+                if attachment.lifecycle_state == 'ATTACHED':
+                    try:
+                        volume = blockstorage_client.get_volume(attachment.volume_id).data
+                        volumes_info['block_volumes'].append({
+                            'id': volume.id,
+                            'display_name': volume.display_name,
+                            'size_in_gbs': volume.size_in_gbs,
+                            'vpus_per_gb': getattr(volume, 'vpus_per_gb', None),
+                            'lifecycle_state': volume.lifecycle_state,
+                            'attachment_id': attachment.id,
+                            'attachment_type': attachment.attachment_type
+                        })
+                    except Exception as e:
+                        logging.warning(f"Error getting block volume {attachment.volume_id}: {e}")
+                        continue
+        except Exception as e:
+            logging.warning(f"Error listing volume attachments for {instance_id}: {e}")
+
+        return volumes_info
+
+    except Exception as e:
+        logging.error(f"Error getting instance volumes for {instance_id}: {e}")
+        return {
+            'boot_volumes': [],
+            'block_volumes': [],
+            'error': str(e)
+        }
+
 def _get_instance_ips(instance_id: str) -> Dict[str, Any]:
     """Get IP addresses for an instance by querying its VNICs"""
     try:
@@ -430,6 +554,310 @@ def get_instance_details_with_ips(instance_id: str) -> Dict[str, Any]:
             return {'error': str(e), 'instance_id': instance_id}
         except Exception as e:
             logging.error(f"Unexpected error getting instance details: {e}")
+            span.record_exception(e)
+            return {'error': str(e), 'instance_id': instance_id}
+
+def get_instance_cost(
+    instance_id: str,
+    time_window: str = "30d",
+    include_volumes: bool = True
+) -> Dict:
+    """Get cost breakdown for an instance including attached volumes"""
+    with tool_span(tracer, "get_instance_cost", mcp_server="oci-mcp-compute") as span:
+        try:
+            config = get_oci_config()
+            compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
+            usage_client = get_client(oci.usage_api.UsageapiClient, region=config.get("region"))
+
+            # Get instance details
+            instance_response = compute_client.get_instance(instance_id)
+            instance = instance_response.data
+            compartment_id = instance.compartment_id
+
+            # Calculate time window
+            end_time = datetime.utcnow()
+            if time_window.endswith('d'):
+                days = int(time_window[:-1])
+                start_time = end_time - timedelta(days=days)
+            elif time_window.endswith('h'):
+                hours = int(time_window[:-1])
+                start_time = end_time - timedelta(hours=hours)
+            else:
+                start_time = end_time - timedelta(days=30)
+
+            # Query usage API for compute costs
+            details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                tenant_id=config.get("tenancy"),
+                time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                granularity="DAILY",
+                query_type="COST",
+                group_by=["service", "resourceId"],
+                compartment_depth=10
+            )
+
+            # Filter by compartment and resource ID
+            details.filter = oci.usage_api.models.Filter(
+                operator="AND",
+                dimensions=[
+                    oci.usage_api.models.Dimension(
+                        key="compartmentId",
+                        value=compartment_id
+                    ),
+                    oci.usage_api.models.Dimension(
+                        key="resourceId",
+                        value=instance_id
+                    )
+                ]
+            )
+
+            try:
+                endpoint = getattr(usage_client.base_client, "endpoint", "")
+            except Exception:
+                endpoint = ""
+            add_oci_call_attributes(
+                span,
+                oci_service="UsageAPI",
+                oci_operation="RequestSummarizedUsages",
+                region=config.get("region"),
+                endpoint=endpoint,
+            )
+
+            response = usage_client.request_summarized_usages(
+                request_summarized_usages_details=details
+            )
+            try:
+                req_id = getattr(response, "headers", {}).get("opc-request-id")
+                if req_id:
+                    span.set_attribute("oci.request_id", req_id)
+            except Exception:
+                pass
+
+            items = getattr(getattr(response, "data", None), "items", None) or []
+
+            # Calculate costs by service
+            compute_cost = 0.0
+            block_storage_cost = 0.0
+            currency = "USD"
+
+            for item in items:
+                service = getattr(item, 'service', '')
+                amount = getattr(item, 'computed_amount', 0) or 0
+                if hasattr(item, 'currency') and getattr(item, 'currency'):
+                    currency = str(getattr(item, 'currency')).strip()
+
+                if service == 'Compute':
+                    compute_cost += float(amount)
+                elif service == 'Block Volume':
+                    block_storage_cost += float(amount)
+
+            # If volumes are included, also query for volume costs
+            volume_costs = {}
+            if include_volumes:
+                volumes_info = _get_instance_volumes(instance_id, compartment_id)
+                
+                # Query costs for boot volumes
+                for bv in volumes_info.get('boot_volumes', []):
+                    bv_details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                        tenant_id=config.get("tenancy"),
+                        time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                        time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                        granularity="DAILY",
+                        query_type="COST",
+                        group_by=["service", "resourceId"],
+                        compartment_depth=10
+                    )
+                    bv_details.filter = oci.usage_api.models.Filter(
+                        operator="AND",
+                        dimensions=[
+                            oci.usage_api.models.Dimension(
+                                key="compartmentId",
+                                value=compartment_id
+                            ),
+                            oci.usage_api.models.Dimension(
+                                key="resourceId",
+                                value=bv['id']
+                            )
+                        ]
+                    )
+                    try:
+                        bv_response = usage_client.request_summarized_usages(
+                            request_summarized_usages_details=bv_details
+                        )
+                        bv_items = getattr(getattr(bv_response, "data", None), "items", None) or []
+                        bv_cost = sum(float(getattr(item, 'computed_amount', 0) or 0) for item in bv_items)
+                        if bv_cost > 0:
+                            volume_costs[bv['id']] = {
+                                'name': bv['display_name'],
+                                'cost': bv_cost,
+                                'type': 'boot_volume'
+                            }
+                            block_storage_cost += bv_cost
+                    except Exception as e:
+                        logging.warning(f"Error getting boot volume cost for {bv['id']}: {e}")
+
+                # Query costs for block volumes
+                for bv in volumes_info.get('block_volumes', []):
+                    bv_details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+                        tenant_id=config.get("tenancy"),
+                        time_usage_started=start_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                        time_usage_ended=end_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                        granularity="DAILY",
+                        query_type="COST",
+                        group_by=["service", "resourceId"],
+                        compartment_depth=10
+                    )
+                    bv_details.filter = oci.usage_api.models.Filter(
+                        operator="AND",
+                        dimensions=[
+                            oci.usage_api.models.Dimension(
+                                key="compartmentId",
+                                value=compartment_id
+                            ),
+                            oci.usage_api.models.Dimension(
+                                key="resourceId",
+                                value=bv['id']
+                            )
+                        ]
+                    )
+                    try:
+                        bv_response = usage_client.request_summarized_usages(
+                            request_summarized_usages_details=bv_details
+                        )
+                        bv_items = getattr(getattr(bv_response, "data", None), "items", None) or []
+                        bv_cost = sum(float(getattr(item, 'computed_amount', 0) or 0) for item in bv_items)
+                        if bv_cost > 0:
+                            volume_costs[bv['id']] = {
+                                'name': bv['display_name'],
+                                'cost': bv_cost,
+                                'type': 'block_volume'
+                            }
+                            block_storage_cost += bv_cost
+                    except Exception as e:
+                        logging.warning(f"Error getting block volume cost for {bv['id']}: {e}")
+
+            total_cost = compute_cost + block_storage_cost
+
+            result = {
+                'instance_id': instance_id,
+                'instance_name': instance.display_name,
+                'time_period': {
+                    'start': start_time.isoformat(),
+                    'end': end_time.isoformat(),
+                    'window': time_window
+                },
+                'costs': {
+                    'compute': compute_cost,
+                    'block_storage': block_storage_cost,
+                    'total': total_cost,
+                    'currency': currency
+                },
+                'volume_costs': volume_costs if include_volumes else {}
+            }
+
+            span.set_attribute("instance.cost.total", total_cost)
+            span.set_attribute("instance.cost.compute", compute_cost)
+            span.set_attribute("instance.cost.storage", block_storage_cost)
+
+            return result
+
+        except oci.exceptions.ServiceError as e:
+            logging.error(f"Error getting instance cost: {e}")
+            span.record_exception(e)
+            return {'error': str(e), 'instance_id': instance_id}
+        except Exception as e:
+            logging.error(f"Unexpected error getting instance cost: {e}")
+            span.record_exception(e)
+            return {'error': str(e), 'instance_id': instance_id}
+
+def get_comprehensive_instance_details(
+    instance_id: str,
+    include_volumes: bool = True,
+    include_ips: bool = True,
+    include_costs: bool = False,
+    cost_time_window: str = "30d"
+) -> Dict[str, Any]:
+    """Get comprehensive instance details including configuration, IPs, volumes, and optionally costs"""
+    with tool_span(tracer, "get_comprehensive_instance_details", mcp_server="oci-mcp-compute") as span:
+        try:
+            config = get_oci_config()
+            compute_client = get_client(oci.core.ComputeClient, region=config.get("region"))
+
+            # Get instance details
+            instance_response = compute_client.get_instance(instance_id)
+            instance = instance_response.data
+            compartment_id = instance.compartment_id
+
+            # Build comprehensive instance info
+            instance_info = {
+                'id': instance.id,
+                'display_name': instance.display_name,
+                'lifecycle_state': instance.lifecycle_state,
+                'shape': instance.shape,
+                'availability_domain': getattr(instance, 'availability_domain', ''),
+                'compartment_id': compartment_id,
+                'region': config.get('region', ''),
+                'time_created': getattr(instance, 'time_created', '').isoformat() if hasattr(instance, 'time_created') and instance.time_created else '',
+            }
+
+            # Add shape configuration
+            if hasattr(instance, 'shape_config'):
+                shape_config = instance.shape_config
+                instance_info['shape_config'] = {
+                    'ocpus': getattr(shape_config, 'ocpus', None),
+                    'memory_in_gbs': getattr(shape_config, 'memory_in_gbs', None),
+                    'baseline_ocpu_utilization': getattr(shape_config, 'baseline_ocpu_utilization', None),
+                    'nvmes': getattr(shape_config, 'nvmes', None)
+                }
+
+            # Add IP addresses if requested
+            if include_ips:
+                ip_info = _get_instance_ips(instance_id)
+                instance_info.update({
+                    'private_ip': ip_info.get('primary_private_ip'),
+                    'public_ip': ip_info.get('primary_public_ip'),
+                    'all_private_ips': ip_info.get('private_ips', []),
+                    'all_public_ips': ip_info.get('public_ips', [])
+                })
+
+            # Add volume information if requested
+            if include_volumes:
+                volumes_info = _get_instance_volumes(instance_id, compartment_id)
+                instance_info['boot_volumes'] = volumes_info.get('boot_volumes', [])
+                instance_info['block_volumes'] = volumes_info.get('block_volumes', [])
+                
+                # Calculate total volume size
+                total_boot_size = sum(bv.get('size_in_gbs', 0) for bv in volumes_info.get('boot_volumes', []))
+                total_block_size = sum(bv.get('size_in_gbs', 0) for bv in volumes_info.get('block_volumes', []))
+                instance_info['total_volume_size_gb'] = total_boot_size + total_block_size
+
+            # Add cost information if requested
+            if include_costs:
+                cost_info = get_instance_cost(instance_id, time_window=cost_time_window, include_volumes=include_volumes)
+                if 'error' not in cost_info:
+                    instance_info['costs'] = cost_info.get('costs', {})
+                    instance_info['volume_costs'] = cost_info.get('volume_costs', {})
+
+            # Add metadata if available
+            if hasattr(instance, 'metadata') and instance.metadata:
+                instance_info['metadata'] = instance.metadata
+
+            # Add additional instance attributes
+            instance_info['image_id'] = getattr(instance, 'image_id', None)
+            instance_info['launch_mode'] = getattr(instance, 'launch_mode', None)
+            instance_info['launch_options'] = _safe_serialize(getattr(instance, 'launch_options', None))
+
+            span.set_attribute("instance.id", instance_id)
+            span.set_attribute("instance.state", instance.lifecycle_state)
+
+            return _safe_serialize(instance_info)
+
+        except oci.exceptions.ServiceError as e:
+            logging.error(f"Error getting comprehensive instance details: {e}")
+            span.record_exception(e)
+            return {'error': str(e), 'instance_id': instance_id}
+        except Exception as e:
+            logging.error(f"Unexpected error getting comprehensive instance details: {e}")
             span.record_exception(e)
             return {'error': str(e), 'instance_id': instance_id}
 
@@ -568,7 +996,7 @@ tools = [
     Tool.from_function(
         fn=list_instances,
         name="list_instances",
-        description="List compute instances"
+        description="List compute instances with their configuration, IP addresses, and attached volumes (boot volumes and block volumes). Returns instance name, IPs, shape, and volume information."
     ),
     Tool.from_function(
         fn=create_instance,
@@ -599,6 +1027,16 @@ tools = [
         fn=get_instance_details_with_ips,
         name="get_instance_details_with_ips",
         description="Get detailed instance information including all IP addresses (primary and secondary, public and private) - optimized for ShowOCI"
+    ),
+    Tool.from_function(
+        fn=get_instance_cost,
+        name="get_instance_cost",
+        description="Get cost breakdown for an instance including attached boot volumes and block volumes. Returns compute costs and storage costs separately."
+    ),
+    Tool.from_function(
+        fn=get_comprehensive_instance_details,
+        name="get_comprehensive_instance_details",
+        description="Get comprehensive instance details including configuration, IPs, volumes, and optionally costs. This is the recommended tool for getting all instance information in one call."
     ),
 ]
 

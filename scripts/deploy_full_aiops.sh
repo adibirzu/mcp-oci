@@ -10,26 +10,26 @@ set -euo pipefail
 echo "[ARCHIVED] deploy_full_aiops.sh is deprecated. See README for Linux installation and launcher." >&2
 exit 1
 
-# --- Bootstrap .env and OCI CLI/config if missing ---
-if [ ! -f .env ]; then
-  echo "No .env found. Create one now? [Y/n]"
+# --- Bootstrap .env.local and OCI CLI/config if missing ---
+if [ ! -f .env.local ]; then
+  echo "No .env.local found. Create one now? [Y/n]"
   read -r ans
   ans=${ans:-Y}
   if [[ "$ans" =~ ^[Yy]$ ]]; then
-    if [ -f .env.sample ]; then
-      echo "Creating .env from .env.sample..."
-      cp .env.sample .env
-      echo ".env created. Please review and edit values if needed."
+    if [ -f .env.local.example ]; then
+      echo "Creating .env.local from .env.local.example..."
+      cp .env.local.example .env.local
+      echo ".env.local created. Please review and edit values if needed."
     else
-      echo "Creating .env with guided prompts..."
+      echo "Creating .env.local with guided prompts..."
       default_profile=${OCI_PROFILE:-DEFAULT}
       default_region=${OCI_REGION:-eu-frankfurt-1}
-      default_comp=${COMPARTMENT_OCID:-ocid1.compartment.oc1..your-compartment-ocid}
+      default_comp=${COMPARTMENT_OCID:-}
       printf "OCI_PROFILE [%s]: " "$default_profile"; read -r v1; v1=${v1:-$default_profile}
       printf "OCI_REGION [%s]: " "$default_region"; read -r v2; v2=${v2:-$default_region}
-      printf "COMPARTMENT_OCID [%s]: " "$default_comp"; read -r v3; v3=${v3:-$default_comp}
+      printf "COMPARTMENT_OCID [[Link to Secure Variable: OCI_COMPARTMENT_OCID]]: "; read -r v3; v3=${v3:-$default_comp}
       printf "ALLOW_MUTATIONS [false]: "; read -r v4; v4=${v4:-false}
-      cat > .env <<EOF
+      cat > .env.local <<EOF
 OCI_PROFILE=$v1
 OCI_REGION=$v2
 COMPARTMENT_OCID=$v3
@@ -44,31 +44,31 @@ MCP_CACHE_TTL_STREAMING=1200
 
 # Optional: Web3 UX + Autonomous DB (wallet mode)
 # ORACLE_DB_USER=ADMIN
-# ORACLE_DB_PASSWORD=ChangeMe123!
-# ORACLE_DB_SERVICE=abcdefg_aiops_high
-# ORACLE_DB_WALLET_ZIP=/absolute/path/to/Wallet_AIOps.zip
-# ORACLE_DB_WALLET_PASSWORD=ChangeMe123!
+# ORACLE_DB_PASSWORD=[Link to Secure Variable: ORACLE_DB_PASSWORD]
+# ORACLE_DB_SERVICE=[Link to Secure Variable: ORACLE_DB_SERVICE]
+# ORACLE_DB_WALLET_ZIP=[Link to Secure Variable: ORACLE_DB_WALLET_ZIP]
+# ORACLE_DB_WALLET_PASSWORD=[Link to Secure Variable: ORACLE_DB_WALLET_PASSWORD]
 
 # Optional: Provision AJD on first deploy
-# ADMIN_PASSWORD=ChangeMe123!
-# DISPLAY_NAME=aiops-ajd
-# DB_NAME=AIOPSAJD
+# ADMIN_PASSWORD=[Link to Secure Variable: ADMIN_PASSWORD]
+# DISPLAY_NAME=[Link to Secure Variable: DISPLAY_NAME]
+# DB_NAME=[Link to Secure Variable: DB_NAME]
 
 # Optional: OCI Generative AI Agents chat proxy for Web3 UX
 # GAI_AGENT_ENDPOINT=http://localhost:8088/agents/chat
-# GAI_AGENT_API_KEY=your-api-key
+# GAI_AGENT_API_KEY=[Link to Secure Variable: GAI_AGENT_API_KEY]
 EOF
-      echo ".env written."
+      echo ".env.local written."
     fi
   else
-    echo "Skipping .env creation. You can copy from .env.example."
+    echo "Skipping .env.local creation. You can copy from .env.local.example."
   fi
 fi
 
-# Load .env if present
-if [ -f .env ]; then
+# Load .env.local if present
+if [ -f .env.local ]; then
   # shellcheck disable=SC2046
-  export $(grep -v '^#' .env | xargs -0 -I{} echo {} | tr '\n' ' ' | sed 's/ *$//') || true
+  export $(grep -v '^#' .env.local | xargs -0 -I{} echo {} | tr '\n' ' ' | sed 's/ *$//') || true
 fi
 
 # Ensure OCI CLI is installed and configured

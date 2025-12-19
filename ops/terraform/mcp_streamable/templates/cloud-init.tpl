@@ -55,7 +55,7 @@ services:
     image: mcp-oci:latest
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.local
     environment:
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
@@ -92,7 +92,7 @@ cat <<'BOOTSTRAP' >/home/opc/mcp-oci-cloud/bootstrap-mcp.sh
 set -euo pipefail
 
 WORKDIR="$(cd "$(dirname "$${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$${WORKDIR}/.env"
+ENV_FILE="$${WORKDIR}/.env.local"
 
 echo "[bootstrap] Preparing MCP-OCI environment file at $${ENV_FILE}"
 if [[ ! -f "$${ENV_FILE}" ]]; then

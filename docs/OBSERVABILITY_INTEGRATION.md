@@ -62,7 +62,7 @@ Choose your integration approach:
 ```bash
 # Environment configuration
 export OCI_MONITORING_NAMESPACE=mcp-oci
-export OCI_MONITORING_COMPARTMENT_ID=ocid1.compartment.oc1..example
+export OCI_MONITORING_COMPARTMENT_ID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # Enable OCI metrics export
 export OTEL_EXPORTER_OCI_ENABLED=true
@@ -164,7 +164,7 @@ Notes
 ```bash
 # Environment configuration
 export OCI_LOG_ANALYTICS_NAMESPACE=mcp-oci
-export OCI_LOG_ANALYTICS_LOG_GROUP_ID=ocid1.loggroup.oc1..example
+export OCI_LOG_ANALYTICS_LOG_GROUP_ID=[Link to Secure Variable: OCI_LOG_GROUP_OCID]
 
 # Enable log export
 export OTEL_EXPORTER_LOGGING_ENABLED=true
@@ -257,9 +257,9 @@ MCP servers emit structured logs compatible with OCI Logging Analytics:
 
 ```bash
 # APM Domain configuration
-export OCI_APM_DOMAIN_ID=ocid1.apmdomain.oc1..example
-export OCI_APM_PRIVATE_DATA_KEY=your-private-data-key
-export OCI_APM_PUBLIC_DATA_KEY=your-public-data-key
+export OCI_APM_DOMAIN_ID=[Link to Secure Variable: OCI_APM_DOMAIN_OCID]
+export OCI_APM_PRIVATE_DATA_KEY="[Link to Secure Variable: OCI_APM_PRIVATE_DATA_KEY]"
+export OCI_APM_PUBLIC_DATA_KEY="[Link to Secure Variable: OCI_APM_PUBLIC_DATA_KEY]"
 
 # Enable APM tracing
 export OTEL_EXPORTER_APM_ENABLED=true
@@ -333,7 +333,7 @@ export OTEL_EXPORTER_OCI_ENABLED=false
 export ENVIRONMENT=production
 export OTEL_EXPORTER_OCI_ENABLED=true
 export OCI_MONITORING_NAMESPACE=mcp-oci-prod
-export OCI_APM_DOMAIN_ID=ocid1.apmdomain.oc1..prod
+export OCI_APM_DOMAIN_ID=[Link to Secure Variable: OCI_APM_DOMAIN_OCID]
 ```
 
 ### Environment-Based Configuration
@@ -415,7 +415,7 @@ Create alerts in OCI Monitoring for critical MCP operations:
   "displayName": "MCP Tool Failures",
   "query": "mcp_tool_calls_total[1m]{outcome=\"error\"} > 5",
   "severity": "WARNING",
-  "destinations": ["ocid1.onssubscription.oc1..example"]
+  "destinations": ["[Link to Secure Variable: OCI_NOTIFICATION_SUBSCRIPTION_OCID]"]
 }
 ```
 

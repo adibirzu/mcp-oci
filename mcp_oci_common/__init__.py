@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from .config import (
     get_oci_config,
@@ -167,7 +169,11 @@ try:
                         "oci-mcp-inventory": int(
                             os.getenv("MCP_PORT_INVENTORY", "7009")
                         ),
+                        "oci-mcp-unified": int(os.getenv("MCP_PORT_UNIFIED", "7010")),
                         "oci-mcp-agents": int(os.getenv("MCP_PORT_AGENTS", "7011")),
+                        "oci-mcp-objectstorage": int(
+                            os.getenv("MCP_PORT_OBJECTSTORAGE", "7012")
+                        ),
                     }
                     port = port_map.get(
                         server_name, int(os.getenv("MCP_PORT_DEFAULT", "7099"))

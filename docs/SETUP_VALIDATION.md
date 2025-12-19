@@ -57,7 +57,7 @@ except Exception as e:
 ```bash
 # Verify repository structure
 test -f README.md && echo "✅ README exists"
-test -f .env.sample && echo "✅ Environment template exists"
+test -f .env.local.example && echo "✅ Environment template exists"
 test -d mcp_servers && echo "✅ Server modules exist"
 test -f requirements.txt && echo "✅ Dependencies defined"
 ```
@@ -100,7 +100,7 @@ for pkg in packages:
 
 ```bash
 # Copy and configure environment
-cp .env.sample .env
+cp .env.local.example .env.local
 
 # Required variables check
 echo "Checking required environment variables:"
@@ -341,7 +341,7 @@ echo "Checking for credentials in codebase:"
 # Check for common credential patterns
 if find . -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" | \
    xargs grep -l "password\|secret\|key" | \
-   grep -v "sample\|example\|doc\|test\|\.env\.sample" | \
+   grep -v "sample\|example\|doc\|test\|\.env.local\.example" | \
    head -1 >/dev/null; then
     echo "⚠️ Potential credentials found - review manually"
 else
@@ -363,15 +363,15 @@ fi
 
 ```bash
 # Check environment file security
-if [[ -f .env ]]; then
-    echo "⚠️ .env file exists - ensure it's in .gitignore"
-    if grep -q "^\.env$" .gitignore 2>/dev/null; then
-        echo "✅ .env is properly ignored by git"
+if [[ -f .env.local ]]; then
+    echo "⚠️ .env.local file exists - ensure it's in .gitignore"
+    if grep -q "^\.env.local$" .gitignore 2>/dev/null; then
+        echo "✅ .env.local is properly ignored by git"
     else
-        echo "❌ .env is NOT in .gitignore"
+        echo "❌ .env.local is NOT in .gitignore"
     fi
 else
-    echo "✅ No .env file in repository"
+    echo "✅ No .env.local file in repository"
 fi
 ```
 
@@ -386,7 +386,7 @@ docs=(
     "docs/INDIVIDUAL_SERVERS.md"
     "docs/UX_OVERVIEW.md"
     "docs/OBSERVABILITY_INTEGRATION.md"
-    ".env.sample"
+    ".env.local.example"
 )
 
 echo "Checking documentation files:"
@@ -433,7 +433,7 @@ done
 echo "🧪 Running end-to-end validation..."
 
 # 1. Environment setup
-source .env 2>/dev/null || echo "No .env file found"
+source .env.local 2>/dev/null || echo "No .env.local file found"
 
 # 2. Start observability
 cd ops && ./start-observability.sh && cd ..
@@ -441,7 +441,7 @@ cd ops && ./start-observability.sh && cd ..
 # 3. Test a simple MCP operation
 python -c "
 import os
-os.environ.setdefault('COMPARTMENT_OCID', 'ocid1.compartment.oc1..example')
+os.environ.setdefault('COMPARTMENT_OCID', '[Link to Secure Variable: OCI_COMPARTMENT_OCID]')
 try:
     from mcp_servers.compute.server import app
     # This would normally require actual MCP client interaction
@@ -483,7 +483,7 @@ oci setup config
 **Permission Denied**
 ```bash
 # Check IAM policies
-oci iam user get --user-id [your-user-ocid]
+oci iam user get --user-id [Link to Secure Variable: OCI_USER_OCID]
 ```
 
 ### Runtime Issues

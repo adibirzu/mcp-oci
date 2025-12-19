@@ -119,7 +119,7 @@ Get comprehensive tenancy information with cache enrichment.
   "summary": "Tenancy: MyTenancy (Home: us-ashburn-1)",
   "data": {
     "tenancy": {
-      "id": "ocid1.tenancy.oc1...",
+      "id": "[Link to Secure Variable: OCI_TENANCY_OCID]",
       "name": "MyTenancy",
       "description": "Production Tenancy",
       "home_region": "us-ashburn-1",
@@ -255,14 +255,14 @@ if stats["data"]["needs_refresh"]:
 ```python
 # Cost analysis now includes compartment names
 cost_data = mcp_client.call_tool("cost_by_compartment_daily", {
-    "tenancy_ocid": "ocid1.tenancy...",
+    "tenancy_ocid": "[Link to Secure Variable: OCI_TENANCY_OCID]",
     "time_usage_started": "2025-11-01",
     "time_usage_ended": "2025-11-19"
 })
 
 # Response includes both OCIDs and human-readable names
 # {
-#   "compartment_id": "ocid1.compartment...",
+#   "compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
 #   "compartment_name": "Production",  # <-- From cache!
 #   "cost": 1234.56
 # }

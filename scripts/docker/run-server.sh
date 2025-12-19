@@ -44,6 +44,7 @@ declare -A SERVER_MODULES=(
   ["blockstorage"]="mcp_servers.blockstorage.server"
   ["loadbalancer"]="mcp_servers.loadbalancer.server"
   ["loganalytics"]="mcp_servers.loganalytics.server"
+  ["unified"]="mcp_servers.unified.server"
   ["agents"]="mcp_servers.agents.server"
 )
 

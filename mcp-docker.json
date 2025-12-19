@@ -72,8 +72,24 @@
     "transport": "stdio"
   },
   {
+    "name": "oci-mcp-objectstorage",
+    "command": ["scripts/docker/run-server.sh", "objectstorage"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {},
+    "transport": "stdio"
+  },
+  {
     "name": "oci-mcp-loganalytics",
     "command": ["scripts/docker/run-server.sh", "loganalytics"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {},
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-unified",
+    "command": ["scripts/docker/run-server.sh", "unified"],
     "args": [],
     "cwd": "${PWD}",
     "env": {},

@@ -10,7 +10,7 @@ This guide shows common cost analytics using the Usage API server and the showus
 ```
 mcp-oci-serve-usageapi --profile DEFAULT --region us-phoenix-1
 mcp-oci call usageapi oci:usageapi:request-summarized-usages --params '{
-  "tenant_id":"ocid1.tenancy...",
+  "tenant_id":"[Link to Secure Variable: OCI_TENANCY_OCID]",
   "time_usage_started":"2025-01-01T00:00:00Z",
   "time_usage_ended":"2025-01-31T23:59:59Z",
   "granularity":"DAILY",

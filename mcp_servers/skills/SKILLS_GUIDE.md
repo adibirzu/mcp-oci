@@ -52,9 +52,9 @@ from mcp_servers.skills import CostAnalysisSkill
 
 skill = CostAnalysisSkill()
 result = skill.analyze_cost_trend(
-    tenancy_ocid="ocid1.tenancy.oc1..xxx",
+    tenancy_ocid="[Link to Secure Variable: OCI_TENANCY_OCID]",
     months_back=6,
-    budget_ocid="ocid1.budget.oc1..xxx"  # optional
+    budget_ocid="[Link to Secure Variable: OCI_RESOURCE_OCID]"  # optional
 )
 
 # Returns:
@@ -72,7 +72,7 @@ Detect cost anomalies and spikes with explanations.
 
 ```python
 result = skill.detect_anomalies(
-    tenancy_ocid="ocid1.tenancy.oc1..xxx",
+    tenancy_ocid="[Link to Secure Variable: OCI_TENANCY_OCID]",
     time_start="2025-01-01",
     time_end="2025-01-31",
     threshold=2.0,
@@ -107,7 +107,7 @@ from mcp_servers.skills import InventoryAuditSkill
 
 skill = InventoryAuditSkill()
 result = skill.run_full_discovery(
-    compartment_id="ocid1.compartment.oc1..xxx",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     region="us-phoenix-1"
 )
 
@@ -127,7 +127,7 @@ Generate compute capacity planning report with utilization analysis.
 
 ```python
 result = skill.generate_capacity_report(
-    compartment_id="ocid1.compartment.oc1..xxx"
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]"
 )
 
 # Returns:
@@ -165,7 +165,7 @@ from mcp_servers.skills import NetworkDiagnosticsSkill
 
 skill = NetworkDiagnosticsSkill()
 result = skill.analyze_topology(
-    compartment_id="ocid1.compartment.oc1..xxx"
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]"
 )
 
 # Returns:
@@ -188,7 +188,7 @@ Assess network security posture with scoring.
 
 ```python
 result = skill.assess_security(
-    compartment_id="ocid1.compartment.oc1..xxx"
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]"
 )
 
 # Returns:

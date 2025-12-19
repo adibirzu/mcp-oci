@@ -14,6 +14,16 @@ from mcp_oci_common.session import get_client
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # Set up tracing with proper Resource
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-network")
 init_tracing(service_name="oci-mcp-network")

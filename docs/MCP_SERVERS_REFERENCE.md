@@ -51,7 +51,7 @@ This document provides comprehensive documentation for all MCP (Model Context Pr
 # List instances
 curl -X POST http://localhost:8080/servers/oci-compute/tools/list_instances \
   -H "Content-Type: application/json" \
-  -d '{"arguments": {"compartment_id": "ocid1.compartment..."}}'
+  -d '{"arguments": {"compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]"}}'
 ```
 
 ---
@@ -313,8 +313,8 @@ The gateway supports OpenTelemetry tracing to OCI APM:
 
 ```bash
 # Enable OCI APM
-export OCI_APM_ENDPOINT="https://your-apm.apm-agt.us-phoenix-1.oci.oraclecloud.com"
-export OCI_APM_PRIVATE_KEY="your-private-key"
+export OCI_APM_ENDPOINT="[Link to Secure Variable: OCI_APM_ENDPOINT]"
+export OCI_APM_PRIVATE_DATA_KEY="[Link to Secure Variable: OCI_APM_PRIVATE_DATA_KEY]"
 
 # Enable console tracing for debugging
 export OTEL_CONSOLE_EXPORT=true

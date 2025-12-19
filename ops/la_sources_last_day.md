@@ -1,5 +1,5 @@
 Logging Analytics Namespace: frxfz3gch4zb
-Compartment (incl. subtree): ocid1.tenancy.oc1..aaaaaaaaxzpxbcag7zgamh2erlggqro3y63tvm2rbkkjz4z2zskvagupiz7a
+Compartment (incl. subtree): [Link to Secure Variable: OCI_TENANCY_OCID]
 
 | Log Source | Events (last 24h) |
 |------------|-------------------:|

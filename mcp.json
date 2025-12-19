@@ -9,7 +9,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -25,7 +25,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -41,7 +41,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -57,7 +57,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true"
     },
     "transport": "stdio"
@@ -72,7 +72,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "LA_NAMESPACE": "${LA_NAMESPACE}"
     },
@@ -88,7 +88,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -104,7 +104,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -120,7 +120,7 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -136,7 +136,55 @@
       "OCI_PROFILE": "${OCI_PROFILE}",
       "OCI_REGION": "${OCI_REGION}",
       "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-objectstorage",
+    "command": ["python", "mcp_servers/objectstorage/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
+      "MCP_OCI_PRIVACY": "true",
+      "ALLOW_MUTATIONS": "true"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-loganalytics",
+    "command": ["python", "-m", "mcp_servers.loganalytics"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
+      "MCP_OCI_PRIVACY": "true",
+      "LA_NAMESPACE": "${LA_NAMESPACE}"
+    },
+    "transport": "stdio"
+  },
+  {
+    "name": "oci-mcp-unified",
+    "command": ["python", "mcp_servers/unified/server.py"],
+    "args": [],
+    "cwd": "${PWD}",
+    "env": {
+      "PYTHONPATH": "${PWD}/src:${PWD}",
+      "OCI_PROFILE": "${OCI_PROFILE}",
+      "OCI_REGION": "${OCI_REGION}",
+      "COMPARTMENT_OCID": "${COMPARTMENT_OCID}",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true",
       "ALLOW_MUTATIONS": "true"
     },
@@ -152,7 +200,7 @@
       "GAI_ADMIN_ENDPOINT": "${GAI_ADMIN_ENDPOINT}",
       "GAI_AGENT_ENDPOINT": "${GAI_AGENT_ENDPOINT}",
       "GAI_AGENT_API_KEY": "${GAI_AGENT_API_KEY}",
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "${OTEL_EXPORTER_OTLP_ENDPOINT}",
       "MCP_OCI_PRIVACY": "true"
     },
     "transport": "stdio"

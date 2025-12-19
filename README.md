@@ -9,6 +9,15 @@ All projects published under the GitHub account **adibirzu** are personal projec
 
 MCP-OCI provides a suite of Model Context Protocol (MCP) servers that let LLMs automate, observe, and secure Oracle Cloud Infrastructure environments. Each server is scoped to a single OCI domain and follows the OCI MCP design guidelines (deterministic behaviour, structured errors, least-privilege defaults).
 
+## Standards
+
+- `/Users/abirzu/dev/oracle-db-autonomous-agent/docs/OCI_MCP_SERVER_STANDARD.md`
+
+## Transport & Auth
+
+- **Local development**: STDIO only
+- **Production/remote**: Streamable HTTP with OAuth enabled
+
 ## Overview
 
 - **Multi-domain coverage** – Compute, Database, Networking, Security, Cost, Observability, Load Balancing, Inventory, Block Storage, Log Analytics, and OCI Generative AI agents
@@ -46,7 +55,7 @@ MCP-OCI provides a suite of Model Context Protocol (MCP) servers that let LLMs a
 ./scripts/install.sh
 ```
 
-The installer bootstraps a virtualenv, validates OCI credentials, builds the Docker image, and starts the observability stack plus all MCP servers in daemon mode.
+The installer bootstraps a virtualenv, validates OCI credentials, runs tenancy discovery, builds the Docker image, and starts the observability stack plus all MCP servers in daemon mode.
 
 ### Manual setup
 
@@ -63,10 +72,25 @@ make fmt lint test  # optional but recommended
 ### OCI configuration
 
 - **OCI CLI config**: `oci setup config` (default `~/.oci/config`)
-- **Environment variables**: copy `.env.sample` and export values (tenancy, user OCID, key path, fingerprint)
+- **Environment variables**: Copy `.env.local.example` to `.env.local` and customize
+  ```bash
+  cp .env.local.example .env.local
+  # Edit .env.local with your values
+  ```
 - **Instance/resource principals**: supported automatically when running on OCI compute/containers
 
+**Note**: All environment variables are automatically loaded from `.env.local` (if present) before any other configuration. This file is git-ignored for security.
+
 ## Configuration
+
+**All configuration is loaded from `.env.local` automatically.** Copy `.env.local.example` to `.env.local` and customize:
+
+```bash
+cp .env.local.example .env.local
+# Edit .env.local with your values
+```
+
+### Key Configuration Variables
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -75,8 +99,14 @@ make fmt lint test  # optional but recommended
 | `COMPARTMENT_OCID` | Default compartment scope | tenancy OCID |
 | `ALLOW_MUTATIONS` | Enable write operations for mutating tools | `false` |
 | `MCP_OCI_PRIVACY` | Mask OCIDs and namespaces in responses | `true` |
+| `OCI_APM_ENDPOINT` | OCI APM OTLP endpoint (takes precedence) | - |
+| `OCI_APM_PRIVATE_DATA_KEY` | Private data key for OCI APM authentication | - |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for traces/metrics/logs | `localhost:4317` |
+| `OTEL_DISABLE_LOCAL` | Disable local OTEL collector fallback | `false` |
 | `METRICS_PORT` | Prometheus metrics port (per server) | server dependent |
+| `MCP_OCI_CACHE_DIR` | Directory for tenancy discovery cache | `~/.mcp_oci_cache` |
+
+**See [Configuration Guide](docs/configuration.md) for complete documentation.**
 
 Additional tunables are documented per server (cache TTLs, retry tuning, FinOpsAI settings, etc.).
 
@@ -93,8 +123,10 @@ Additional tunables are documented per server (cache TTLs, retry tuning, FinOpsA
 | Load Balancer | `mcp_servers/loadbalancer` | `oci:loadbalancer:list-load-balancers` | [docs/servers/loadbalancer.md](docs/servers/loadbalancer.md) |
 | Inventory | `mcp_servers/inventory` | `oci:inventory:list-resources` | [docs/servers/inventory.md](docs/servers/inventory.md) |
 | Log Analytics | `mcp_servers/loganalytics` | `oci:loganalytics:execute-query` | [docs/servers/loganalytics.md](docs/servers/loganalytics.md) |
+| Object Storage | `mcp_servers/objectstorage` | `oci:objectstorage:list-buckets` | [docs/servers/objectstorage.md](docs/servers/objectstorage.md) |
 | Observability Hub | `mcp_servers/observability` | `oci:observability:get-metrics-summary` | [docs/servers/observability.md](docs/servers/observability.md) |
 | Generative AI Agents | `mcp_servers/agents` | `oci:agents:list-agents` | [docs/servers/agents.md](docs/servers/agents.md) |
+| Unified (All Tools) | `mcp_servers/unified` | `doctor` | [docs/servers/unified.md](docs/servers/unified.md) |
 
 ## Usage
 
@@ -148,7 +180,7 @@ cd ~/mcp-oci-cloud
 ./bootstrap-mcp.sh
 ```
 
-The bootstrap script prompts for `KEY=VALUE` pairs (e.g. `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID`), writes them to `.env`, enforces `MCP_TRANSPORT=streamable-http`, and starts the Docker composition exposing the MCP servers over streamable HTTP. OS firewall rules are configured automatically via cloud-init; the instance NSG is opened for the same ports.
+The bootstrap script prompts for `KEY=VALUE` pairs (e.g. `OCI_PROFILE`, `OCI_REGION`, `COMPARTMENT_OCID`), writes them to `.env.local`, enforces `MCP_TRANSPORT=streamable-http`, and starts the Docker composition exposing the MCP servers over streamable HTTP. OS firewall rules are configured automatically via cloud-init; the instance NSG is opened for the same ports.
 
 ### Observability stack
 
@@ -156,7 +188,14 @@ The bootstrap script prompts for `KEY=VALUE` pairs (e.g. `OCI_PROFILE`, `OCI_REG
 ./run-all-local.sh                         # Prometheus, Tempo, Pyroscope, Grafana, UX
 ```
 
-Each server publishes OTLP spans/metrics; HTTP variants also expose `/metrics`. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to point at the collector (`otel-collector:4317` in Docker Compose).
+Each server publishes OTLP spans/metrics; HTTP variants also expose `/metrics`. 
+
+**Telemetry Configuration:**
+- **OCI APM (Production)**: Set `OCI_APM_ENDPOINT` and `OCI_APM_PRIVATE_DATA_KEY` to send traces directly to OCI APM
+- **Local Collector (Development)**: Defaults to `localhost:4317` (otel-collector:4317 in Docker Compose)
+- **Disable Local**: Set `OTEL_DISABLE_LOCAL=true` to disable local collector when using OCI APM
+
+See [Telemetry Configuration Guide](docs/telemetry.md) for detailed setup instructions.
 
 ## Development
 

@@ -3,7 +3,7 @@
 # Launch an OCI Compute instance prepped for MCP-OCI.
 # - Creates a VM.Standard.E6.Flex instance with 2 OCPUs / 16 GB RAM.
 # - Boots Oracle Linux and installs required tooling (python, git, OCI CLI).
-# - Prompts for OCI environment values and drops them into /home/opc/mcp-oci/.env.
+# - Prompts for OCI environment values and drops them into /home/opc/mcp-oci/.env.local.
 #
 # Requirements:
 #   * OCI CLI installed locally and configured with permissions to launch instances.
@@ -72,7 +72,7 @@ if [[ "${assign_ip_input,,}" =~ ^y(es)?$ ]]; then
   ASSIGN_PUBLIC_IP=true
 fi
 
-info "Enter environment variables to place into /home/opc/mcp-oci/.env (KEY=VALUE). Press enter on an empty line to finish."
+info "Enter environment variables to place into /home/opc/mcp-oci/.env.local (KEY=VALUE). Press enter on an empty line to finish."
 ENV_LINES=()
 while true; do
   read -r env_line || true
@@ -149,10 +149,10 @@ if ! command -v oci >/dev/null 2>&1; then
 fi
 
 install -d -m 0750 -o opc -g opc /home/opc/mcp-oci
-cat <<'ENVEOF' >/home/opc/mcp-oci/.env
+cat <<'ENVEOF' >/home/opc/mcp-oci/.env.local
 ${ENV_BLOCK}ENVEOF
-chown opc:opc /home/opc/mcp-oci/.env
-chmod 600 /home/opc/mcp-oci/.env
+chown opc:opc /home/opc/mcp-oci/.env.local
+chmod 600 /home/opc/mcp-oci/.env.local
 
 echo "Instance provisioning complete." >&2
 EOF
@@ -184,4 +184,4 @@ oci compute instance launch \
   --wait-for-state RUNNING
 
 info "Instance launch request submitted. Review the OCI Console for final status."
-info "Once the VM is reachable, the MCP environment variables live in /home/opc/mcp-oci/.env."
+info "Once the VM is reachable, the MCP environment variables live in /home/opc/mcp-oci/.env.local."

@@ -29,7 +29,7 @@
 
   <main>
     <div id="preflight" class="panel" style="border-color:#e60000; display:none;">
-      <strong>Setup required:</strong> COMPARTMENT_OCID is not set. Enter a compartment OCID in the Discovery/Capacity inputs or set COMPARTMENT_OCID in your .env.
+      <strong>Setup required:</strong> COMPARTMENT_OCID is not set. Enter a compartment OCID in the Discovery/Capacity inputs or set COMPARTMENT_OCID in your .env.local.
     </div>
     <section id="overview" class="panel">
       <h2>MCP Server Capabilities</h2>
@@ -134,7 +134,7 @@
         <button onclick="createAgent()">Create Agent</button>
         <button onclick="loadAgents()">Refresh</button>
       </div>
-      <div id="agentsHint" class="muted">Configured via GAI_ADMIN_ENDPOINT/GAI_AGENT_ENDPOINT in .env</div>
+      <div id="agentsHint" class="muted">Configured via GAI_ADMIN_ENDPOINT/GAI_AGENT_ENDPOINT in .env.local</div>
       <div id="agentsList"></div>
       <pre id="agentsOut" class="code"></pre>
     </section>

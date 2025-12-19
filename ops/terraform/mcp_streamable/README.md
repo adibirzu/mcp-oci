@@ -21,4 +21,4 @@ ssh opc@"$(terraform output -raw instance_public_ip)"
 cd ~/mcp-oci-cloud
 ./bootstrap-mcp.sh
 ```
-The bootstrap script prompts for OCI env values (with existing defaults), persists them to `.env`, ensures `MCP_TRANSPORT=streamable-http`, and restarts the Docker composition.
+The bootstrap script prompts for OCI env values (with existing defaults), persists them to `.env.local`, ensures `MCP_TRANSPORT=streamable-http`, and restarts the Docker composition.

@@ -81,7 +81,7 @@ service_cost_drilldown(target_service="database")
 ```bash
 oci_loganalytics_exadata_cost_drilldown(
     analysis_type="cost_drilldown",
-    compartment_id="your-compartment-id",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     time_range="30d"
 )
 ```
@@ -90,7 +90,7 @@ oci_loganalytics_exadata_cost_drilldown(
 ```bash
 oci_loganalytics_exadata_cost_drilldown(
     query_name="basic_exadata_costs",
-    compartment_id="your-compartment-id",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     time_range="30d"
 )
 ```
@@ -120,7 +120,7 @@ oci_loganalytics_exadata_cost_drilldown(
 ```bash
 oci_loganalytics_exadata_cost_drilldown(
     analysis_type="basic_cost_monitoring",
-    compartment_id="ocid1.compartment.oc1..abc123",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     time_range="7d"
 )
 ```
@@ -129,7 +129,7 @@ oci_loganalytics_exadata_cost_drilldown(
 ```bash
 oci_loganalytics_exadata_cost_drilldown(
     query_name="high_cost_databases",
-    compartment_id="ocid1.compartment.oc1..abc123"
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]"
 )
 ```
 
@@ -137,7 +137,7 @@ oci_loganalytics_exadata_cost_drilldown(
 ```bash
 oci_loganalytics_exadata_cost_drilldown(
     analysis_type="regional_analysis",
-    compartment_id="ocid1.compartment.oc1..abc123",
+    compartment_id="[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
     time_range="30d"
 )
 ```

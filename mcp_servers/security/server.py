@@ -15,6 +15,16 @@ from opentelemetry import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # Set up tracing with proper Resource
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-security")
 init_tracing(service_name="oci-mcp-security")

@@ -6,6 +6,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Load .env.local if it exists (before any other operations)
+if [[ -f "$REPO_ROOT/.env.local" ]]; then
+  set -a
+  source "$REPO_ROOT/.env.local"
+  set +a
+  say "Loaded environment from .env.local"
+fi
+
 say() { echo -e "==> $*"; }
 warn() { echo -e "WARNING: $*" >&2; }
 die() { echo -e "ERROR: $*" >&2; exit 1; }
@@ -131,6 +139,18 @@ ensure_python_env() {
   fi
 }
 
+ensure_venv_symlink() {
+  if [[ ! -d .venv ]]; then
+    warn "Skipping .venv311 creation; Python virtualenv missing"
+    return 0
+  fi
+  if [[ -e .venv311 && ! -L .venv311 ]]; then
+    rm -rf .venv311
+  fi
+  ln -sfn .venv .venv311
+  say "Ensured .venv311 links to .venv for stdio discovery"
+}
+
 verify_oci_config() {
   say "Verifying OCI credentials/config ..."
   # Accept either ~/.oci/config or Environment/Instance/Resource Principals hints.
@@ -192,6 +212,16 @@ start_observability() {
   echo "  Jaeger:      http://localhost:16686"
 }
 
+run_tenancy_discovery() {
+  say "Running tenancy discovery..."
+  # shellcheck disable=SC1091
+  . .venv/bin/activate
+  python scripts/init_tenancy_discovery.py || {
+    warn "Tenancy discovery failed, but continuing with server startup..."
+  }
+  say "Tenancy discovery completed"
+}
+
 start_mcp_servers() {
   say "Starting MCP servers (daemon) ..."
   # shellcheck disable=SC1091
@@ -235,7 +265,9 @@ main() {
   ensure_docker_compose
   ensure_oci_cli
   ensure_python_env
+  ensure_venv_symlink
   verify_oci_config
+  run_tenancy_discovery
   build_mcp_image
   start_observability
   start_mcp_servers

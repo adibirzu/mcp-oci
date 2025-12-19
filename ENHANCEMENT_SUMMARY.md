@@ -92,7 +92,7 @@ Created comprehensive documentation:
 {
   "metadata": {
     "generated_at": "ISO-8601 timestamp",
-    "tenancy_id": "ocid1.tenancy...",
+    "tenancy_id": "[Link to Secure Variable: OCI_TENANCY_OCID]",
     "region": "us-ashburn-1",
     "profile": "DEFAULT"
   },
@@ -217,7 +217,7 @@ Based on test tenancy:
 ```python
 # Cost query returns OCIDs only
 {
-  "compartment_id": "ocid1.compartment.oc1..aaaaaa....",
+  "compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
   "cost": 1234.56,
   "service": "Compute"
 }
@@ -229,7 +229,7 @@ Based on test tenancy:
 ```python
 # Same query now enriched automatically
 {
-  "compartment_id": "ocid1.compartment.oc1..aaaaaa....",
+  "compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
   "compartment_name": "Production",  # From cache!
   "cost": 1234.56,
   "service": "Compute"
@@ -300,7 +300,7 @@ def test_compartment_lookup():
 
 def test_enrichment():
     cache = get_local_cache()
-    data = {"compartment_id": "ocid1.compartment..."}
+    data = {"compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]"}
     enriched = cache.enrich_with_names(data)
     assert "compartment_name" in enriched
 ```

@@ -7,6 +7,15 @@
 
 set -euo pipefail
 
+# Load .env.local if it exists (before any other operations)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/.env.local" ]]; then
+  set -a
+  source "$SCRIPT_DIR/.env.local"
+  set +a
+  echo "[INFO] Loaded environment from .env.local"
+fi
+
 NO_DOCKER=false
 USE_DOCKER_DESKTOP=false
 

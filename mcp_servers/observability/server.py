@@ -6,6 +6,16 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, List
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # ----- Observability bootstrap -----
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 from mcp_oci_common.privacy import privacy_enabled, redact_payload

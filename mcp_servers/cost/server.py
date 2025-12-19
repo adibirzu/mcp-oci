@@ -32,6 +32,16 @@ from .finopsai.tools.usage_queries import UsageQuery, request_summarized_usages
 from .finopsai.utils import safe_float, currency_from, map_compartment_rows, resolve_tenancy
 from .finopsai.tools.focus import list_focus_days
 
+# Load repo-local .env.local so OCI/OTEL config is applied consistently.
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_repo_root / ".env.local")
+except Exception:
+    pass
+
 # Set up logging
 logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNING)
 

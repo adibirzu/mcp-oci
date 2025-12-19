@@ -68,7 +68,7 @@ MCP Servers (Host)              Observability Stack (Docker)
 
 ### Environment Variables
 
-MCP servers use these environment variables (configured in `.env`):
+MCP servers use these environment variables (configured in `.env.local`):
 
 ```bash
 # OpenTelemetry endpoint (no http:// prefix for gRPC)
@@ -105,7 +105,7 @@ The exporter automatically:
 **Solution**:
 1. Ensure otel-collector is running: `docker ps | grep otel-collector`
 2. Check port 4317 is exposed: Should show `0.0.0.0:4317->4317/tcp`
-3. Verify endpoint in `.env` has no `http://` prefix: `OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317`
+3. Verify endpoint in `.env.local` has no `http://` prefix: `OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317`
 4. Restart MCP servers to pick up new environment variables
 
 ### Issue 2: otel-collector shows "unhealthy" status
@@ -233,7 +233,7 @@ rate(mcp_tool_calls_total{outcome="error"}[5m])
 To send telemetry to a different collector:
 
 ```bash
-# In .env
+# In .env.local
 OTEL_EXPORTER_OTLP_ENDPOINT=my-collector.example.com:4317
 ```
 
@@ -268,8 +268,8 @@ The code gracefully handles missing dependencies with warnings.
 
 - [ ] otel-collector is running and healthy
 - [ ] Port 4317 is accessible from host: `curl -v http://localhost:4317`
-- [ ] `.env` has `OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317` (no http://)
-- [ ] MCP servers are restarted after changing `.env`
+- [ ] `.env.local` has `OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317` (no http://)
+- [ ] MCP servers are restarted after changing `.env.local`
 - [ ] Prometheus is scraping otel-collector: http://localhost:9090/targets
 - [ ] Tempo/Jaeger are receiving traces: check their logs
 

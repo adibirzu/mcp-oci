@@ -23,8 +23,26 @@ cd "$PARENT2"
 # Ensure globbing returns empty instead of a literal when there are no matches
 shopt -s nullglob
 
+# Load .env.local if it exists (before any other operations)
+if [[ -f "$PARENT2/.env.local" ]]; then
+  set -a
+  source "$PARENT2/.env.local"
+  set +a
+  echo "[INFO] Loaded environment from .env.local"
+fi
+
 # Ensure src/ is on PYTHONPATH so servers can import src/mcp_oci_common
 export PYTHONPATH="$(pwd)/src:$(pwd):${PYTHONPATH:-}"
+
+# Run tenancy discovery before starting servers
+run_tenancy_discovery() {
+  if [[ -f "scripts/init_tenancy_discovery.py" ]]; then
+    echo "[INFO] Running tenancy discovery..."
+    python3 scripts/init_tenancy_discovery.py >/dev/null 2>&1 || {
+      echo "[WARN] Tenancy discovery failed, continuing anyway..."
+    }
+  fi
+}
 
 PID_DIR="${PID_DIR:-/tmp}"
 
@@ -120,15 +138,37 @@ stop_server() {
 launch_server() {
     local server=$1
     local mode=${2:-foreground}  # foreground | daemon
+    
+    # Run tenancy discovery before starting server (only once per session)
+    if [[ -z "${TENANCY_DISCOVERY_RUN:-}" ]]; then
+      run_tenancy_discovery
+      export TENANCY_DISCOVERY_RUN="1"
+    fi
 
-    # OpenTelemetry defaults (can be overridden by environment)
+    # OpenTelemetry defaults - prioritize OCI APM over local collector
     export OTEL_TRACES_EXPORTER="${OTEL_TRACES_EXPORTER:-otlp}"
     export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER:-otlp}"
     export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-otlp}"
-    # Prefer gRPC on localhost:4317 for local stack; falls back cleanly if overridden
-    # NOTE: gRPC exporters expect 'host:port' without http:// prefix
-    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-localhost:4317}"
-    export OTEL_EXPORTER_OTLP_PROTOCOL="${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}"
+    
+    # OCI APM configuration takes precedence if available
+    if [[ -n "${OCI_APM_ENDPOINT:-}" && -n "${OCI_APM_PRIVATE_DATA_KEY:-}" ]]; then
+      # Use OCI APM endpoint (HTTP/HTTPS)
+      export OTEL_EXPORTER_OTLP_ENDPOINT="${OCI_APM_ENDPOINT}"
+      export OTEL_EXPORTER_OTLP_PROTOCOL="${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}"
+      export OTEL_EXPORTER_OTLP_HEADERS="Authorization=dataKey ${OCI_APM_PRIVATE_DATA_KEY}"
+      # Disable local OTEL collector when OCI APM is configured
+      export OTEL_DISABLE_LOCAL="${OTEL_DISABLE_LOCAL:-true}"
+      export OTEL_TRACING_ENABLED="${OTEL_TRACING_ENABLED:-true}"
+    else
+      # Fallback to local collector (for development)
+      # NOTE: gRPC exporters expect 'host:port' without http:// prefix
+      export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-localhost:4317}"
+      export OTEL_EXPORTER_OTLP_PROTOCOL="${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}"
+      # Disable local OTEL if explicitly requested
+      if [[ "${OTEL_DISABLE_LOCAL:-false}" == "true" ]]; then
+        export OTEL_TRACING_ENABLED="false"
+      fi
+    fi
     # Service metadata for better filtering
     export OTEL_SERVICE_NAME="mcp-oci-$server"
     export FASTMCP_SERVER_NAME="oci-mcp-$server"
@@ -137,13 +177,12 @@ launch_server() {
     # Enable privacy masking by default (can be overridden by env)
     export MCP_OCI_PRIVACY="${MCP_OCI_PRIVACY:-true}"
 
-    # If tenant has a single Log Analytics namespace, pin it for fast startup
-    # Override by exporting LA_NAMESPACE in the environment
-    export LA_NAMESPACE="${LA_NAMESPACE:-frxfz3gch4zb}"
+	    # Log Analytics namespace is tenancy-specific; do not set defaults here.
+	    # Set LA_NAMESPACE explicitly (e.g., in .env.local) if needed.
 
     # Enable controlled mutations for specific servers
     case "$server" in
-        compute|db|network|blockstorage|loadbalancer)
+	        compute|db|network|blockstorage|loadbalancer|objectstorage)
             export ALLOW_MUTATIONS="${ALLOW_MUTATIONS:-true}"
             ;;
         *)
@@ -167,19 +206,21 @@ launch_server() {
     fi
 
     # Ensure metrics port aligns with UX expectations
-    case "$server" in
-      compute)       export METRICS_PORT="${METRICS_PORT:-8001}" ;;
-      db)            export METRICS_PORT="${METRICS_PORT:-10002}" ;;
-      observability) export METRICS_PORT="${METRICS_PORT:-8003}" ;;
-      security)      export METRICS_PORT="${METRICS_PORT:-8004}" ;;
-      cost)          export METRICS_PORT="${METRICS_PORT:-8005}" ;;
-      network)       export METRICS_PORT="${METRICS_PORT:-8006}" ;;
-      blockstorage)  export METRICS_PORT="${METRICS_PORT:-8007}" ;;
-      loadbalancer)  export METRICS_PORT="${METRICS_PORT:-8008}" ;;
-      inventory)     export METRICS_PORT="${METRICS_PORT:-8009}" ;;
-      agents)        export METRICS_PORT="${METRICS_PORT:-8011}" ;;
-      *)            : ;;
-    esac
+	    case "$server" in
+	      compute)       export METRICS_PORT="${METRICS_PORT:-8001}" ;;
+	      db)            export METRICS_PORT="${METRICS_PORT:-10002}" ;;
+	      observability) export METRICS_PORT="${METRICS_PORT:-8003}" ;;
+	      security)      export METRICS_PORT="${METRICS_PORT:-8004}" ;;
+	      cost)          export METRICS_PORT="${METRICS_PORT:-8005}" ;;
+	      network)       export METRICS_PORT="${METRICS_PORT:-8006}" ;;
+	      blockstorage)  export METRICS_PORT="${METRICS_PORT:-8007}" ;;
+	      loadbalancer)  export METRICS_PORT="${METRICS_PORT:-8008}" ;;
+	      inventory)     export METRICS_PORT="${METRICS_PORT:-8009}" ;;
+	      unified)       export METRICS_PORT="${METRICS_PORT:-8010}" ;;
+	      agents)        export METRICS_PORT="${METRICS_PORT:-8011}" ;;
+	      objectstorage) export METRICS_PORT="${METRICS_PORT:-8012}" ;;
+	      *)            : ;;
+	    esac
 
     # Default MCP transport configuration (overridable by env or flags)
     # In daemon mode default to network transport to avoid blocking on stdio
@@ -194,20 +235,22 @@ launch_server() {
     # - For stdio, keep legacy behavior (MCP_PORT follows METRICS_PORT) if unset
     if [[ "${MCP_TRANSPORT}" != "stdio" ]]; then
       if [[ -z "${MCP_PORT:-}" ]]; then
-        case "$server" in
-          compute)       export MCP_PORT="${MCP_PORT_COMPUTE:-7001}" ;;
-          db)            export MCP_PORT="${MCP_PORT_DB:-7002}" ;;
-          observability) export MCP_PORT="${MCP_PORT_OBSERVABILITY:-7003}" ;;
-          security)      export MCP_PORT="${MCP_PORT_SECURITY:-7004}" ;;
-          cost)          export MCP_PORT="${MCP_PORT_COST:-7005}" ;;
-          network)       export MCP_PORT="${MCP_PORT_NETWORK:-7006}" ;;
-          blockstorage)  export MCP_PORT="${MCP_PORT_BLOCKSTORAGE:-7007}" ;;
-          loadbalancer)  export MCP_PORT="${MCP_PORT_LOADBALANCER:-7008}" ;;
-          inventory)     export MCP_PORT="${MCP_PORT_INVENTORY:-7009}" ;;
-          agents)        export MCP_PORT="${MCP_PORT_AGENTS:-7011}" ;;
-          *)             export MCP_PORT="${MCP_PORT_DEFAULT:-7099}" ;;
-        esac
-      fi
+	        case "$server" in
+	          compute)       export MCP_PORT="${MCP_PORT_COMPUTE:-7001}" ;;
+	          db)            export MCP_PORT="${MCP_PORT_DB:-7002}" ;;
+	          observability) export MCP_PORT="${MCP_PORT_OBSERVABILITY:-7003}" ;;
+	          security)      export MCP_PORT="${MCP_PORT_SECURITY:-7004}" ;;
+	          cost)          export MCP_PORT="${MCP_PORT_COST:-7005}" ;;
+	          network)       export MCP_PORT="${MCP_PORT_NETWORK:-7006}" ;;
+	          blockstorage)  export MCP_PORT="${MCP_PORT_BLOCKSTORAGE:-7007}" ;;
+	          loadbalancer)  export MCP_PORT="${MCP_PORT_LOADBALANCER:-7008}" ;;
+	          inventory)     export MCP_PORT="${MCP_PORT_INVENTORY:-7009}" ;;
+	          unified)       export MCP_PORT="${MCP_PORT_UNIFIED:-7010}" ;;
+	          agents)        export MCP_PORT="${MCP_PORT_AGENTS:-7011}" ;;
+	          objectstorage) export MCP_PORT="${MCP_PORT_OBJECTSTORAGE:-7012}" ;;
+	          *)             export MCP_PORT="${MCP_PORT_DEFAULT:-7099}" ;;
+	        esac
+	      fi
       # Avoid metrics collision: if METRICS_PORT equals MCP_PORT, disable metrics before Python starts
       if [[ -n "${METRICS_PORT:-}" && "${METRICS_PORT}" == "${MCP_PORT}" ]]; then
         export METRICS_PORT="-1"
@@ -288,7 +331,7 @@ case "$norm_cmd" in
     echo "All discovered MCP servers launched (daemon mode). Use '$0 status <server>' to check or '$0 stop <server>' to stop."
     ;;
 
-  compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer|loganalytics|agents)
+  compute|db|network|security|observability|cost|inventory|blockstorage|loadbalancer|loganalytics|unified|agents|objectstorage)
     mode="foreground"
     # Parse optional flags: --daemon, --http, --sse, --stream|--streamable|--streamable-http, --host <host>, --port <port>
     while [[ $# -gt 0 ]]; do

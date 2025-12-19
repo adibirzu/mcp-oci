@@ -73,7 +73,7 @@ Preferred entry: mcp_oci_monitoring.
 
 Example (window wrapper):
 {
-  "compartment_id": "ocid1.compartment.oc1..example",
+  "compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]",
   "namespace": "oci_computeagent",
   "query": "CpuUtilization[1m].mean()",
   "window": "1h"

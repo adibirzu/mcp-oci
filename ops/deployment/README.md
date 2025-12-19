@@ -119,7 +119,7 @@ curl http://localhost:8000/health
 # List instances
 curl -X POST http://localhost:7001/tools/list_instances \
   -H "Content-Type: application/json" \
-  -d '{"compartment_id": "ocid1.compartment..."}'
+  -d '{"compartment_id": "[Link to Secure Variable: OCI_COMPARTMENT_OCID]"}'
 ```
 
 ### WebSocket
@@ -159,13 +159,13 @@ grpcurl -plaintext -d '{"compartment_id": "..."}' \
 
 ## Configuration Files
 
-### Environment Variables (`.env`)
+### Environment Variables (`.env.local`)
 ```bash
 # OCI Configuration
 OCI_CLI_AUTH=api_key
 OCI_CONFIG_FILE=~/.oci/config
 OCI_CONFIG_PROFILE=DEFAULT
-COMPARTMENT_ID=ocid1.compartment...
+COMPARTMENT_ID=[Link to Secure Variable: OCI_COMPARTMENT_OCID]
 
 # MCP Settings
 MCP_TRANSPORT=streamable
@@ -327,7 +327,7 @@ export MCP_WORKER_COUNT=8
 # Enable Redis caching
 docker-compose --profile cache up -d
 
-# Configure in .env
+# Configure in .env.local
 export MCP_CACHE_ENABLED=true
 export MCP_CACHE_REDIS_URL=redis://localhost:6379
 ```
