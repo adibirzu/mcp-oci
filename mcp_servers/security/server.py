@@ -11,9 +11,11 @@ from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attr
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.session import get_client
 from mcp_oci_common.response import safe_serialize
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
+from mcp_oci_common.oci_apm import init_oci_apm_tracing
+import json
 
 # Load repo-local .env.local so OCI/OTEL config is applied consistently.
 try:
@@ -29,6 +31,8 @@ except Exception:
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-security")
 init_tracing(service_name="oci-mcp-security")
 init_metrics()
+# Initialize OCI APM tracing (uses OCI_APM_ENDPOINT and OCI_APM_PRIVATE_DATA_KEY)
+init_oci_apm_tracing(service_name="oci-mcp-security")
 tracer = trace.get_tracer("oci-mcp-security")
 
 # Logging setup
@@ -240,6 +244,33 @@ def list_data_safe_findings(compartment_id: Optional[str] = None, profile: Optio
         # Stubbed in this build; Data Safe often not enabled in test envs
         return {'ok': False, 'error': 'NotImplemented: Data Safe integration requires tenancy enablement'}
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    manifest = {
+        "name": "OCI MCP Security Server",
+        "version": "1.0.0",
+        "description": "OCI Security MCP Server for IAM, Cloud Guard, and Data Safe",
+        "capabilities": {
+            "skills": ["iam-management", "security-posture", "compliance-audit"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": [
+                    "list_compartments", "list_iam_users", "list_groups",
+                    "list_policies", "list_cloud_guard_problems", "list_data_safe_findings"
+                ],
+                "tier3_heavy": [],
+                "tier4_admin": []
+            }
+        },
+        "usage_guide": "Use list_compartments for tenancy structure, list_iam_users/groups/policies for IAM audit, list_cloud_guard_problems for security issues.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(
         fn=lambda: {"status": "ok", "server": "oci-mcp-security", "pid": os.getpid()},
@@ -338,6 +369,12 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-security")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

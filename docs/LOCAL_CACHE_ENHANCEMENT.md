@@ -299,6 +299,16 @@ Files:
 - `oci_resources_cache.json` - Full cache data
 - `cache_metadata.json` - Quick metadata summary
 
+### Redis Shared Cache (Optional)
+
+Use Redis when multiple agents/servers should read the same cache without file sync:
+
+- `MCP_CACHE_BACKEND=redis`
+- `MCP_REDIS_URL=redis://localhost:6379`
+- `MCP_CACHE_KEY_PREFIX=mcp:cache`
+
+When enabled, `scripts/build-local-cache.py` writes `oci_resources_cache` and `cache_metadata` into Redis under the configured prefix, and MCP servers read from Redis first.
+
 ## Benefits
 
 ### 1. Token Usage Reduction

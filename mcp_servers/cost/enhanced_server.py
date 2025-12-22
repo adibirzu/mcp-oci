@@ -11,7 +11,7 @@ import numpy as np
 from scipy import stats
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 # MCP-OCI common imports
 from mcp_oci_common import get_oci_config, get_compartment_id

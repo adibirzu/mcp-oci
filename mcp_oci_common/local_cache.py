@@ -21,7 +21,15 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_DIR = os.path.expanduser("~/.mcp-oci/cache")
+def _get_shared_cache_dir() -> str:
+    """Resolve shared cache directory across MCP servers and agents."""
+    raw = os.getenv("MCP_CACHE_DIR") or os.getenv("OCI_MCP_CACHE_DIR")
+    if raw:
+        return os.path.expanduser(raw)
+    return os.path.expanduser("~/.mcp-oci/cache")
+
+
+DEFAULT_CACHE_DIR = _get_shared_cache_dir()
 
 
 class OCILocalCache:
@@ -45,6 +53,8 @@ class OCILocalCache:
     def _load_cache(self):
         """Load cache from disk"""
         try:
+            if self._load_cache_from_redis():
+                return
             if os.path.exists(self.cache_file):
                 with open(self.cache_file, 'r') as f:
                     self._cache_data = json.load(f)
@@ -59,6 +69,34 @@ class OCILocalCache:
         except Exception as e:
             logger.error(f"Error loading cache: {e}")
             self._cache_data = self._empty_cache()
+
+    def _load_cache_from_redis(self) -> bool:
+        """Load cache from Redis when configured."""
+        backend = os.getenv("MCP_CACHE_BACKEND", "file").lower()
+        redis_url = os.getenv("MCP_REDIS_URL") or os.getenv("REDIS_URL")
+        if backend != "redis" or not redis_url:
+            return False
+        try:
+            import redis  # type: ignore
+        except Exception:
+            logger.warning("Redis cache backend requested but redis library not installed; falling back to file cache")
+            return False
+
+        try:
+            prefix = os.getenv("MCP_CACHE_KEY_PREFIX", "mcp:cache")
+            cache_key = f"{prefix}:oci_resources_cache"
+            meta_key = f"{prefix}:oci_cache_metadata"
+            client = redis.Redis.from_url(redis_url)
+            raw = client.get(cache_key)
+            if raw:
+                self._cache_data = json.loads(raw)
+                meta_raw = client.get(meta_key)
+                if meta_raw:
+                    self._metadata = json.loads(meta_raw)
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to load cache from Redis: {e}")
+        return False
 
     def _empty_cache(self) -> Dict[str, Any]:
         """Return empty cache structure"""

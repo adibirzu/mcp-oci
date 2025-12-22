@@ -24,7 +24,7 @@ except Exception:
 from mcp_oci_common import get_oci_config
 from mcp_oci_common.response import with_meta
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 import oci  # type: ignore
 import requests
@@ -1373,6 +1373,403 @@ def analyze_exadata_costs(
         }
 
 
+def _resolve_compartment_id(compartment_id: str | None, profile: str | None) -> str | None:
+    if compartment_id:
+        return compartment_id
+    try:
+        cfg = get_oci_config(profile_name=profile)
+        return cfg.get("tenancy") or compartment_id
+    except Exception:
+        return compartment_id
+
+
+def _normalize_time_range(time_range: str | None, time_filter: str | None = None) -> str:
+    if time_filter:
+        import re
+
+        match = re.search(r"dateRelative\\(([^)]+)\\)", time_filter)
+        if match:
+            return match.group(1)
+    return time_range or "24h"
+
+
+def _not_supported(tool_name: str) -> str:
+    return with_meta(
+        {"error": f"{tool_name} is not yet implemented in the Python port"},
+        success=False,
+        message=f"{tool_name} not supported in Python port",
+    )
+
+
+def suggest_query(query: str) -> dict:
+    """Suggest query improvements using the Logan query enhancer."""
+    result = validate_query(query)
+    if isinstance(result, dict) and result.get("success"):
+        validation = result.get("validation_result", {})
+        return {
+            "success": True,
+            "suggestions": validation.get("suggestions", []),
+            "enhanced_query": validation.get("enhanced_query"),
+            "warnings": validation.get("warnings", []),
+            "errors": validation.get("errors", []),
+        }
+    return result
+
+
+def validate_logan_query(query: str) -> dict:
+    """Alias for validate_query with Logan naming."""
+    return validate_query(query)
+
+
+def execute_logan_query(
+    query: str,
+    compartment_id: str | None = None,
+    time_range: str = "24h",
+    max_count: int = 1000,
+    query_name: str | None = None,
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    resolved_compartment = _resolve_compartment_id(compartment_id, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return execute_query(
+        query=query,
+        compartment_id=resolved_compartment,
+        query_name=query_name,
+        time_range=time_range,
+        max_count=max_count,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_execute_query(
+    query: str,
+    queryName: str | None = None,
+    timeRange: str = "24h",
+    compartmentId: str | None = None,
+    environment: str | None = None,
+    timeFilter: str | None = None,
+    format: str = "json",
+    maxCount: int = 1000,
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    _ = environment, format
+    time_range = _normalize_time_range(timeRange, timeFilter)
+    return execute_logan_query(
+        query=query,
+        compartment_id=compartmentId,
+        time_range=time_range,
+        max_count=maxCount,
+        query_name=queryName,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_search_security_events(
+    searchTerm: str,
+    eventType: str = "all",
+    timeRange: str = "24h",
+    compartmentId: str | None = None,
+    limit: int = 20,
+    format: str = "json",
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    _ = format
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return search_security_events(
+        search_term=searchTerm,
+        compartment_id=resolved_compartment,
+        event_type=eventType,
+        time_range=timeRange,
+        limit=limit,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_get_mitre_techniques(
+    techniqueId: str | None = None,
+    category: str = "all",
+    timeRange: str = "30d",
+    compartmentId: str | None = None,
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return get_mitre_techniques(
+        compartment_id=resolved_compartment,
+        technique_id=techniqueId,
+        category=category,
+        time_range=timeRange,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_analyze_ip_activity(
+    ipAddress: str,
+    analysisType: str = "full",
+    timeRange: str = "24h",
+    compartmentId: str | None = None,
+    format: str = "json",
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    _ = format
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return analyze_ip_activity(
+        ip_address=ipAddress,
+        compartment_id=resolved_compartment,
+        analysis_type=analysisType,
+        time_range=timeRange,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_validate_query(query: str) -> dict:
+    return validate_query(query)
+
+
+def oci_logan_get_documentation(
+    topic: str = "query_syntax",
+    searchTerm: str | None = None,
+) -> str:
+    return get_documentation(topic=topic, search_term=searchTerm)
+
+
+def oci_logan_get_queries(category: str = "all") -> str:
+    try:
+        from .exadata_logan_queries import ExadataLoganQueries
+
+        catalog = ExadataLoganQueries().queries
+        items = []
+        for key, q in catalog.items():
+            items.append(
+                {
+                    "id": key,
+                    "name": q.name,
+                    "description": q.description,
+                    "query": q.query,
+                    "use_case": q.use_case,
+                    "time_range": q.time_range,
+                }
+            )
+        return with_meta(
+            {"category": category, "queries": items},
+            success=True,
+            message=f"Returned {len(items)} query templates",
+        )
+    except Exception as exc:
+        return with_meta(
+            {"error": str(exc)},
+            success=False,
+            message="Failed to load query templates",
+        )
+
+
+def oci_logan_usage_guide() -> str:
+    return get_documentation(topic="query_syntax")
+
+
+def oci_logan_health(
+    compartmentId: str | None = None,
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return check_oci_connection(
+        compartment_id=resolved_compartment,
+        test_query=True,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_check_connection(
+    compartmentId: str | None = None,
+    profile: str | None = None,
+    region: str | None = None,
+    testQuery: bool = True,
+) -> str:
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    return check_oci_connection(
+        compartment_id=resolved_compartment,
+        test_query=testQuery,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_execute_advanced_analytics(
+    analyticsType: str,
+    query: str | None = None,
+    field: str | None = None,
+    parameters: dict | None = None,
+    timeRange: str = "24h",
+    compartmentId: str | None = None,
+    format: str = "json",
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    _ = format
+    if not query:
+        return with_meta(
+            {"error": "query is required for advanced analytics"},
+            success=False,
+            message="query required",
+        )
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    payload = dict(parameters or {})
+    if field:
+        payload.setdefault("field", field)
+    return perform_advanced_analytics(
+        base_query=query,
+        compartment_id=resolved_compartment,
+        analytics_type=analyticsType,
+        parameters=payload,
+        time_range=timeRange,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_execute_statistical_analysis(
+    operation: str,
+    fields: list[str] | None = None,
+    groupBy: list[str] | None = None,
+    query: str | None = None,
+    timeRange: str = "24h",
+    compartmentId: str | None = None,
+    format: str = "json",
+    profile: str | None = None,
+    region: str | None = None,
+) -> str:
+    _ = format
+    if not query:
+        return with_meta(
+            {"error": "query is required for statistical analysis"},
+            success=False,
+            message="query required",
+        )
+    resolved_compartment = _resolve_compartment_id(compartmentId, profile)
+    if not resolved_compartment:
+        return with_meta(
+            {"error": "compartment_id not provided and could not be resolved"},
+            success=False,
+            message="compartment_id required",
+        )
+    stats_type = "stats" if operation == "distinct" else operation
+    group_by = groupBy or fields or []
+    return perform_statistical_analysis(
+        base_query=query,
+        compartment_id=resolved_compartment,
+        statistics_type=stats_type,
+        aggregations=[{"function": "count"}],
+        group_by=group_by or None,
+        time_range=timeRange,
+        profile=profile,
+        region=region,
+    )
+
+
+def oci_logan_execute_field_operations(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_execute_field_operations")
+
+
+def oci_logan_correlation_analysis(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_correlation_analysis")
+
+
+def oci_logan_list_log_sources(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_log_sources")
+
+
+def oci_logan_get_log_source_details(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_get_log_source_details")
+
+
+def oci_logan_list_active_log_sources(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_active_log_sources")
+
+
+def oci_logan_list_log_fields(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_log_fields")
+
+
+def oci_logan_get_field_details(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_get_field_details")
+
+
+def oci_logan_get_namespace_info(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_get_namespace_info")
+
+
+def oci_logan_list_entities(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_entities")
+
+
+def oci_logan_get_storage_usage(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_get_storage_usage")
+
+
+def oci_logan_list_parsers(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_parsers")
+
+
+def oci_logan_list_labels(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_list_labels")
+
+
+def oci_logan_query_recent_uploads(*_args, **_kwargs) -> str:
+    return _not_supported("oci_logan_query_recent_uploads")
+
+
 def register_tools() -> list[dict[str, Any]]:
     return [
         # Core Query Tools
@@ -1635,5 +2032,312 @@ def register_tools() -> list[dict[str, Any]]:
                 "required": ["query", "compartment_id"],
             },
             "handler": analyze_exadata_costs,
+        },
+        {
+            "name": "suggest_query",
+            "description": "Suggest improvements and enhancements for a Log Analytics query",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Log Analytics query or description"}
+                },
+                "required": ["query"],
+            },
+            "handler": suggest_query,
+        },
+        {
+            "name": "validate_logan_query",
+            "description": "Validate a Logan query and return suggestions",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Log Analytics query"}
+                },
+                "required": ["query"],
+            },
+            "handler": validate_logan_query,
+        },
+        {
+            "name": "execute_logan_query",
+            "description": "Execute a Logan query against OCI Log Analytics",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Log Analytics query"},
+                    "query_name": {"type": "string", "description": "Optional query name"},
+                    "time_range": {"type": "string", "description": "Time range (e.g., 24h, 7d)", "default": "24h"},
+                    "compartment_id": {"type": "string", "description": "OCI compartment ID"},
+                    "max_count": {"type": "integer", "description": "Max results", "default": 1000},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+            "handler": execute_logan_query,
+        },
+        {
+            "name": "oci_logan_execute_query",
+            "description": "Execute a Logan query (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Log Analytics query"},
+                    "queryName": {"type": "string", "description": "Optional query name"},
+                    "timeRange": {"type": "string", "description": "Time range", "default": "24h"},
+                    "compartmentId": {"type": "string", "description": "OCI compartment ID"},
+                    "environment": {"type": "string", "description": "Optional environment"},
+                    "timeFilter": {"type": "string", "description": "Custom time filter"},
+                    "format": {"type": "string", "enum": ["markdown", "json"], "default": "json"},
+                    "maxCount": {"type": "integer", "description": "Max results", "default": 1000},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+            "handler": oci_logan_execute_query,
+        },
+        {
+            "name": "oci_logan_search_security_events",
+            "description": "Search for security events (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "searchTerm": {"type": "string", "description": "Search term"},
+                    "eventType": {"type": "string", "default": "all"},
+                    "timeRange": {"type": "string", "default": "24h"},
+                    "compartmentId": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                    "format": {"type": "string", "enum": ["markdown", "json"], "default": "json"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["searchTerm"],
+            },
+            "handler": oci_logan_search_security_events,
+        },
+        {
+            "name": "oci_logan_get_mitre_techniques",
+            "description": "Analyze MITRE techniques (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "techniqueId": {"type": "string"},
+                    "category": {"type": "string", "default": "all"},
+                    "timeRange": {"type": "string", "default": "30d"},
+                    "compartmentId": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": [],
+            },
+            "handler": oci_logan_get_mitre_techniques,
+        },
+        {
+            "name": "oci_logan_analyze_ip_activity",
+            "description": "Analyze IP activity (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ipAddress": {"type": "string"},
+                    "analysisType": {"type": "string", "default": "full"},
+                    "timeRange": {"type": "string", "default": "24h"},
+                    "compartmentId": {"type": "string"},
+                    "format": {"type": "string", "enum": ["markdown", "json"], "default": "json"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["ipAddress"],
+            },
+            "handler": oci_logan_analyze_ip_activity,
+        },
+        {
+            "name": "oci_logan_get_queries",
+            "description": "List Logan query templates (Python port)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "default": "all"}
+                },
+                "required": [],
+            },
+            "handler": oci_logan_get_queries,
+        },
+        {
+            "name": "oci_logan_validate_query",
+            "description": "Validate Logan query (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"],
+            },
+            "handler": oci_logan_validate_query,
+        },
+        {
+            "name": "oci_logan_get_documentation",
+            "description": "Get Log Analytics documentation (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "default": "query_syntax"},
+                    "searchTerm": {"type": "string"}
+                },
+                "required": [],
+            },
+            "handler": oci_logan_get_documentation,
+        },
+        {
+            "name": "oci_logan_usage_guide",
+            "description": "Get Logan usage guide",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_usage_guide,
+        },
+        {
+            "name": "oci_logan_health",
+            "description": "Check Logan server health",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartmentId": {"type": "string"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": [],
+            },
+            "handler": oci_logan_health,
+        },
+        {
+            "name": "oci_logan_check_connection",
+            "description": "Check OCI Log Analytics connectivity",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "compartmentId": {"type": "string"},
+                    "testQuery": {"type": "boolean", "default": True},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": [],
+            },
+            "handler": oci_logan_check_connection,
+        },
+        {
+            "name": "oci_logan_execute_advanced_analytics",
+            "description": "Execute advanced analytics (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "analyticsType": {"type": "string"},
+                    "query": {"type": "string"},
+                    "field": {"type": "string"},
+                    "parameters": {"type": "object"},
+                    "timeRange": {"type": "string", "default": "24h"},
+                    "compartmentId": {"type": "string"},
+                    "format": {"type": "string", "enum": ["markdown", "json"], "default": "json"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["analyticsType"],
+            },
+            "handler": oci_logan_execute_advanced_analytics,
+        },
+        {
+            "name": "oci_logan_execute_statistical_analysis",
+            "description": "Execute statistical analysis (Node-compatible input schema)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "operation": {"type": "string"},
+                    "fields": {"type": "array", "items": {"type": "string"}},
+                    "groupBy": {"type": "array", "items": {"type": "string"}},
+                    "query": {"type": "string"},
+                    "timeRange": {"type": "string", "default": "24h"},
+                    "compartmentId": {"type": "string"},
+                    "format": {"type": "string", "enum": ["markdown", "json"], "default": "json"},
+                    "profile": {"type": "string"},
+                    "region": {"type": "string"},
+                },
+                "required": ["operation"],
+            },
+            "handler": oci_logan_execute_statistical_analysis,
+        },
+        {
+            "name": "oci_logan_execute_field_operations",
+            "description": "Execute field operations (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_execute_field_operations,
+        },
+        {
+            "name": "oci_logan_correlation_analysis",
+            "description": "Correlation analysis (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_correlation_analysis,
+        },
+        {
+            "name": "oci_logan_list_log_sources",
+            "description": "List log sources (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_log_sources,
+        },
+        {
+            "name": "oci_logan_get_log_source_details",
+            "description": "Get log source details (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_get_log_source_details,
+        },
+        {
+            "name": "oci_logan_list_active_log_sources",
+            "description": "List active log sources (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_active_log_sources,
+        },
+        {
+            "name": "oci_logan_list_log_fields",
+            "description": "List log fields (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_log_fields,
+        },
+        {
+            "name": "oci_logan_get_field_details",
+            "description": "Get field details (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_get_field_details,
+        },
+        {
+            "name": "oci_logan_get_namespace_info",
+            "description": "Get namespace info (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_get_namespace_info,
+        },
+        {
+            "name": "oci_logan_list_entities",
+            "description": "List entities (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_entities,
+        },
+        {
+            "name": "oci_logan_get_storage_usage",
+            "description": "Get storage usage (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_get_storage_usage,
+        },
+        {
+            "name": "oci_logan_list_parsers",
+            "description": "List parsers (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_parsers,
+        },
+        {
+            "name": "oci_logan_list_labels",
+            "description": "List labels (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_list_labels,
+        },
+        {
+            "name": "oci_logan_query_recent_uploads",
+            "description": "Query recent uploads (not yet supported in Python port)",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "handler": oci_logan_query_recent_uploads,
         },
     ]

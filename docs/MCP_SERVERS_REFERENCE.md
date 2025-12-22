@@ -129,7 +129,7 @@ curl -X POST http://localhost:8080/servers/oci-compute/tools/list_instances \
 
 ---
 
-### 7. oci-cost (24 tools)
+### 7. oci-cost (28 tools)
 
 **Purpose**: FinOps and cost management - analyze costs, detect anomalies, forecast spending.
 
@@ -140,6 +140,10 @@ curl -X POST http://localhost:8080/servers/oci-compute/tools/list_instances \
   - `cost_by_compartment_daily` - Daily cost by compartment
   - `service_cost_drilldown` - Service-level cost breakdown
   - `cost_by_tag_key_value` - Cost grouped by tags
+  - `list_tag_defaults` - Tagging rules (tag defaults)
+  - `cost_by_resource` - Resource-level cost breakdown
+  - `cost_by_database` - Database cost breakdown (ADB by default)
+  - `cost_by_pdb` - PDB cost breakdown (best-effort)
   - `monthly_trend_forecast` - Monthly cost forecast
 - **FinOps Reports**:
   - `budget_status_and_actions` - Budget tracking

@@ -7,7 +7,7 @@ import requests
 import oci
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
 from mcp_oci_common import get_oci_config, get_compartment_id
@@ -475,6 +475,38 @@ def delete_data_source(data_source_id: str, profile: Optional[str] = None, regio
             return {"status": "deleted"}
         except Exception as e:
             return {"error": str(e)}
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    import json
+    manifest = {
+        "name": "OCI MCP Agents Server",
+        "version": "1.0.0",
+        "description": "OCI Generative AI Agents MCP Server for agent, endpoint, and knowledge base management",
+        "capabilities": {
+            "skills": ["genai-agents", "knowledge-bases", "agent-endpoints"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": [
+                    "list_agents", "get_agent", "list_agent_endpoints", "get_agent_endpoint",
+                    "list_knowledge_bases", "get_knowledge_base", "test_agent_message"
+                ],
+                "tier3_heavy": [],
+                "tier4_admin": [
+                    "create_agent", "update_agent", "delete_agent",
+                    "create_agent_endpoint", "update_agent_endpoint", "delete_agent_endpoint",
+                    "create_knowledge_base", "update_knowledge_base", "delete_knowledge_base"
+                ]
+            }
+        },
+        "usage_guide": "Use list_agents for discovery, test_agent_message for testing, admin tools require ALLOW_MUTATIONS=true.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "ALLOW_MUTATIONS", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(fn=lambda: {"status": "ok", "server": "oci-mcp-agents", "pid": os.getpid()}, name="healthcheck", description="Liveness check for agents server"),
     Tool.from_function(fn=lambda: (lambda _cfg=get_oci_config(): {"server": "oci-mcp-agents", "ok": True, "region": _cfg.get("region"), "profile": os.getenv("OCI_PROFILE") or "DEFAULT", "tools": [t.name for t in tools]})(), name="doctor", description="Return server health, config summary, and masking status"),
@@ -545,4 +577,10 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-agents")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     mcp.run()

@@ -25,8 +25,17 @@ class CacheEntry:
         )
 
 
+def _get_shared_cache_dir() -> str:
+    raw = os.getenv("MCP_CACHE_DIR") or os.getenv("OCI_MCP_CACHE_DIR")
+    if raw:
+        return os.path.expanduser(raw)
+    return os.path.expanduser("~/.mcp-oci/cache")
+
+
 class MCPCache:
-    def __init__(self, cache_dir: str = "/tmp/mcp-oci-cache", default_ttl: int = 3600):
+    def __init__(self, cache_dir: str = "", default_ttl: int = 3600):
+        if not cache_dir:
+            cache_dir = _get_shared_cache_dir()
         self.cache_dir = cache_dir
         self.default_ttl = default_ttl
         self.cache: Dict[str, CacheEntry] = {}
@@ -221,7 +230,7 @@ def get_cache() -> MCPCache:
     """Get the global cache instance"""
     global _cache_instance
     if _cache_instance is None:
-        cache_dir = os.getenv("MCP_CACHE_DIR", "/tmp/mcp-oci-cache")
+        cache_dir = os.getenv("MCP_CACHE_DIR") or os.getenv("OCI_MCP_CACHE_DIR") or _get_shared_cache_dir()
         default_ttl = int(os.getenv("MCP_CACHE_TTL", "3600"))  # 1 hour default
         _cache_instance = MCPCache(cache_dir, default_ttl)
     return _cache_instance

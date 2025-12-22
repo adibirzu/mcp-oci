@@ -109,3 +109,30 @@ usage_resources*.csv
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Cache files with sensitive tenant data
+.mcp_oci_opsi_cache.json
+.mcp_oci_opsi_cache_*.json
+.mcp_oci_cache.json
+.mcp_oci_cache_*.json
+.mcp_oci_logan_cache.json
+.mcp_oci_logan_cache_*.json
+*_cache.json
+*.cache
+.mcp_*_cache_*.json
+
+# Discovery reports (sensitive) - NEVER COMMIT
+database_discovery_*.json
+*_discovery_*.json
+tenancy_review_*.json
+inventory_report_*.json
+emdemo_*.json
+
+# Ops data directory
+ops/data/
+
+# Test output
+tests/output/
+
+# Cursor/AI assistant
+.cursor/

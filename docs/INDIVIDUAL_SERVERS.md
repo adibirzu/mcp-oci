@@ -75,6 +75,10 @@ start_instance(instance_id="[Link to Secure Variable: OCI_INSTANCE_OCID]", confi
 - `service_cost_drilldown` - Analyze costs by service and compartment
 - `cost_by_compartment_daily` - Daily cost breakdown by compartment
 - `cost_by_tag_key_value` - Cost analysis by resource tags
+- `list_tag_defaults` - Tagging rules (tag defaults)
+- `cost_by_resource` - Cost by resource ID/name
+- `cost_by_database` - Cost by database resources
+- `cost_by_pdb` - Cost by PDB name (best-effort)
 - `monthly_trend_forecast` - Cost trends and forecasting
 - `object_storage_costs_and_tiering` - Storage cost optimization
 - `top_cost_spikes_explain` - Identify and explain cost anomalies

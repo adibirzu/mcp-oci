@@ -16,9 +16,43 @@ Features:
 import time
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
-from opentelemetry.sdk.trace import TracerProvider, Span
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import Status, StatusCode
+    from opentelemetry.sdk.trace import TracerProvider, Span
+    _OTEL_AVAILABLE = True
+except Exception:
+    trace = None
+    _OTEL_AVAILABLE = False
+
+    class StatusCode:
+        OK = 1
+        ERROR = 2
+        UNSET = 0
+
+    class Status:
+        def __init__(self, status_code, description=None):
+            self.status_code = status_code
+            self.description = description
+
+    class TracerProvider:
+        pass
+
+    class Span:
+        pass
+
+    class _NoOpSpan:
+        def __init__(self):
+            self.status = Status(StatusCode.UNSET)
+
+        def set_attribute(self, *args, **kwargs) -> None:
+            pass
+
+        def set_status(self, *_args, **_kwargs) -> None:
+            pass
+
+        def end(self) -> None:
+            pass
 
 
 @dataclass
@@ -235,6 +269,8 @@ class MCPObservabilityEnhancer:
 
     def _init_tracer_provider(self):
         """Initialize OpenTelemetry TracerProvider for real span creation"""
+        if not _OTEL_AVAILABLE or trace is None:
+            return
         # Set up a TracerProvider to ensure we get recording spans
         # Only initialize if no tracer provider is already set
         if not hasattr(trace.get_tracer_provider(), "_resource"):
@@ -348,7 +384,27 @@ class MCPObservabilityEnhancer:
 
 def create_mcp_otel_enhancer(service_name: str) -> MCPObservabilityEnhancer:
     """Factory function to create MCP OpenTelemetry enhancer"""
+    if not _OTEL_AVAILABLE or trace is None:
+        return _NoOpMCPObservabilityEnhancer(service_name)
     return MCPObservabilityEnhancer(service_name)
+
+
+class _NoOpMCPObservabilityEnhancer:
+    def __init__(self, service_name: str):
+        self.service_name = service_name
+        self.capabilities = {"otel": {"traces": False}}
+
+    def register_trace_handler(self, _handler) -> None:
+        return None
+
+    def get_server_capabilities(self):
+        return self.capabilities
+
+    def create_trace_span(self, **_kwargs):
+        return _NoOpSpan()
+
+    def send_trace_notification(self, *_args, **_kwargs):
+        return None
 
 
 # Example usage and integration helpers

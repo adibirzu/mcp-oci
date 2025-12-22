@@ -8,7 +8,7 @@ import pandas as pd
 from scipy import stats
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 from mcp_oci_common import get_oci_config, get_compartment_id
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes

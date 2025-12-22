@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.session import get_client
@@ -142,7 +142,7 @@ def list_db_systems(
         cache = get_cache()
         params = {'compartment_id': compartment_id, 'region': region}
         try:
-            systems, req_id = cache.get_or_refresh(
+            result = cache.get_or_refresh(
                 server_name="oci-mcp-db",
                 operation="list_db_systems",
                 params=params,
@@ -150,6 +150,11 @@ def list_db_systems(
                 ttl_seconds=600,
                 force_refresh=False
             )
+            # Handle None result from cache refresh failure
+            if result is None:
+                logging.error("Failed to fetch DB systems from cache or source.")
+                return []
+            systems, req_id = result
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             span.set_attribute("systems.count", len(systems))
@@ -158,6 +163,11 @@ def list_db_systems(
             if region:
                 span.set_attribute("region", region)
             return systems
+        except (TypeError, ValueError) as e:
+            # Handle unpacking errors
+            logging.error(f"Error unpacking DB systems result: {e}")
+            span.record_exception(e)
+            return []
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing DB systems: {e}")
             span.record_exception(e)
@@ -747,6 +757,37 @@ except ImportError:
     logging.warning("Skills module not available - skill tools will not be registered")
 
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    import json
+    manifest = {
+        "name": "OCI MCP Database Server",
+        "version": "1.0.0",
+        "description": "OCI Database MCP Server for Autonomous DB and DB Systems management",
+        "capabilities": {
+            "skills": ["database-management", "performance-monitoring", "cost-analysis"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": [
+                    "list_autonomous_databases", "list_db_systems", "get_autonomous_database",
+                    "get_db_cpu_snapshot", "get_db_metrics", "query_multicloud_costs", "get_cost_summary_by_cloud"
+                ],
+                "tier3_heavy": [],
+                "tier4_admin": [
+                    "start_autonomous_database", "stop_autonomous_database", "restart_autonomous_database",
+                    "start_db_system", "stop_db_system", "restart_db_system"
+                ]
+            }
+        },
+        "usage_guide": "Use list_autonomous_databases for discovery, get_db_metrics for monitoring, admin tools require ALLOW_MUTATIONS=true.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "ALLOW_MUTATIONS", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(
         fn=healthcheck,
@@ -958,6 +999,12 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-db")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

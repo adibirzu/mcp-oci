@@ -30,7 +30,7 @@ import oci
 from oci.pagination import list_call_get_all_results
 
 # OpenTelemetry
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 # Common utilities from mcp_oci_common
 from mcp_oci_common import (
@@ -908,6 +908,34 @@ def create_preauthenticated_request(
 
 
 # =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    import json
+    manifest = {
+        "name": "OCI MCP Object Storage Server",
+        "version": "1.0.0",
+        "description": "OCI Object Storage MCP Server for bucket and object management",
+        "capabilities": {
+            "skills": ["object-storage", "backup-management", "storage-analytics"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": [
+                    "list_buckets", "get_bucket", "list_objects",
+                    "get_bucket_usage", "list_db_backups", "get_backup_details"
+                ],
+                "tier3_heavy": ["get_storage_report"],
+                "tier4_admin": ["create_preauthenticated_request"]
+            }
+        },
+        "usage_guide": "Use list_buckets for discovery, get_storage_report for comprehensive analysis, list_db_backups for backup discovery.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "ALLOW_MUTATIONS", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
+# =============================================================================
 # Tool Registration
 # =============================================================================
 
@@ -1024,6 +1052,11 @@ if __name__ == "__main__":
 
     # Create and run FastMCP server
     mcp = FastMCP(tools=tools, name="oci-mcp-objectstorage")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
 
     # Optional OpenTelemetry instrumentation
     if _FastAPIInstrumentor:

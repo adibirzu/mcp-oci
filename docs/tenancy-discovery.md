@@ -18,12 +18,12 @@ The discovery process collects:
 
 Tenancy discovery cache is stored at:
 ```
-~/.mcp_oci_cache/tenancy_discovery.json
+~/.mcp-oci/cache/tenancy_discovery.json
 ```
 
 You can customize the cache directory with:
 ```bash
-export MCP_OCI_CACHE_DIR="/path/to/cache"
+export MCP_CACHE_DIR="/path/to/cache"
 ```
 
 ## Cache Format
@@ -66,7 +66,7 @@ python scripts/init_tenancy_discovery.py
 
 This will:
 1. Discover tenancy information from OCI
-2. Save cache to `~/.mcp_oci_cache/tenancy_discovery.json`
+2. Save cache to `~/.mcp-oci/cache/tenancy_discovery.json`
 3. Print discovered information to stdout
 
 ## Using Discovery Cache
@@ -85,7 +85,7 @@ The cache is refreshed:
 
 To force a refresh:
 ```bash
-rm ~/.mcp_oci_cache/tenancy_discovery.json
+rm ~/.mcp-oci/cache/tenancy_discovery.json
 # Restart servers or run discovery manually
 ```
 
@@ -102,7 +102,7 @@ If discovery fails:
 ### Cache Not Updating
 
 If cache seems stale:
-1. Delete the cache file: `rm ~/.mcp_oci_cache/tenancy_discovery.json`
+1. Delete the cache file: `rm ~/.mcp-oci/cache/tenancy_discovery.json`
 2. Restart servers or run discovery manually
 3. Verify write permissions to cache directory
 
@@ -131,4 +131,3 @@ All MCP servers benefit from tenancy discovery:
 - [Installation Guide](../README.md#installation)
 - [Configuration Guide](../README.md#configuration)
 - [Architecture Guide](../ARCHITECTURE.md)
-

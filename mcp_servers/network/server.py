@@ -7,12 +7,13 @@ import oci
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common import get_oci_config, get_compartment_id, add_oci_call_attributes, allow_mutations, validate_and_log_tools
 from mcp_oci_common.session import get_client
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span
+import json
 
 # Load repo-local .env.local so OCI/OTEL config is applied consistently.
 try:
@@ -88,7 +89,7 @@ def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
         cache = get_cache()
         params = {'compartment_id': compartment}
         try:
-            vcns, req_id = cache.get_or_refresh(
+            result = cache.get_or_refresh(
                 server_name="oci-mcp-network",
                 operation="list_vcns",
                 params=params,
@@ -96,6 +97,11 @@ def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
                 ttl_seconds=600,
                 force_refresh=False
             )
+            # Handle None result from cache (fetch failed or empty cache)
+            if result is None:
+                logging.warning("Cache returned None for list_vcns - fetch may have failed")
+                return []
+            vcns, req_id = result
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             span.set_attribute("vcns.count", len(vcns))
@@ -104,6 +110,10 @@ def list_vcns(compartment_id: Optional[str] = None) -> List[Dict]:
             return vcns
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing VCNs: {e}")
+            span.record_exception(e)
+            return []
+        except (TypeError, ValueError) as e:
+            logging.error(f"Error unpacking cache result for list_vcns: {e}")
             span.record_exception(e)
             return []
 
@@ -133,7 +143,7 @@ def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict
         cache = get_cache()
         params = {'vcn_id': vcn_id, 'compartment_id': compartment}
         try:
-            subnets, req_id = cache.get_or_refresh(
+            result = cache.get_or_refresh(
                 server_name="oci-mcp-network",
                 operation="list_subnets",
                 params=params,
@@ -141,6 +151,11 @@ def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict
                 ttl_seconds=600,
                 force_refresh=False
             )
+            # Handle None result from cache (fetch failed or empty cache)
+            if result is None:
+                logging.warning("Cache returned None for list_subnets - fetch may have failed")
+                return []
+            subnets, req_id = result
             if req_id:
                 span.set_attribute("oci.request_id", req_id)
             span.set_attribute("subnets.count", len(subnets))
@@ -150,6 +165,10 @@ def list_subnets(vcn_id: str, compartment_id: Optional[str] = None) -> List[Dict
             return subnets
         except oci.exceptions.ServiceError as e:
             logging.error(f"Error listing subnets: {e}")
+            span.record_exception(e)
+            return []
+        except (TypeError, ValueError) as e:
+            logging.error(f"Error unpacking cache result for list_subnets: {e}")
             span.record_exception(e)
             return []
 
@@ -748,6 +767,68 @@ def create_vcn_with_subnets_rest(
             span.record_exception(e)
             return {"error": str(e), "region": used_region, "compartment_id": comp, "api": "rest"}
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """
+    Server manifest resource for capability discovery.
+    Returns server metadata, available skills, and tool categorization.
+    """
+    manifest = {
+        "name": "OCI MCP Network Server",
+        "version": "1.0.0",
+        "description": "OCI Network Infrastructure MCP Server for VCN, subnet, and gateway management",
+        "capabilities": {
+            "skills": [
+                "network-topology",
+                "vcn-management",
+                "subnet-management",
+                "security-assessment"
+            ],
+            "tools": {
+                "tier1_instant": [
+                    "healthcheck",
+                    "doctor"
+                ],
+                "tier2_api": [
+                    "list_vcns",
+                    "list_subnets",
+                    "summarize_public_endpoints"
+                ],
+                "tier3_heavy": [],
+                "tier4_admin": [
+                    "create_vcn",
+                    "create_subnet",
+                    "create_vcn_with_subnets",
+                    "create_vcn_with_subnets_rest"
+                ]
+            }
+        },
+        "usage_guide": """
+Start with Tier 1 tools for instant responses (< 100ms):
+1. Use healthcheck() for basic server status
+2. Use doctor() to verify configuration
+
+Then use Tier 2 tools for API-based queries (1-10s):
+1. Use list_vcns() to discover networks
+2. Use list_subnets() to explore VCN topology
+3. Use summarize_public_endpoints() for security assessment
+
+Tier 4 admin tools require ALLOW_MUTATIONS=true:
+- create_vcn_with_subnets() - Full VCN with gateways and subnets
+""",
+        "environment_variables": [
+            "OCI_PROFILE",
+            "OCI_REGION",
+            "COMPARTMENT_OCID",
+            "ALLOW_MUTATIONS",
+            "MCP_OCI_PRIVACY"
+        ]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(
         fn=lambda: {"status": "ok", "server": "oci-mcp-network", "pid": os.getpid()},
@@ -758,6 +839,7 @@ tools = [
         fn=lambda: (lambda _cfg=get_oci_config(): {
             "server": "oci-mcp-network",
             "ok": True,
+            "privacy": bool(__import__('mcp_oci_common.privacy', fromlist=['privacy_enabled']).privacy_enabled()),
             "region": _cfg.get("region"),
             "profile": os.getenv("OCI_PROFILE") or "DEFAULT",
             "tools": [t.name for t in tools]
@@ -850,6 +932,11 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-network")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

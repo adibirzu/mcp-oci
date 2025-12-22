@@ -8,7 +8,7 @@ import difflib
 from typing import Dict, Optional, List
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.cache import get_cache
 from mcp_oci_common.config import get_oci_config
@@ -601,15 +601,19 @@ def list_security_lists_inventory(compartment_id: Optional[str] = None, vcn_id: 
     """List Networking security lists (NSGs) in a compartment; optionally filter by VCN."""
     with tool_span(tracer, "list_security_lists_inventory", mcp_server="oci-mcp-inventory") as span:
         try:
-            if not compartment_id:
-                cfg = get_oci_config(profile_name=profile)
-                if region:
-                    cfg["region"] = region
-                compartment_id = cfg.get("tenancy")
-            from mcp_oci_networking.server import list_security_lists as _lsl
-            out = _lsl(compartment_id=compartment_id, vcn_id=vcn_id, limit=limit, profile=profile, region=region)
-            data = json.loads(out) if isinstance(out, str) else out
-            return {"items": data.get("items", []), "count": len(data.get("items", []))}
+            cfg = get_oci_config(profile_name=profile)
+            if region:
+                cfg["region"] = region
+            compartment = compartment_id or cfg.get("tenancy")
+            vn_client = get_client(oci.core.VirtualNetworkClient, region=cfg.get("region"))
+            kwargs = {"compartment_id": compartment}
+            if vcn_id:
+                kwargs["vcn_id"] = vcn_id
+            if limit:
+                kwargs["limit"] = limit
+            response = list_call_get_all_results(vn_client.list_security_lists, **kwargs)
+            items = [{"id": sl.id, "display_name": sl.display_name, "vcn_id": sl.vcn_id} for sl in response.data[:limit]]
+            return {"items": items, "count": len(items)}
         except Exception as e:
             return {"error": str(e)}
 
@@ -618,15 +622,14 @@ def list_load_balancers_inventory(compartment_id: Optional[str] = None, limit: i
     """List Load Balancers in a compartment."""
     with tool_span(tracer, "list_load_balancers_inventory", mcp_server="oci-mcp-inventory") as span:
         try:
-            if not compartment_id:
-                cfg = get_oci_config(profile_name=profile)
-                if region:
-                    cfg["region"] = region
-                compartment_id = cfg.get("tenancy")
-            from mcp_oci_loadbalancer.server import list_load_balancers as _llb
-            out = _llb(compartment_id=compartment_id, limit=limit, profile=profile, region=region)
-            data = json.loads(out) if isinstance(out, str) else out
-            return {"items": data.get("items", []), "count": len(data.get("items", []))}
+            cfg = get_oci_config(profile_name=profile)
+            if region:
+                cfg["region"] = region
+            compartment = compartment_id or cfg.get("tenancy")
+            lb_client = get_client(oci.load_balancer.LoadBalancerClient, region=cfg.get("region"))
+            response = list_call_get_all_results(lb_client.list_load_balancers, compartment_id=compartment)
+            items = [{"id": lb.id, "display_name": lb.display_name, "lifecycle_state": lb.lifecycle_state} for lb in response.data[:limit]]
+            return {"items": items, "count": len(items)}
         except Exception as e:
             return {"error": str(e)}
 
@@ -636,59 +639,104 @@ def list_all_discovery(compartment_id: Optional[str] = None, profile: Optional[s
     Returns counts per type and small samples (up to limit_per_type).
     """
     with tool_span(tracer, "list_all_discovery", mcp_server="oci-mcp-inventory"):
-        if not compartment_id:
-            cfg = get_oci_config(profile_name=profile)
-            if region:
-                cfg["region"] = region
-            compartment_id = cfg.get("tenancy")
+        cfg = get_oci_config(profile_name=profile)
+        if region:
+            cfg["region"] = region
+        compartment = compartment_id or cfg.get("tenancy")
         result: Dict[str, Dict] = {}
-        # Helper to load possibly-JSON-returning functions
-        def _load(x):
-            try:
-                parsed = json.loads(x) if isinstance(x, str) else x
-                return _safe_serialize(parsed)
-            except Exception:
-                return _safe_serialize(x)
-        # Networking
+
+        # Networking - VCNs, Subnets, Security Lists
         try:
-            from mcp_oci_networking.server import list_vcns as _lv, list_subnets as _ls, list_security_lists as _lsl
-            lv = _load(_lv(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            ls = _load(_ls(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            lsl = _load(_lsl(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            result["vcns"] = {"count": len(lv.get("items", [])), "items": lv.get("items", [])}
-            result["subnets"] = {"count": len(ls.get("items", [])), "items": ls.get("items", [])}
-            result["security_lists"] = {"count": len(lsl.get("items", [])), "items": lsl.get("items", [])}
+            vn_client = get_client(oci.core.VirtualNetworkClient, region=cfg.get("region"))
+            # VCNs
+            vcns_resp = list_call_get_all_results(vn_client.list_vcns, compartment_id=compartment)
+            vcn_items = [{"id": v.id, "display_name": v.display_name, "cidr_block": getattr(v, 'cidr_block', '')} for v in vcns_resp.data[:limit_per_type]]
+            result["vcns"] = {"count": len(vcn_items), "items": vcn_items}
+            # Security Lists
+            sl_resp = list_call_get_all_results(vn_client.list_security_lists, compartment_id=compartment)
+            sl_items = [{"id": sl.id, "display_name": sl.display_name, "vcn_id": sl.vcn_id} for sl in sl_resp.data[:limit_per_type]]
+            result["security_lists"] = {"count": len(sl_items), "items": sl_items}
+            # Subnets (across all VCNs in the first few VCNs)
+            subnet_items = []
+            for vcn in vcns_resp.data[:5]:  # Limit to first 5 VCNs
+                try:
+                    sn_resp = list_call_get_all_results(vn_client.list_subnets, compartment_id=compartment, vcn_id=vcn.id)
+                    for sn in sn_resp.data[:limit_per_type]:
+                        subnet_items.append({"id": sn.id, "display_name": sn.display_name, "cidr_block": sn.cidr_block, "vcn_id": vcn.id})
+                except Exception:
+                    pass
+            result["subnets"] = {"count": len(subnet_items), "items": subnet_items[:limit_per_type]}
         except Exception as e:
             result["networking_error"] = {"error": str(e)}
-        # Compute
+
+        # Compute instances
         try:
-            from mcp_oci_compute.server import list_instances as _li
-            li = _li(compartment_id=compartment_id, include_subtree=False, max_items=limit_per_type, profile=profile, region=region)
-            result["instances"] = {"count": len(li.get("items", [])), "items": li.get("items", [])}
+            compute_client = get_client(oci.core.ComputeClient, region=cfg.get("region"))
+            inst_resp = list_call_get_all_results(compute_client.list_instances, compartment_id=compartment)
+            inst_items = [{"id": i.id, "display_name": i.display_name, "lifecycle_state": i.lifecycle_state, "shape": i.shape} for i in inst_resp.data[:limit_per_type]]
+            result["instances"] = {"count": len(inst_items), "items": inst_items}
         except Exception as e:
             result["compute_error"] = {"error": str(e)}
+
         # Load balancers
         try:
-            from mcp_oci_loadbalancer.server import list_load_balancers as _llb
-            lb = _load(_llb(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            result["load_balancers"] = {"count": len(lb.get("items", [])), "items": lb.get("items", [])}
+            lb_client = get_client(oci.load_balancer.LoadBalancerClient, region=cfg.get("region"))
+            lb_resp = list_call_get_all_results(lb_client.list_load_balancers, compartment_id=compartment)
+            lb_items = [{"id": lb.id, "display_name": lb.display_name, "lifecycle_state": lb.lifecycle_state} for lb in lb_resp.data[:limit_per_type]]
+            result["load_balancers"] = {"count": len(lb_items), "items": lb_items}
         except Exception as e:
             result["loadbalancer_error"] = {"error": str(e)}
-        # Functions
+
+        # Functions applications
         try:
-            from mcp_oci_functions.server import list_applications as _lapp
-            fa = _load(_lapp(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            result["functions_apps"] = {"count": len(fa.get("items", [])), "items": fa.get("items", [])}
+            fn_client = get_client(oci.functions.FunctionsManagementClient, region=cfg.get("region"))
+            fn_resp = list_call_get_all_results(fn_client.list_applications, compartment_id=compartment)
+            fn_items = [{"id": f.id, "display_name": f.display_name, "lifecycle_state": f.lifecycle_state} for f in fn_resp.data[:limit_per_type]]
+            result["functions_apps"] = {"count": len(fn_items), "items": fn_items}
         except Exception as e:
             result["functions_error"] = {"error": str(e)}
-        # Streaming
+
+        # Streaming streams
         try:
-            from mcp_oci_streaming.server import list_streams as _lst
-            st = _load(_lst(compartment_id=compartment_id, limit=limit_per_type, profile=profile, region=region))
-            result["streams"] = {"count": len(st.get("items", [])), "items": st.get("items", [])}
+            stream_client = get_client(oci.streaming.StreamAdminClient, region=cfg.get("region"))
+            stream_resp = list_call_get_all_results(stream_client.list_streams, compartment_id=compartment)
+            stream_items = [{"id": s.id, "name": s.name, "lifecycle_state": s.lifecycle_state} for s in stream_resp.data[:limit_per_type]]
+            result["streams"] = {"count": len(stream_items), "items": stream_items}
         except Exception as e:
             result["streaming_error"] = {"error": str(e)}
+
         return _safe_serialize(result)
+
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    import json
+    manifest = {
+        "name": "OCI MCP Inventory Server",
+        "version": "1.0.0",
+        "description": "OCI Inventory MCP Server for resource discovery and capacity reporting",
+        "capabilities": {
+            "skills": ["resource-inventory", "capacity-planning", "discovery"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor", "get_cache_stats"],
+                "tier2_api": [
+                    "get_tenancy_info", "list_all_discovery",
+                    "list_streams_inventory", "list_functions_applications_inventory",
+                    "list_security_lists_inventory", "list_load_balancers_inventory"
+                ],
+                "tier3_heavy": [
+                    "run_showoci", "run_showoci_simple", "generate_compute_capacity_report"
+                ],
+                "tier4_admin": ["refresh_local_cache"]
+            }
+        },
+        "usage_guide": "Use get_tenancy_info for overview, list_all_discovery for resource audit, run_showoci for comprehensive inventory.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
 
 tools = [
     Tool.from_function(fn=healthcheck, name="healthcheck", description="Lightweight readiness/liveness check for the inventory server"),
@@ -812,6 +860,12 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-inventory")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

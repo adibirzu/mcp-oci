@@ -1,0 +1,106 @@
+{
+  "mcpServers": {
+    "oci-mcp-unified": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/unified/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "ALLOW_MUTATIONS": "false",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-cost": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["-m", "mcp_servers.cost.server"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-compute": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/compute/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "ALLOW_MUTATIONS": "false",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-network": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/network/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "ALLOW_MUTATIONS": "false",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-db": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/db/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "ALLOW_MUTATIONS": "false",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-security": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/security/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    },
+    "oci-mcp-observability": {
+      "command": "/Users/abirzu/dev/MCP/mcp-oci/.venv/bin/python",
+      "args": ["mcp_servers/observability/server.py"],
+      "cwd": "/Users/abirzu/dev/MCP/mcp-oci",
+      "env": {
+        "PYTHONPATH": "/Users/abirzu/dev/MCP/mcp-oci/src:/Users/abirzu/dev/MCP/mcp-oci",
+        "OCI_PROFILE": "DEFAULT",
+        "OCI_REGION": "eu-frankfurt-1",
+        "MCP_OCI_PRIVACY": "true",
+        "OTEL_TRACING_ENABLED": "true",
+        "OCI_APM_ENDPOINT": "https://aaaadfjywjb7saaaaaaaaacvse.apm-agt.eu-frankfurt-1.oci.oraclecloud.com/20200101/opentelemetry",
+        "OCI_APM_PRIVATE_DATA_KEY": "OLEWOU27SSKBDEICSEAOCIAS75MX3UQD"
+      }
+    }
+  }
+}

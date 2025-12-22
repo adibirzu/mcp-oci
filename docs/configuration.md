@@ -86,7 +86,10 @@ Example file for documentation and onboarding. Copy to `.env.local` and fill in 
 |----------|-------------|----------|---------|
 | `ALLOW_MUTATIONS` | Enable write operations | No | `false` |
 | `MCP_OCI_PRIVACY` | Mask OCIDs in responses | No | `true` |
-| `MCP_OCI_CACHE_DIR` | Cache directory | No | `~/.mcp_oci_cache` |
+| `MCP_CACHE_DIR` | Shared cache directory | No | `~/.mcp-oci/cache` |
+| `MCP_CACHE_BACKEND` | Cache backend (`file` or `redis`) | No | `file` |
+| `MCP_REDIS_URL` | Redis connection URL for shared cache | No | `redis://localhost:6379` |
+| `MCP_CACHE_KEY_PREFIX` | Redis key prefix for shared cache | No | `mcp:cache` |
 
 ### Server Ports
 

@@ -51,6 +51,16 @@ ls -lah ~/.mcp-oci/cache/
 cat ~/.mcp-oci/cache/cache_metadata.json
 ```
 
+## 2b. (Optional) Redis Shared Cache
+
+```bash
+# Store cache in Redis for shared access
+export MCP_CACHE_BACKEND=redis
+export MCP_REDIS_URL=redis://localhost:6379
+export MCP_CACHE_KEY_PREFIX=mcp:cache
+python scripts/build-local-cache.py
+```
+
 ## 3. Use Enhanced Servers
 
 ### Start Cost Server

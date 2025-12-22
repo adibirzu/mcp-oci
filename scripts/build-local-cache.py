@@ -43,7 +43,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Default cache directory
-DEFAULT_CACHE_DIR = os.path.expanduser("~/.mcp-oci/cache")
+def _get_shared_cache_dir() -> str:
+    raw = os.getenv("MCP_CACHE_DIR") or os.getenv("OCI_MCP_CACHE_DIR")
+    if raw:
+        return os.path.expanduser(raw)
+    return os.path.expanduser("~/.mcp-oci/cache")
+
+
+DEFAULT_CACHE_DIR = _get_shared_cache_dir()
+
+
+def _maybe_write_redis_cache(cache_data: Dict[str, Any], metadata: Dict[str, Any]) -> None:
+    backend = os.getenv("MCP_CACHE_BACKEND", "file").lower()
+    redis_url = os.getenv("MCP_REDIS_URL") or os.getenv("REDIS_URL")
+    if backend != "redis" or not redis_url:
+        return
+    try:
+        import redis  # type: ignore
+    except Exception:
+        logger.warning("Redis cache backend requested but redis library not installed; skipping Redis write")
+        return
+    try:
+        prefix = os.getenv("MCP_CACHE_KEY_PREFIX", "mcp:cache")
+        client = redis.Redis.from_url(redis_url)
+        client.set(f"{prefix}:oci_resources_cache", json.dumps(cache_data, default=str))
+        client.set(f"{prefix}:oci_cache_metadata", json.dumps(metadata, default=str))
+        logger.info("Cache pushed to Redis")
+    except Exception as e:
+        logger.warning(f"Failed to write cache to Redis: {e}")
 
 
 class OCILocalCacheBuilder:
@@ -504,6 +531,7 @@ class OCILocalCacheBuilder:
                 json.dump(metadata, f, indent=2)
 
             logger.info(f"Metadata saved to {metadata_file}")
+            _maybe_write_redis_cache(self.cache_data, metadata)
 
         except Exception as e:
             logger.error(f"Error saving cache: {e}")

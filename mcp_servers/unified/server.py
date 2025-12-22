@@ -43,11 +43,14 @@ except ImportError:
     raise
 
 try:
-    from opentelemetry import trace
+    from mcp_oci_common.otel import trace
     from mcp_oci_common.observability import init_tracing, init_metrics
+    from mcp_oci_common.oci_apm import init_oci_apm_tracing
     os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-unified")
     init_tracing(service_name="oci-mcp-unified")
     init_metrics()
+    # Initialize OCI APM tracing (uses OCI_APM_ENDPOINT and OCI_APM_PRIVATE_DATA_KEY)
+    init_oci_apm_tracing(service_name="oci-mcp-unified")
     tracer = trace.get_tracer("oci-mcp-unified")
 except ImportError:
     logger.warning("OpenTelemetry not available - tracing disabled")

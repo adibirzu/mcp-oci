@@ -244,7 +244,24 @@ def _infer_otlp_transport(endpoint: str) -> str:
     return "grpc"
 
 
-def _get_otlp_export_config(endpoint: str | None) -> tuple[str, str, dict[str, str] | None]:
+def _normalize_oci_apm_endpoint(endpoint: str, signal: str) -> str:
+    """
+    Normalize OCI APM OTLP endpoints to the expected OTLP signal paths.
+    Mirrors the Node agents' behavior for /opentelemetry/private/v1/{signal}.
+    """
+    base = endpoint.rstrip("/")
+    if "/v1/" in base:
+        return base
+    if "/opentelemetry" in base:
+        return f"{base}/private/v1/{signal}"
+    if "/20200101" in base:
+        return f"{base}/opentelemetry/private/v1/{signal}"
+    return f"{base}/20200101/opentelemetry/private/v1/{signal}"
+
+
+def _get_otlp_export_config(
+    endpoint: str | None, *, signal: str = "traces"
+) -> tuple[str, str, dict[str, str] | None]:
     """
     Determine OTLP exporter transport + endpoint + headers.
 
@@ -263,7 +280,7 @@ def _get_otlp_export_config(endpoint: str | None) -> tuple[str, str, dict[str, s
         oci_key = os.getenv("OCI_APM_PRIVATE_DATA_KEY")
         if oci_ep and oci_key:
             # OCI APM takes precedence
-            ep = oci_ep
+            ep = _normalize_oci_apm_endpoint(oci_ep, signal)
             headers = {"Authorization": f"dataKey {oci_key}"}
             # Ensure we use HTTP protocol for OCI APM
             transport = _infer_otlp_transport(ep)
@@ -358,7 +375,7 @@ def init_tracing(
         # Already initialized; return tracer for the requested service name.
         return trace.get_tracer(service_name)
 
-    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint)
+    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint, signal="traces")
     
     # If transport is "none", tracing is disabled
     if transport == "none":
@@ -401,6 +418,21 @@ def init_tracing(
         return None
 
 
+def _is_oci_apm_endpoint() -> bool:
+    """Check if OCI APM endpoint is configured (OCI APM doesn't support metrics)."""
+    oci_ep = os.getenv("OCI_APM_ENDPOINT")
+    oci_key = os.getenv("OCI_APM_PRIVATE_DATA_KEY")
+    return bool(oci_ep and oci_key)
+
+
+def _metrics_exporter_disabled() -> bool:
+    """Check if metrics exporter is explicitly disabled via environment."""
+    # Support both MCP_OTEL_METRICS_EXPORTER=none and OTEL_METRICS_EXPORTER=none
+    mcp_metrics = os.getenv("MCP_OTEL_METRICS_EXPORTER", "").lower()
+    otel_metrics = os.getenv("OTEL_METRICS_EXPORTER", "").lower()
+    return mcp_metrics == "none" or otel_metrics == "none"
+
+
 def init_metrics(
     *,
     endpoint: str | None = None,
@@ -411,8 +443,23 @@ def init_metrics(
     Initialize OTLP metrics export (optional). Uses the same endpoint as tracing by default.
     This is idempotent: calling it multiple times will not re-create providers.
     Returns None if OpenTelemetry is not available.
+
+    Note: OCI APM does not support OTLP metrics - only traces. When OCI APM is configured,
+    metrics export is automatically disabled to avoid 404 errors.
     """
     if not _otel_tracing_enabled():
+        return None
+
+    # Check if metrics exporter is explicitly disabled
+    if _metrics_exporter_disabled():
+        return None
+
+    # OCI APM does not support OTLP metrics - skip metrics initialization
+    if _is_oci_apm_endpoint():
+        import logging
+        logging.getLogger(__name__).debug(
+            "Skipping OTLP metrics initialization: OCI APM only supports traces, not metrics"
+        )
         return None
 
     otel_available, otel_modules = _lazy_import_opentelemetry()
@@ -433,7 +480,11 @@ def init_metrics(
         # Already initialized; return meter for the requested name.
         return metrics.get_meter(meter_name)
 
-    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint)
+    transport, exporter_endpoint, headers = _get_otlp_export_config(endpoint, signal="metrics")
+
+    # If transport is "none", metrics are disabled
+    if transport == "none":
+        return None
 
     try:
         if transport == "http":

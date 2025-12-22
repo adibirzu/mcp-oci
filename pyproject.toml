@@ -6,7 +6,8 @@ authors = [ "Abir Zu <abirzu@example.com>" ]
 readme = "README.md"
 packages = [
   {include = "mcp_servers"},
-  {include = "mcp_oci_common"}
+  {include = "mcp_oci_common"},
+  {include = "mcp_oci_usageapi", from = "src"}
 ]
 
 [tool.poetry.dependencies]
@@ -30,6 +31,7 @@ opentelemetry-sdk = { version = "*", optional = true }
 opentelemetry-api = { version = "*", optional = true }
 opentelemetry-exporter-otlp = { version = "*", optional = true }
 opentelemetry-instrumentation-fastapi = { version = "^0.58b0", optional = true }
+redis = { version = "*", optional = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
@@ -67,6 +69,9 @@ observability = [
     "opentelemetry-exporter-otlp",
     "opentelemetry-instrumentation-fastapi"
 ]
+cache = [
+    "redis"
+]
 dev = [
     "pytest",
     "pytest-mock",
@@ -89,7 +94,8 @@ all = [
     "opentelemetry-sdk",
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
-    "opentelemetry-instrumentation-fastapi"
+    "opentelemetry-instrumentation-fastapi",
+    "redis"
 ]
 
 # Expose CLI entry points
