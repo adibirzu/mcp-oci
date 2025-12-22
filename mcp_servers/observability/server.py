@@ -30,7 +30,7 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool
 
 # ----- OpenTelemetry -----
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 
 # Log Analytics support is optional; import lazily when available.
 la_execute_query_impl = None
@@ -1572,6 +1572,10 @@ tools = [
     Tool.from_function(fn=get_observability_metrics_summary, name="get_observability_metrics_summary", description="Get comprehensive observability metrics and server status"),
 ]
 
+def healthcheck() -> Dict:
+    """Lightweight readiness/liveness check for the observability server."""
+    return {"status": "ok", "server": "oci-mcp-observability", "pid": os.getpid()}
+
 def doctor() -> Dict:
     try:
         from mcp_oci_common.privacy import privacy_enabled
@@ -1632,9 +1636,11 @@ def diagnostics_loganalytics_stats(
         "ok": bool(chosen),
     }
 
-# Register diagnostics tool
+# Register diagnostics and health tools
 if LOGAN_AVAILABLE:
     tools.append(Tool.from_function(fn=diagnostics_loganalytics_stats, name="diagnostics_loganalytics_stats", description="Run multiple 'stats by Log Source' variants and report which works"))
+# Insert healthcheck at the beginning for consistency with other servers
+tools.insert(0, Tool.from_function(fn=healthcheck, name="healthcheck", description="Lightweight readiness/liveness check for the observability server"))
 tools.append(Tool.from_function(fn=doctor, name="doctor", description="Return server health, config summary, and masking status"))
 
 def doctor_all() -> Dict:
@@ -1695,6 +1701,39 @@ def doctor_all() -> Dict:
 
 tools.append(Tool.from_function(fn=doctor_all, name="doctor_all", description="Aggregate doctor/healthcheck across all MCP-OCI servers"))
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    manifest = {
+        "name": "OCI MCP Observability Server",
+        "version": "1.0.0",
+        "description": "OCI Observability MCP Server for Log Analytics, Monitoring, and Security Analysis",
+        "capabilities": {
+            "skills": ["log-analytics", "security-analysis", "monitoring", "threat-intelligence"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor", "get_la_namespace", "quick_checks"],
+                "tier2_api": [
+                    "list_la_namespaces", "run_log_analytics_query", "run_saved_search",
+                    "execute_logan_query", "search_security_events", "validate_query",
+                    "check_oci_connection", "get_documentation"
+                ],
+                "tier3_heavy": [
+                    "build_advanced_query", "correlate_threat_intelligence",
+                    "get_mitre_techniques", "analyze_ip_activity",
+                    "execute_statistical_analysis", "execute_advanced_analytics",
+                    "correlate_metrics_with_logs", "doctor_all"
+                ],
+                "tier4_admin": ["set_la_namespace", "emit_test_log"]
+            }
+        },
+        "usage_guide": "Use quick_checks for basic validation, execute_logan_query for log analysis, search_security_events for threat hunting.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "LA_NAMESPACE", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 def get_tools():
     return [{"name": t.name, "description": t.description} for t in tools]
 
@@ -1748,6 +1787,11 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-observability")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
 
     if _FastAPIInstrumentor:
         try:

@@ -5,10 +5,11 @@ from typing import List, Dict, Optional, Any
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
 from datetime import datetime, timedelta
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 from mcp_oci_common.session import get_client
+from mcp_oci_common.oci_apm import init_oci_apm_tracing
 
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations, validate_and_log_tools
 from mcp_oci_common.cache import get_cache
@@ -30,6 +31,8 @@ logging.basicConfig(level=logging.INFO if os.getenv('DEBUG') else logging.WARNIN
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-compute")
 init_tracing(service_name="oci-mcp-compute")
 init_metrics()
+# Initialize OCI APM tracing (uses OCI_APM_ENDPOINT and OCI_APM_PRIVATE_DATA_KEY)
+init_oci_apm_tracing(service_name="oci-mcp-compute")
 tracer = trace.get_tracer("oci-mcp-compute")
 
 def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str] = None, lifecycle_state: Optional[str] = None, include_volumes: bool = True, include_ips: bool = True):
@@ -110,7 +113,7 @@ def _fetch_instances(compartment_id: Optional[str] = None, region: Optional[str]
 
         # Add volume information (boot volumes and block volumes) if requested
         if include_volumes:
-            volumes_info = _get_instance_volumes(inst.id, instance_compartment)
+            volumes_info = _get_instance_volumes(inst.id, instance_compartment, getattr(inst, 'availability_domain', ''))
             instance_data['boot_volumes'] = volumes_info.get('boot_volumes', [])
             instance_data['block_volumes'] = volumes_info.get('block_volumes', [])
             
@@ -374,7 +377,7 @@ def _safe_serialize(obj):
         except Exception:
             return {"unknown_type": str(type(obj))}
 
-def _get_instance_volumes(instance_id: str, compartment_id: str) -> Dict[str, Any]:
+def _get_instance_volumes(instance_id: str, compartment_id: str, availability_domain: str) -> Dict[str, Any]:
     """Get boot volumes and block volumes attached to an instance"""
     try:
         config = get_oci_config()
@@ -390,7 +393,8 @@ def _get_instance_volumes(instance_id: str, compartment_id: str) -> Dict[str, An
         try:
             boot_volume_attachments = list_call_get_all_results(
                 compute_client.list_boot_volume_attachments,
-                compartment_id=compartment_id,
+                availability_domain,
+                compartment_id,
                 instance_id=instance_id
             ).data
 
@@ -654,7 +658,7 @@ def get_instance_cost(
             # If volumes are included, also query for volume costs
             volume_costs = {}
             if include_volumes:
-                volumes_info = _get_instance_volumes(instance_id, compartment_id)
+                volumes_info = _get_instance_volumes(instance_id, compartment_id, getattr(instance, 'availability_domain', ''))
                 
                 # Query costs for boot volumes
                 for bv in volumes_info.get('boot_volumes', []):
@@ -822,7 +826,7 @@ def get_comprehensive_instance_details(
 
             # Add volume information if requested
             if include_volumes:
-                volumes_info = _get_instance_volumes(instance_id, compartment_id)
+                volumes_info = _get_instance_volumes(instance_id, compartment_id, getattr(instance, 'availability_domain', ''))
                 instance_info['boot_volumes'] = volumes_info.get('boot_volumes', [])
                 instance_info['block_volumes'] = volumes_info.get('block_volumes', [])
                 
@@ -982,6 +986,36 @@ def doctor() -> dict:
     except Exception as e:
         return {"server": "oci-mcp-compute", "ok": False, "error": str(e)}
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    import json
+    manifest = {
+        "name": "OCI MCP Compute Server",
+        "version": "1.0.0",
+        "description": "OCI Compute MCP Server for instance management and monitoring",
+        "capabilities": {
+            "skills": ["compute-management", "instance-lifecycle", "performance-monitoring"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": [
+                    "list_instances", "get_instance_metrics", "get_instance_details_with_ips",
+                    "get_instance_cost", "get_comprehensive_instance_details", "list_shapes"
+                ],
+                "tier3_heavy": [],
+                "tier4_admin": [
+                    "create_instance", "start_instance", "stop_instance", "restart_instance"
+                ]
+            }
+        },
+        "usage_guide": "Use list_instances for discovery, get_comprehensive_instance_details for full info, admin tools require ALLOW_MUTATIONS=true.",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "ALLOW_MUTATIONS", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(
         fn=healthcheck,
@@ -1091,6 +1125,12 @@ if __name__ == "__main__":
         exit(1)
 
     mcp = FastMCP(tools=tools, name="oci-mcp-compute")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

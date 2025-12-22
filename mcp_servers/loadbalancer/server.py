@@ -4,12 +4,13 @@ from typing import Dict, List, Any, Optional
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
 import oci
-from opentelemetry import trace
+from mcp_oci_common.otel import trace
 from oci.pagination import list_call_get_all_results
 from mcp_oci_common.observability import init_tracing, init_metrics, tool_span, add_oci_call_attributes
 
 from mcp_oci_common import get_oci_config, get_compartment_id, allow_mutations, validate_and_log_tools
 from mcp_oci_common.session import get_client
+import json
 
 # Set up tracing with proper Resource
 os.environ.setdefault("OTEL_SERVICE_NAME", "oci-mcp-loadbalancer")
@@ -157,6 +158,30 @@ def create_load_balancer(
             return {'error': str(e)}
 
 
+# =============================================================================
+# Server Manifest Resource
+# =============================================================================
+
+def server_manifest() -> str:
+    """Server manifest resource for capability discovery."""
+    manifest = {
+        "name": "OCI MCP Load Balancer Server",
+        "version": "1.0.0",
+        "description": "OCI Load Balancer MCP Server for LB management",
+        "capabilities": {
+            "skills": ["load-balancer-management"],
+            "tools": {
+                "tier1_instant": ["healthcheck", "doctor"],
+                "tier2_api": ["list_load_balancers"],
+                "tier3_heavy": [],
+                "tier4_admin": ["create_load_balancer"]
+            }
+        },
+        "usage_guide": "Use list_load_balancers for discovery, create_load_balancer for provisioning (requires ALLOW_MUTATIONS=true).",
+        "environment_variables": ["OCI_PROFILE", "OCI_REGION", "COMPARTMENT_OCID", "ALLOW_MUTATIONS", "MCP_OCI_PRIVACY"]
+    }
+    return json.dumps(manifest, indent=2)
+
 tools = [
     Tool.from_function(
         fn=lambda: {"status": "ok", "server": "oci-mcp-loadbalancer", "pid": os.getpid()},
@@ -231,6 +256,12 @@ if __name__ == "__main__":
         pass
 
     mcp = FastMCP(tools=tools, name="oci-mcp-loadbalancer")
+
+    # Register the server manifest resource
+    @mcp.resource("server://manifest")
+    def get_manifest() -> str:
+        return server_manifest()
+
     if _FastAPIInstrumentor:
         try:
             if hasattr(mcp, "app"):

@@ -11,7 +11,11 @@ MCP-OCI provides a suite of Model Context Protocol (MCP) servers that let LLMs a
 
 ## Standards
 
-- `/Users/abirzu/dev/oracle-db-autonomous-agent/docs/OCI_MCP_SERVER_STANDARD.md`
+- `docs/OCI_MCP_SERVER_STANDARD.md`
+
+## Runbooks
+
+- `docs/runbooks/README.md`
 
 ## Transport & Auth
 
@@ -104,7 +108,10 @@ cp .env.local.example .env.local
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for traces/metrics/logs | `localhost:4317` |
 | `OTEL_DISABLE_LOCAL` | Disable local OTEL collector fallback | `false` |
 | `METRICS_PORT` | Prometheus metrics port (per server) | server dependent |
-| `MCP_OCI_CACHE_DIR` | Directory for tenancy discovery cache | `~/.mcp_oci_cache` |
+| `MCP_CACHE_DIR` | Shared cache directory for MCP servers | `~/.mcp-oci/cache` |
+| `MCP_CACHE_BACKEND` | Cache backend (`file` or `redis`) | `file` |
+| `MCP_REDIS_URL` | Redis connection URL for shared cache | `redis://localhost:6379` |
+| `MCP_CACHE_KEY_PREFIX` | Redis key prefix for shared cache | `mcp:cache` |
 
 **See [Configuration Guide](docs/configuration.md) for complete documentation.**
 

@@ -51,6 +51,18 @@ def _get_oci_apm_config() -> Dict[str, Any]:
     }
 
 
+def _normalize_oci_apm_endpoint(endpoint: str) -> str:
+    """Normalize OCI APM OTLP endpoint to the private traces path."""
+    base = endpoint.rstrip("/")
+    if "/v1/" in base:
+        return base
+    if "/opentelemetry" in base:
+        return f"{base}/private/v1/traces"
+    if "/20200101" in base:
+        return f"{base}/opentelemetry/private/v1/traces"
+    return f"{base}/20200101/opentelemetry/private/v1/traces"
+
+
 def init_oci_apm_tracing(
     service_name: Optional[str] = None,
     *,
@@ -138,7 +150,7 @@ def init_oci_apm_tracing(
     try:
         # Create exporter with OCI APM endpoint
         exporter = OTLPSpanExporter(
-            endpoint=config["endpoint"],
+            endpoint=_normalize_oci_apm_endpoint(config["endpoint"]),
             headers=headers,
         )
 

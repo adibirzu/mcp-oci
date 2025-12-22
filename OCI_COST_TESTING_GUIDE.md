@@ -75,6 +75,42 @@ Success Criteria: List of dates with present/absent status
 
 ### Phase 3: Advanced Analytics Testing
 
+#### Test 6.1: Tagging Rules (Tag Defaults)
+```
+Tool: list_tag_defaults
+Purpose: Verify tag default rules for cost attribution policies
+Parameters: compartment_id, include_children=true
+Expected: Tag default rules list
+Success Criteria: Rules include tag definition IDs and compartments
+```
+
+#### Test 6.2: Resource-Level Cost
+```
+Tool: cost_by_resource
+Purpose: Break down spend by resource ID/name
+Parameters: tenancy_ocid, time_start, time_end, service_name (optional)
+Expected: Resource-level cost rows
+Success Criteria: Costs aggregated by resource with currency
+```
+
+#### Test 6.3: Database Cost (ADB)
+```
+Tool: cost_by_database
+Purpose: Break down spend by database resources
+Parameters: tenancy_ocid, time_start, time_end, database_name_contains (optional)
+Expected: Database-level cost rows
+Success Criteria: Database costs scoped to ADB service by default
+```
+
+#### Test 6.4: PDB Cost (Best-effort)
+```
+Tool: cost_by_pdb
+Purpose: Estimate spend by PDB name
+Parameters: tenancy_ocid, time_start, time_end, pdb_name_contains
+Expected: PDB-level cost rows
+Success Criteria: PDB names matched from resourceName fields
+```
+
 #### Test 7: Cost Spike Detection
 ```
 Tool: top_cost_spikes_explain

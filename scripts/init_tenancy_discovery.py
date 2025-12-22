@@ -153,7 +153,7 @@ def save_tenancy_cache(tenancy_info: Dict[str, Any], cache_dir: Optional[str] = 
     
     Args:
         tenancy_info: Tenancy information dictionary
-        cache_dir: Cache directory path (defaults to ~/.mcp_oci_cache)
+        cache_dir: Cache directory path (defaults to ~/.mcp-oci/cache)
         
     Returns:
         Path to the cache file
@@ -163,7 +163,7 @@ def save_tenancy_cache(tenancy_info: Dict[str, Any], cache_dir: Optional[str] = 
         return ""
     
     if cache_dir is None:
-        cache_dir = os.path.expanduser("~/.mcp_oci_cache")
+        cache_dir = os.path.expanduser("~/.mcp-oci/cache")
     
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -183,7 +183,7 @@ def save_tenancy_cache(tenancy_info: Dict[str, Any], cache_dir: Optional[str] = 
 def main():
     """Main entry point for tenancy discovery initialization."""
     profile = os.getenv('OCI_PROFILE', 'DEFAULT')
-    cache_dir = os.getenv('MCP_OCI_CACHE_DIR', None)
+    cache_dir = os.getenv('MCP_CACHE_DIR') or os.getenv('OCI_MCP_CACHE_DIR') or os.getenv('MCP_OCI_CACHE_DIR')
     
     logger.info("Starting tenancy discovery...")
     logger.info(f"Using OCI profile: {profile}")
@@ -206,4 +206,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

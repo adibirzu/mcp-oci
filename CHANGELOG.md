@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tenancy Discovery**: Automatic tenancy discovery at server startup
   - New `scripts/init_tenancy_discovery.py` script for discovering tenancy information
   - Automatic discovery runs during installation and server startup
-  - Cache stored at `~/.mcp_oci_cache/tenancy_discovery.json`
+  - Cache stored at `~/.mcp-oci/cache/tenancy_discovery.json`
   - See [Tenancy Discovery Guide](docs/tenancy-discovery.md) for details
 
 - **OCI APM Telemetry Support**: Enhanced telemetry configuration
@@ -61,4 +61,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Basic MCP server implementations
 - OCI SDK integration
-

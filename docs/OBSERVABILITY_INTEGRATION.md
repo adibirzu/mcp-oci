@@ -139,7 +139,7 @@ General OCI SDK (shared client factory)
 - OCI_REQUEST_TIMEOUT_CONNECT=seconds, OCI_REQUEST_TIMEOUT_READ=seconds — fine‑grained timeouts
 
 Caching (shared disk+memory cache)
-- MCP_CACHE_DIR=/tmp/mcp-oci-cache (default)
+- MCP_CACHE_DIR=~/.mcp-oci/cache (default)
 - MCP_CACHE_TTL=3600 — default TTL seconds for cache entries
 
 Log Analytics REST (oci-mcp-loganalytics)

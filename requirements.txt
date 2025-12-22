@@ -21,4 +21,5 @@ pandas
 scipy
 typer
 fastmcp
+redis
 pyroscope-io

@@ -141,3 +141,29 @@ class ForecastCreditsOut(BaseModel):
     credits: dict
     risk: Literal["UNDER", "OVER", "NEUTRAL"]
     notes: List[str]
+
+class ResourceCostRow(BaseModel):
+    resourceId: str
+    resourceName: str
+    service: str
+    compartment: str
+    cost: float
+
+class CostByResourceOut(BaseModel):
+    window: Window
+    currency: str
+    filters: dict
+    rows: List[ResourceCostRow]
+
+class TagDefaultRule(BaseModel):
+    id: Optional[str] = None
+    compartmentId: Optional[str] = None
+    tagNamespaceId: Optional[str] = None
+    tagDefinitionId: Optional[str] = None
+    tagNamespaceName: Optional[str] = None
+    tagName: Optional[str] = None
+    value: Optional[str] = None
+    lifecycleState: Optional[str] = None
+
+class TaggingRulesOut(BaseModel):
+    rules: List[TagDefaultRule]

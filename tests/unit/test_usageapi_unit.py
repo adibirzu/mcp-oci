@@ -4,7 +4,7 @@ import types
 from typing import Any
 
 
-sys.path.insert(0, os.path.abspath("legacy_src"))
+sys.path.insert(0, os.path.abspath("src"))
 
 
 def _fake_oci_module():

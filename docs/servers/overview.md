@@ -15,6 +15,25 @@ This summary links to the active MCP server guides and highlights a representati
 | Log Analytics | `oci:loganalytics:execute-query` | Run Logging Analytics queries with namespace auto-detection |
 | Observability Hub | `oci:observability:get-observability-metrics-summary` | Correlate tracing, metrics, and recent MCP calls |
 | Generative AI Agents | `oci:agents:list-agents` | List Generative AI agents or proxies |
+| Object Storage | `oci:objectstorage:list-buckets` | Enumerate buckets and usage summaries |
+| Unified | `server://manifest` | Single endpoint for multi-service tools and skills |
+
+## Runbooks
+
+Per-server runbooks live in `docs/runbooks/` and map common intents to tools:
+- compute.md
+- network.md
+- blockstorage.md
+- loadbalancer.md
+- objectstorage.md
+- inventory.md
+- security.md
+- cost.md
+- db.md
+- observability.md
+- loganalytics.md
+- agents.md
+- unified.md
 
 ## Operational Tips
 
