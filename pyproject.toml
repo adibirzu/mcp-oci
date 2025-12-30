@@ -1,125 +1,66 @@
-[tool.poetry]
-name = "mcp-oci"
-version = "0.1.0"
-description = "Oracle Cloud Infrastructure MCP Servers for AI and Observability"
-authors = [ "Abir Zu <abirzu@example.com>" ]
+[project]
+name = "mcp-server-oci"
+version = "2.0.0"
+description = "Professional OCI MCP Server with FastMCP - Oracle Cloud Infrastructure management via Model Context Protocol"
 readme = "README.md"
-packages = [
-  {include = "mcp_servers"},
-  {include = "mcp_oci_common"},
-  {include = "mcp_oci_usageapi", from = "src"}
+license = "MIT"
+authors = [
+    { name = "Adrian Birzu", email = "adibirzu@gmail.com" }
+]
+keywords = ["oci", "oracle", "cloud", "mcp", "ai", "llm", "fastmcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "fastmcp>=2.14.1",
+    "oci>=2.164.2",
+    "pydantic>=2.5.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+    "structlog>=24.0.0",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-fastmcp = "*"  # For MCP/STDIO
-typer = "*"    # For CLI
-pydantic = "*"
-tenacity = "*"
-jinja2 = "*"
-numpy = "^2.1.1"
-pandas = "^2.2.3"
-scipy = "^1.14.1"
-
-# Optional dependencies for different features
-oci = { version = "*", optional = true }  # Official OCI SDK
-fastapi = { version = "*", optional = true }
-uvicorn = { version = "*", optional = true }
-streamlit = { version = "*", optional = true }
-prometheus-client = { version = "*", optional = true }
-opentelemetry-sdk = { version = "*", optional = true }
-opentelemetry-api = { version = "*", optional = true }
-opentelemetry-exporter-otlp = { version = "*", optional = true }
-opentelemetry-instrumentation-fastapi = { version = "^0.58b0", optional = true }
-redis = { version = "*", optional = true }
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0.0"
-pytest-mock = "^3.10.0"
-pytest-asyncio = "^0.21.0"
-pytest-cov = "^4.0.0"
-requests = "*"  # For testing observability endpoints
-black = "^23.0.0"
-isort = "^5.12.0"
-flake8 = "^6.0.0"
-mypy = "^1.5.0"
-ruff = "^0.1.0"
-pre-commit = "^3.0.0"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^7.0.0"
-pytest-mock = "^3.10.0"
-pytest-asyncio = "^0.21.0"
-pytest-cov = "^4.0.0"
-requests = "*"  # Required for observability pipeline tests
-
-[tool.poetry.extras]
-oci = [
-    "oci",
-    "opentelemetry-sdk",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp"
-]
-web = ["fastapi", "uvicorn"]
-ui = ["streamlit"]
-observability = [
-    "prometheus-client",
-    "opentelemetry-sdk",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-instrumentation-fastapi"
-]
-cache = [
-    "redis"
-]
+[project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-mock",
-    "pytest-asyncio",
-    "pytest-cov",
-    "requests",
-    "black",
-    "isort",
-    "flake8",
-    "mypy",
-    "ruff",
-    "pre-commit"
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
 ]
-all = [
-    "oci",
-    "fastapi",
-    "uvicorn",
-    "streamlit",
-    "prometheus-client",
-    "opentelemetry-sdk",
-    "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-instrumentation-fastapi",
-    "redis"
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "opentelemetry-instrumentation-httpx>=0.41b0",
 ]
 
-# Expose CLI entry points
+[project.scripts]
+oci-mcp = "mcp_server_oci.server:main"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_server_oci"]
 
 [tool.ruff]
-line-length = 120
-target-version = "py311"
-extend-exclude = [
-  "oci-python-sdk",
-  ".venv",
-  "dist",
-  "build",
-  "third_party",
-  # Non-core demo/ops and experimental UIs are excluded from strict lint
-  "ops",
-  "web3_ux",
-  "src/mcp_oci_fastmcp*",
-  "src/mcp_oci_fastmcp_rest*",
-]
+line-length = 100
+target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F"]
-ignore = ["E501"]
+select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

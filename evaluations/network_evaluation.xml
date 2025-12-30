@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Network Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>network</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Find all VCNs that have more than 10 subnets configured. How many such VCNs exist across all compartments?</question>
+        <answer>4</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the VCN with the largest CIDR block (most IP addresses available). What is the CIDR prefix length (e.g., 16, 20, 24)?</question>
+        <answer>16</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all subnets that are configured as public (have route to Internet Gateway). How many public subnets exist?</question>
+        <answer>12</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>List all Load Balancers with bandwidth greater than 100 Mbps. What is the display name of the one with the highest bandwidth?</question>
+        <answer>prod-api-lb</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find VCNs that have peering connections to other VCNs. How many VCN peering connections exist in total?</question>
+        <answer>8</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the security list with the most ingress rules. How many ingress rules does it have?</question>
+        <answer>47</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all NAT Gateways that are currently in AVAILABLE state. How many are there?</question>
+        <answer>6</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Calculate the total number of reserved public IPs across all compartments. What is the count?</question>
+        <answer>34</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find subnets that have security lists allowing ingress from 0.0.0.0/0 on port 22 (SSH). How many such subnets exist?</question>
+        <answer>5</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the Load Balancer with the most backend servers configured. What is the total backend server count?</question>
+        <answer>16</answer>
+    </qa_pair>
+</evaluation>

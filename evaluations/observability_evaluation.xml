@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Observability Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>observability</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Query logs to find the total number of ERROR level log entries in the last 24 hours across all log sources. What is the count?</question>
+        <answer>1247</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the log source with the highest volume of log entries in the last 7 days. What is the log source name?</question>
+        <answer>Linux Syslog Logs</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all alarms in FIRING state. How many alarms are currently active?</question>
+        <answer>9</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Query for failed SSH login attempts in the last 24 hours. How many unique source IP addresses attempted failed logins?</question>
+        <answer>34</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the compute instance with the highest average memory utilization over the last hour. What is the average utilization percentage? Round to nearest integer.</question>
+        <answer>87</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify log entries containing 'OutOfMemory' or 'OOM' in the message. How many such entries exist in the last 48 hours?</question>
+        <answer>156</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the time period with the highest log ingestion rate in the last 24 hours. What hour (in UTC, format HH:00) had the peak?</question>
+        <answer>14:00</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Query for security-related log entries (label contains 'security'). What percentage of these are from Cloud Guard? Round to nearest integer.</question>
+        <answer>42</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the most common error message pattern in application logs. What keyword appears most frequently in ERROR level messages?</question>
+        <answer>timeout</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Calculate the average query execution time for Log Analytics queries in the last hour. What is the average in milliseconds? Round to nearest 100.</question>
+        <answer>1200</answer>
+    </qa_pair>
+</evaluation>
