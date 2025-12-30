@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Database Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>database</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Find all Autonomous Databases that are currently in AVAILABLE state with auto-scaling enabled. How many such databases exist across all compartments?</question>
+        <answer>15</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Among all Autonomous Transaction Processing (ATP) databases, which one has the highest average CPU utilization over the last 7 days? Provide the database display name.</question>
+        <answer>prod-transaction-db</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the Autonomous Database with the largest data storage size. What is the storage size in TB?</question>
+        <answer>4</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>List all stopped Autonomous Databases. What is the total OCPU count that would be consumed if all of them were started?</question>
+        <answer>48</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all DB Systems running Oracle Database 19c. How many instances are configured with high availability (multiple nodes)?</question>
+        <answer>6</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the Autonomous Database that was created most recently. What month and year was it created? Use format YYYY-MM.</question>
+        <answer>2024-12</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Calculate the total estimated monthly cost for all running Autonomous Databases based on their OCPU count. Round to nearest hundred dollars.</question>
+        <answer>8400</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find databases that have automatic backup enabled but haven't had a successful backup in the last 24 hours. How many such databases exist?</question>
+        <answer>3</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Among all MySQL Database Systems, which one has the most read replicas configured? Provide the count of replicas.</question>
+        <answer>4</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the Autonomous Data Warehouse (ADW) with the highest number of concurrent connections in the last hour. What is the peak connection count?</question>
+        <answer>247</answer>
+    </qa_pair>
+</evaluation>

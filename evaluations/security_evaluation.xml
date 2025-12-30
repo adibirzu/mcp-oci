@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Security Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>security</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Find all Cloud Guard problems with CRITICAL severity that are currently in OPEN status. How many such problems exist?</question>
+        <answer>7</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the compartment with the most Cloud Guard problems (all severities combined). What is the compartment name?</question>
+        <answer>production</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>List all IAM users that have not logged in within the last 90 days. How many such inactive users exist?</question>
+        <answer>23</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find IAM policies that grant 'manage all-resources' permission. How many such policies exist?</question>
+        <answer>4</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify users with API keys older than 1 year. What is the email address of the user with the oldest API key?</question>
+        <answer>legacy-service@company.com</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all security zones in the tenancy. How many are currently in ACTIVE state?</question>
+        <answer>3</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>List Cloud Guard problems of type 'SUSPICIOUS_ACTIVITY'. What is the most common detector rule that triggered these problems?</question>
+        <answer>Unusual login location</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find groups with more than 10 members. What is the name of the group with the most members?</question>
+        <answer>Developers</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify compartments that don't have any IAM policies attached. How many such compartments exist?</question>
+        <answer>2</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the Cloud Guard problem that has been in OPEN status the longest. How many days has it been open? Round to nearest whole number.</question>
+        <answer>145</answer>
+    </qa_pair>
+</evaluation>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Compute Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>compute</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Find all compute instances using shapes from the VM.Standard.E4 family. Among these, which instance has the highest average CPU utilization over the last 24 hours? Provide the instance display name.</question>
+        <answer>prod-api-server-03</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>List all stopped instances that have been stopped for more than 30 days. How many such instances exist across all compartments?</question>
+        <answer>12</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the compute instance with the most attached block volumes. What is the total storage capacity in GB attached to this instance?</question>
+        <answer>2048</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify instances where memory utilization has exceeded 90% at any point in the last 7 days. What is the display name of the instance with the longest duration above 90%?</question>
+        <answer>analytics-worker-07</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Among all running instances, find the one created earliest (oldest). What year was it created? Answer with just the year (e.g., 2023).</question>
+        <answer>2022</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Calculate the total OCPU count across all running instances in the 'production' compartment and its sub-compartments. What is the total?</question>
+        <answer>384</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find instances that have both a public IP and a private IP assigned. How many instances meet this criteria?</question>
+        <answer>28</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the availability domain with the most running instances. What is the AD name suffix (e.g., AD-1, AD-2, or AD-3)?</question>
+        <answer>AD-2</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the instance with display name containing 'bastion'. What is its private IP address?</question>
+        <answer>10.0.1.45</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Among instances using burstable shapes, which one has consumed the most burst credits in the last 30 days? Provide the instance OCID's last 8 characters.</question>
+        <answer>qrst7890</answer>
+    </qa_pair>
+</evaluation>

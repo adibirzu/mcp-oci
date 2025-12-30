@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+    <metadata>
+        <name>OCI Cost Domain Evaluation</name>
+        <version>1.0</version>
+        <domain>cost</domain>
+        <difficulty>complex</difficulty>
+    </metadata>
+    
+    <qa_pair>
+        <question>Using the cost analysis tools, find the OCI service that had the highest month-over-month percentage increase in spending during Q4 2024. What is the service name?</question>
+        <answer>Object Storage</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Analyze cost anomalies in the last 90 days. For the most significant cost spike detected, which compartment contributed the most to the anomaly? Provide the compartment name.</question>
+        <answer>production-workloads</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Compare the forecasted monthly spend with the actual Universal Credits balance. Will the current spending rate exhaust credits before the end of the fiscal year? Answer True or False.</question>
+        <answer>False</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find all compartments where the daily cost exceeded $500 at least once in December 2024. How many such compartments exist?</question>
+        <answer>7</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Looking at cost by tag, find the tag key-value pair under the 'CostCenter' namespace that has the highest total spending in 2024. What is the tag value?</question>
+        <answer>engineering-platform</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Analyze the cost trend for Autonomous Database service over the last 6 months. What was the percentage change from the first month to the last month? Round to nearest integer and include the sign (e.g., +15 or -8).</question>
+        <answer>+23</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Find the budget that is closest to its alert threshold without exceeding it. What percentage of the budget has been consumed? Round to nearest integer.</question>
+        <answer>87</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Identify the day in Q4 2024 with the highest single-day spending across all services. What was the date? Use format YYYY-MM-DD.</question>
+        <answer>2024-12-15</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>For the Compute service, calculate the ratio of cost between the production and development compartments for January 2024. Express as a decimal rounded to one place (e.g., 3.2).</question>
+        <answer>4.7</answer>
+    </qa_pair>
+    
+    <qa_pair>
+        <question>Using cost forecasting, estimate the total tenancy spend for the next 30 days. Provide the amount in whole dollars without currency symbol.</question>
+        <answer>45670</answer>
+    </qa_pair>
+</evaluation>
