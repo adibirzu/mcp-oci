@@ -6,7 +6,6 @@ Follows OCI MCP Server Standard v2.1 with Pydantic v2 patterns.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -54,15 +53,15 @@ class ListUsersInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to tenancy root)",
     )
-    lifecycle_state: Optional[UserLifecycleState] = Field(
+    lifecycle_state: UserLifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state",
     )
-    name_contains: Optional[str] = Field(
+    name_contains: str | None = Field(
         default=None,
         description="Filter users whose name contains this string",
     )
@@ -115,11 +114,11 @@ class ListGroupsInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to tenancy root)",
     )
-    name_contains: Optional[str] = Field(
+    name_contains: str | None = Field(
         default=None,
         description="Filter groups whose name contains this string",
     )
@@ -144,11 +143,11 @@ class ListPoliciesInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID to list policies from",
     )
-    name_contains: Optional[str] = Field(
+    name_contains: str | None = Field(
         default=None,
         description="Filter policies whose name contains this string",
     )
@@ -173,15 +172,15 @@ class ListCloudGuardProblemsInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID to search for problems",
     )
-    risk_level: Optional[RiskLevel] = Field(
+    risk_level: RiskLevel | None = Field(
         default=None,
         description="Filter by risk level (CRITICAL, HIGH, MEDIUM, LOW, MINOR)",
     )
-    lifecycle_state: Optional[ProblemLifecycleState] = Field(
+    lifecycle_state: ProblemLifecycleState | None = Field(
         default=ProblemLifecycleState.ACTIVE,
         description="Filter by lifecycle state (ACTIVE, INACTIVE)",
     )
@@ -206,7 +205,7 @@ class SecurityAuditInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID to audit (defaults to tenancy root)",
     )

@@ -128,7 +128,7 @@ class SecurityFormatter:
             md += f"### {policy.get('name', 'Unknown')}\n"
             md += f"**OCID:** `{Formatter.format_ocid(policy.get('id', ''))}`\n"
             md += f"**Description:** {policy.get('description', 'N/A')}\n"
-            
+
             statements = policy.get("statements", [])
             if statements:
                 md += "**Statements:**\n"
@@ -146,7 +146,7 @@ class SecurityFormatter:
         md = MarkdownFormatter.header("Cloud Guard Problems", 1)
 
         md += f"**Total Problems:** {data.get('total', 0)}\n"
-        
+
         # Risk level summary
         summary = data.get("summary", {})
         if summary:
@@ -163,7 +163,7 @@ class SecurityFormatter:
             return md
 
         md += "\n## Problems\n"
-        
+
         # Group by risk level
         risk_icons = {
             "CRITICAL": "🔴",
@@ -176,14 +176,14 @@ class SecurityFormatter:
         for problem in problems:
             risk = problem.get("risk_level", "UNKNOWN")
             icon = risk_icons.get(risk, "❓")
-            
+
             md += f"### {icon} {problem.get('problem_name', 'Unknown Problem')}\n"
             md += f"- **Risk Level:** {risk}\n"
             md += f"- **Resource:** {problem.get('resource_name', 'N/A')}\n"
             md += f"- **Type:** {problem.get('resource_type', 'N/A')}\n"
             md += f"- **Region:** {problem.get('region', 'N/A')}\n"
             md += f"- **First Detected:** {Formatter.format_datetime(problem.get('time_first_detected', '')) if problem.get('time_first_detected') else 'N/A'}\n"
-            
+
             recommendation = problem.get("recommendation", "")
             if recommendation:
                 md += f"- **Recommendation:** {recommendation[:100]}{'...' if len(recommendation) > 100 else ''}\n"
@@ -214,7 +214,7 @@ class SecurityFormatter:
             md += f"- **Users:** {iam.get('total_users', 0)} (Active: {iam.get('active_users', 0)})\n"
             md += f"- **Groups:** {iam.get('total_groups', 0)}\n"
             md += f"- **Policies:** {iam.get('total_policies', 0)}\n"
-            
+
             findings = iam.get("findings", [])
             if findings:
                 md += "\n**Findings:**\n"
@@ -238,7 +238,7 @@ class SecurityFormatter:
             md += f"- **VCNs:** {network.get('total_vcns', 0)}\n"
             md += f"- **Public Subnets:** {network.get('public_subnets', 0)}\n"
             md += f"- **Open Security Rules:** {network.get('open_rules', 0)}\n"
-            
+
             findings = network.get("findings", [])
             if findings:
                 md += "\n**Findings:**\n"

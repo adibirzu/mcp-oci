@@ -14,23 +14,19 @@ Environment Variables:
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from time import perf_counter
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 
-
 # Global state
-_tracer: Optional[Any] = None
-_logger: Optional[Any] = None
+_tracer: Any | None = None
+_logger: Any | None = None
 _start_time: float = perf_counter()
 
 
@@ -63,26 +59,27 @@ def configure_logging(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
-    
+
     if json_format:
         processors.append(structlog.processors.JSONRenderer())
     else:
         processors.append(structlog.dev.ConsoleRenderer(colors=True))
-    
+
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, level.upper(), logging.INFO)
         ),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        # Use stderr for MCP stdio compatibility (stdout is for JSON-RPC only)
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=True,
     )
-    
-    # Also configure standard library logging
+
+    # Also configure standard library logging to stderr
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout,
+        stream=sys.stderr,  # Must use stderr for MCP stdio transport
         level=getattr(logging, level.upper(), logging.INFO),
     )
 
@@ -106,7 +103,7 @@ def get_logger(name: str = "oci-mcp") -> structlog.BoundLogger:
 def init_tracing(
     service_name: str = "oci-mcp-server",
     service_version: str = "2.0.0"
-) -> Optional[Any]:
+) -> Any | None:
     """Initialize OpenTelemetry tracing with OCI APM backend.
     
     This function attempts to initialize OTEL tracing. If the otel
@@ -120,30 +117,30 @@ def init_tracing(
         Tracer instance or None if disabled/unavailable
     """
     global _tracer
-    
+
     # Check if disabled
     if os.getenv("OTEL_SDK_DISABLED", "false").lower() == "true":
         get_logger().info("OpenTelemetry tracing disabled via OTEL_SDK_DISABLED")
         return None
-    
+
     # Check for OCI APM configuration
     apm_endpoint = os.getenv("OCI_APM_ENDPOINT")
     apm_key = os.getenv("OCI_APM_PRIVATE_DATA_KEY")
-    
+
     if not apm_endpoint or not apm_key:
         get_logger().info(
             "OCI APM not configured (missing OCI_APM_ENDPOINT or OCI_APM_PRIVATE_DATA_KEY)",
             hint="Tracing will be disabled"
         )
         return None
-    
+
     try:
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-        
+
         # Create resource with service info
         resource = Resource.create({
             SERVICE_NAME: service_name,
@@ -152,29 +149,29 @@ def init_tracing(
             "cloud.provider": "oci",
             "cloud.region": os.getenv("OCI_REGION", "unknown"),
         })
-        
+
         # Configure OTLP exporter for OCI APM
         otlp_exporter = OTLPSpanExporter(
             endpoint=f"{apm_endpoint}/20200101/opentelemetry/private/v1/traces",
             headers={"Authorization": f"dataKey {apm_key}"}
         )
-        
+
         # Create and configure tracer provider
         provider = TracerProvider(resource=resource)
         provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
         trace.set_tracer_provider(provider)
-        
+
         _tracer = trace.get_tracer(service_name)
-        
+
         get_logger().info(
             "OpenTelemetry tracing initialized",
             service=service_name,
             version=service_version,
             apm_endpoint=apm_endpoint[:30] + "..."
         )
-        
+
         return _tracer
-        
+
     except ImportError:
         get_logger().info(
             "OpenTelemetry packages not installed",
@@ -189,7 +186,7 @@ def init_tracing(
         return None
 
 
-def get_tracer() -> Optional[Any]:
+def get_tracer() -> Any | None:
     """Get the global tracer instance."""
     return _tracer
 
@@ -201,23 +198,23 @@ def get_tracer() -> Optional[Any]:
 @dataclass
 class ToolExecutionContext:
     """Context for tool execution with observability."""
-    
+
     tool_name: str
     domain: str
     params: dict[str, Any] = field(default_factory=dict)
     start_time: float = field(default_factory=perf_counter)
-    span: Optional[Any] = None
+    span: Any | None = None
     logger: Any = None
-    
+
     def __post_init__(self):
         if self.logger is None:
             self.logger = get_logger(f"oci-mcp.{self.domain}")
-    
+
     @property
     def duration_ms(self) -> float:
         """Get elapsed time in milliseconds."""
         return (perf_counter() - self.start_time) * 1000
-    
+
     def log_start(self) -> None:
         """Log tool execution start."""
         self.logger.info(
@@ -226,8 +223,8 @@ class ToolExecutionContext:
             domain=self.domain,
             params=_sanitize_params(self.params)
         )
-    
-    def log_success(self, result_summary: Optional[dict] = None) -> None:
+
+    def log_success(self, result_summary: dict | None = None) -> None:
         """Log tool execution success."""
         self.logger.info(
             f"Completed {self.tool_name}",
@@ -236,7 +233,7 @@ class ToolExecutionContext:
             duration_ms=round(self.duration_ms, 2),
             **(result_summary or {})
         )
-    
+
     def log_error(self, error: Exception) -> None:
         """Log tool execution error."""
         self.logger.error(
@@ -253,7 +250,7 @@ class ToolExecutionContext:
 async def observe_tool(
     tool_name: str,
     domain: str,
-    params: Optional[dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 ):
     """Context manager for unified tool observability.
     
@@ -280,14 +277,14 @@ async def observe_tool(
         domain=domain,
         params=params or {}
     )
-    
+
     # Start tracing span if available
     tracer = get_tracer()
     if tracer:
         try:
             from opentelemetry import trace
             from opentelemetry.trace import Status, StatusCode
-            
+
             ctx.span = tracer.start_span(
                 tool_name,
                 kind=trace.SpanKind.SERVER,
@@ -298,16 +295,16 @@ async def observe_tool(
             )
         except ImportError:
             pass
-    
+
     # Log start
     ctx.log_start()
-    
+
     try:
         yield ctx
-        
+
         # Log success
         ctx.log_success()
-        
+
         # Mark span as successful
         if ctx.span:
             try:
@@ -315,11 +312,11 @@ async def observe_tool(
                 ctx.span.set_status(Status(StatusCode.OK))
             except ImportError:
                 pass
-                
+
     except Exception as e:
         # Log error
         ctx.log_error(e)
-        
+
         # Mark span as error
         if ctx.span:
             try:
@@ -328,9 +325,9 @@ async def observe_tool(
                 ctx.span.set_status(Status(StatusCode.ERROR, str(e)))
             except ImportError:
                 pass
-        
+
         raise
-        
+
     finally:
         # End span
         if ctx.span:
@@ -351,10 +348,10 @@ def _sanitize_params(params: dict[str, Any]) -> dict[str, Any]:
         Sanitized parameters safe for logging
     """
     sensitive_keys = {
-        "password", "api_key", "private_key", "token", 
+        "password", "api_key", "private_key", "token",
         "secret", "credential", "auth"
     }
-    
+
     sanitized = {}
     for key, value in params.items():
         # Check for sensitive keys
@@ -368,7 +365,7 @@ def _sanitize_params(params: dict[str, Any]) -> dict[str, Any]:
             sanitized[key] = f"{value[:100]}..."
         else:
             sanitized[key] = value
-    
+
     return sanitized
 
 
@@ -433,13 +430,13 @@ def init_observability(
         json_format=json_logs,
         service_name=service_name
     )
-    
+
     # Initialize tracing (optional)
     init_tracing(
         service_name=service_name,
         service_version=service_version
     )
-    
+
     get_logger().info(
         "Observability initialized",
         service=service_name,

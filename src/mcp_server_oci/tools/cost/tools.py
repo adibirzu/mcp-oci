@@ -6,14 +6,14 @@ from __future__ import annotations
 import asyncio
 import statistics
 from datetime import datetime, timedelta
-from typing import Any
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import Context, FastMCP
 
 from mcp_server_oci.core.client import get_oci_client
 from mcp_server_oci.core.errors import format_error_response, handle_oci_error
-from mcp_server_oci.skills.discovery import tool_registry, ToolInfo
+from mcp_server_oci.skills.discovery import ToolInfo, tool_registry
 
+from .formatters import CostFormatter
 from .models import (
     CostAnomalyInput,
     CostByCompartmentInput,
@@ -22,12 +22,11 @@ from .models import (
     MonthlyTrendInput,
     ResponseFormat,
 )
-from .formatters import CostFormatter
 
 
 def register_cost_tools(mcp: FastMCP) -> None:
     """Register all cost domain tools with the MCP server."""
-    
+
     @mcp.tool(
         name="oci_cost_get_summary",
         annotations={
@@ -59,16 +58,16 @@ def register_cost_tools(mcp: FastMCP) -> None:
              "time_end": "2024-01-31T23:59:59Z", "granularity": "DAILY"}
         """
         await ctx.report_progress(0.1, "Connecting to OCI Usage API...")
-        
+
         try:
             async with get_oci_client() as client:
                 usage_client = client.usage_api
-                
+
                 await ctx.report_progress(0.3, "Fetching cost data...")
-                
+
                 # Build request
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
-                
+
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
                     time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
@@ -77,32 +76,32 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     query_type="COST",
                     group_by=["service"],
                 )
-                
+
                 # Execute query
                 response = await asyncio.to_thread(
                     usage_client.request_summarized_usages,
                     request_details
                 )
-                
+
                 await ctx.report_progress(0.7, "Processing results...")
-                
+
                 # Process response
                 data = _process_cost_summary(
                     response.data.items,
                     params.time_start,
                     params.time_end
                 )
-                
+
                 await ctx.report_progress(0.9, "Formatting output...")
-                
+
                 if params.response_format == ResponseFormat.JSON:
                     return CostFormatter.to_json(data)
                 return CostFormatter.summary_markdown(data)
-                
+
         except Exception as e:
             error = handle_oci_error(e, "fetching cost summary")
             return format_error_response(error, params.response_format.value)
-    
+
     # Register for discovery
     tool_registry.register(ToolInfo(
         name="oci_cost_get_summary",
@@ -112,8 +111,8 @@ def register_cost_tools(mcp: FastMCP) -> None:
         input_schema=CostSummaryInput.model_json_schema(),
         annotations={"readOnlyHint": True, "destructiveHint": False}
     ))
-    
-    
+
+
     @mcp.tool(
         name="oci_cost_by_service",
         annotations={
@@ -140,15 +139,15 @@ def register_cost_tools(mcp: FastMCP) -> None:
             - Percentage of total spend
         """
         await ctx.report_progress(0.1, "Starting service cost analysis...")
-        
+
         try:
             async with get_oci_client() as client:
                 usage_client = client.usage_api
-                
+
                 await ctx.report_progress(0.3, "Fetching service costs...")
-                
+
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
-                
+
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
                     time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
@@ -157,29 +156,29 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     query_type="COST",
                     group_by=["service"],
                 )
-                
+
                 response = await asyncio.to_thread(
                     usage_client.request_summarized_usages,
                     request_details
                 )
-                
+
                 await ctx.report_progress(0.7, "Analyzing service breakdown...")
-                
+
                 data = _process_service_costs(
                     response.data.items,
                     params.top_n,
                     params.time_start,
                     params.time_end
                 )
-                
+
                 if params.response_format == ResponseFormat.JSON:
                     return CostFormatter.to_json(data)
                 return CostFormatter.service_drilldown_markdown(data)
-                
+
         except Exception as e:
             error = handle_oci_error(e, "fetching service costs")
             return format_error_response(error, params.response_format.value)
-    
+
     tool_registry.register(ToolInfo(
         name="oci_cost_by_service",
         domain="cost",
@@ -188,8 +187,8 @@ def register_cost_tools(mcp: FastMCP) -> None:
         input_schema=CostByServiceInput.model_json_schema(),
         annotations={"readOnlyHint": True, "destructiveHint": False}
     ))
-    
-    
+
+
     @mcp.tool(
         name="oci_cost_by_compartment",
         annotations={
@@ -215,24 +214,24 @@ def register_cost_tools(mcp: FastMCP) -> None:
             - Service breakdown per compartment
         """
         await ctx.report_progress(0.1, "Initializing compartment cost query...")
-        
+
         try:
             async with get_oci_client() as client:
                 usage_client = client.usage_api
                 identity_client = client.identity
-                
+
                 await ctx.report_progress(0.2, "Fetching compartment hierarchy...")
-                
+
                 # Get compartment names
                 compartments = await _get_compartment_map(
-                    identity_client, 
+                    identity_client,
                     params.tenancy_ocid
                 )
-                
+
                 await ctx.report_progress(0.4, "Fetching cost data...")
-                
+
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
-                
+
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
                     time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
@@ -241,14 +240,14 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     query_type="COST",
                     group_by=["compartmentId", "service"],
                 )
-                
+
                 response = await asyncio.to_thread(
                     usage_client.request_summarized_usages,
                     request_details
                 )
-                
+
                 await ctx.report_progress(0.7, "Processing compartment data...")
-                
+
                 data = _process_compartment_costs(
                     response.data.items,
                     compartments,
@@ -256,15 +255,15 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     params.time_start,
                     params.time_end
                 )
-                
+
                 if params.response_format == ResponseFormat.JSON:
                     return CostFormatter.to_json(data)
                 return CostFormatter.compartment_markdown(data)
-                
+
         except Exception as e:
             error = handle_oci_error(e, "fetching compartment costs")
             return format_error_response(error, params.response_format.value)
-    
+
     tool_registry.register(ToolInfo(
         name="oci_cost_by_compartment",
         domain="cost",
@@ -273,8 +272,8 @@ def register_cost_tools(mcp: FastMCP) -> None:
         input_schema=CostByCompartmentInput.model_json_schema(),
         annotations={"readOnlyHint": True, "destructiveHint": False}
     ))
-    
-    
+
+
     @mcp.tool(
         name="oci_cost_monthly_trend",
         annotations={
@@ -302,19 +301,19 @@ def register_cost_tools(mcp: FastMCP) -> None:
             - Budget variance (if budget_ocid provided)
         """
         await ctx.report_progress(0.1, "Calculating date ranges...")
-        
+
         try:
             async with get_oci_client() as client:
                 usage_client = client.usage_api
-                
+
                 # Calculate time range
                 end_date = datetime.utcnow()
                 start_date = end_date - timedelta(days=params.months_back * 30)
-                
+
                 await ctx.report_progress(0.3, f"Fetching {params.months_back} months of data...")
-                
+
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
-                
+
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
                     time_usage_started=start_date,
@@ -322,28 +321,28 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     granularity="MONTHLY",
                     query_type="COST",
                 )
-                
+
                 response = await asyncio.to_thread(
                     usage_client.request_summarized_usages,
                     request_details
                 )
-                
+
                 await ctx.report_progress(0.6, "Calculating trends...")
-                
+
                 data = _process_monthly_trend(response.data.items, params.months_back)
-                
+
                 if params.include_forecast:
                     await ctx.report_progress(0.8, "Generating forecast...")
                     data["forecast"] = _generate_forecast(data["monthly_costs"])
-                
+
                 if params.response_format == ResponseFormat.JSON:
                     return CostFormatter.to_json(data)
                 return CostFormatter.trend_markdown(data)
-                
+
         except Exception as e:
             error = handle_oci_error(e, "analyzing cost trends")
             return format_error_response(error, params.response_format.value)
-    
+
     tool_registry.register(ToolInfo(
         name="oci_cost_monthly_trend",
         domain="cost",
@@ -352,8 +351,8 @@ def register_cost_tools(mcp: FastMCP) -> None:
         input_schema=MonthlyTrendInput.model_json_schema(),
         annotations={"readOnlyHint": True, "destructiveHint": False}
     ))
-    
-    
+
+
     @mcp.tool(
         name="oci_cost_detect_anomalies",
         annotations={
@@ -380,15 +379,15 @@ def register_cost_tools(mcp: FastMCP) -> None:
             - Root cause analysis (service breakdown)
         """
         await ctx.report_progress(0.1, "Fetching daily cost data...")
-        
+
         try:
             async with get_oci_client() as client:
                 usage_client = client.usage_api
-                
+
                 await ctx.report_progress(0.3, "Running anomaly detection...")
-                
+
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
-                
+
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
                     time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
@@ -397,23 +396,23 @@ def register_cost_tools(mcp: FastMCP) -> None:
                     query_type="COST",
                     group_by=["service"],
                 )
-                
+
                 response = await asyncio.to_thread(
                     usage_client.request_summarized_usages,
                     request_details
                 )
-                
+
                 await ctx.report_progress(0.6, "Analyzing patterns...")
-                
+
                 # Detect anomalies
                 anomalies = _detect_cost_anomalies(
                     response.data.items,
                     threshold=params.threshold,
                     top_n=params.top_n
                 )
-                
+
                 await ctx.report_progress(0.9, "Generating report...")
-                
+
                 result = {
                     "anomalies": anomalies,
                     "detection_params": {
@@ -428,15 +427,15 @@ def register_cost_tools(mcp: FastMCP) -> None:
                         "low": len([a for a in anomalies if a["severity"] == "low"]),
                     }
                 }
-                
+
                 if params.response_format == ResponseFormat.JSON:
                     return CostFormatter.to_json(result)
                 return CostFormatter.anomaly_markdown(result)
-                
+
         except Exception as e:
             error = handle_oci_error(e, "detecting cost anomalies")
             return format_error_response(error, params.response_format.value)
-    
+
     tool_registry.register(ToolInfo(
         name="oci_cost_detect_anomalies",
         domain="cost",
@@ -453,29 +452,29 @@ def _process_cost_summary(items: list, time_start: str, time_end: str) -> dict:
     """Process raw OCI usage API response into cost summary."""
     service_costs = {}
     total_cost = 0.0
-    
+
     for item in items:
         cost = float(item.computed_amount or 0)
         service = item.service or "Unknown"
         total_cost += cost
-        
+
         if service in service_costs:
             service_costs[service] += cost
         else:
             service_costs[service] = cost
-    
+
     # Calculate days in period
     start = datetime.fromisoformat(time_start.replace('Z', '+00:00'))
     end = datetime.fromisoformat(time_end.replace('Z', '+00:00'))
     days = max((end - start).days, 1)
-    
+
     # Sort services by cost
     sorted_services = sorted(
         service_costs.items(),
         key=lambda x: x[1],
         reverse=True
     )
-    
+
     by_service = []
     for service, cost in sorted_services[:10]:
         pct = (cost / total_cost * 100) if total_cost > 0 else 0
@@ -485,7 +484,7 @@ def _process_cost_summary(items: list, time_start: str, time_end: str) -> dict:
             "percentage": pct,
             "currency": "USD"
         })
-    
+
     return {
         "total_cost": total_cost,
         "currency": "USD",
@@ -500,23 +499,23 @@ def _process_service_costs(items: list, top_n: int, time_start: str, time_end: s
     """Process service cost drilldown."""
     service_costs = {}
     total = 0.0
-    
+
     for item in items:
         cost = float(item.computed_amount or 0)
         service = item.service or "Unknown"
         total += cost
-        
+
         if service in service_costs:
             service_costs[service] += cost
         else:
             service_costs[service] = cost
-    
+
     sorted_services = sorted(
         service_costs.items(),
         key=lambda x: x[1],
         reverse=True
     )[:top_n]
-    
+
     services = []
     for service, cost in sorted_services:
         pct = (cost / total * 100) if total > 0 else 0
@@ -525,7 +524,7 @@ def _process_service_costs(items: list, top_n: int, time_start: str, time_end: s
             "cost": cost,
             "percentage": pct
         })
-    
+
     return {
         "total": total,
         "period_start": time_start,
@@ -537,7 +536,7 @@ def _process_service_costs(items: list, top_n: int, time_start: str, time_end: s
 async def _get_compartment_map(identity_client, tenancy_id: str) -> dict[str, str]:
     """Build OCID to name mapping for compartments."""
     compartments = {}
-    
+
     try:
         response = await asyncio.to_thread(
             identity_client.list_compartments,
@@ -545,21 +544,21 @@ async def _get_compartment_map(identity_client, tenancy_id: str) -> dict[str, st
             compartment_id_in_subtree=True,
             lifecycle_state="ACTIVE"
         )
-        
+
         for comp in response.data:
             compartments[comp.id] = comp.name
-        
+
         # Add root compartment
         compartments[tenancy_id] = "root"
-        
+
     except Exception:
         pass  # Return empty map on error
-    
+
     return compartments
 
 
 def _process_compartment_costs(
-    items: list, 
+    items: list,
     compartments: dict[str, str],
     top_n: int,
     time_start: str,
@@ -568,34 +567,34 @@ def _process_compartment_costs(
     """Process costs grouped by compartment."""
     compartment_data = {}
     total = 0.0
-    
+
     for item in items:
         cost = float(item.computed_amount or 0)
         comp_id = item.compartment_id or "unknown"
         service = item.service or "Unknown"
         total += cost
-        
+
         if comp_id not in compartment_data:
             compartment_data[comp_id] = {
                 "name": compartments.get(comp_id, comp_id[:20] + "..."),
                 "cost": 0.0,
                 "services": {}
             }
-        
+
         compartment_data[comp_id]["cost"] += cost
-        
+
         if service in compartment_data[comp_id]["services"]:
             compartment_data[comp_id]["services"][service] += cost
         else:
             compartment_data[comp_id]["services"][service] = cost
-    
+
     # Sort and format
     sorted_comps = sorted(
         compartment_data.items(),
         key=lambda x: x[1]["cost"],
         reverse=True
     )[:top_n]
-    
+
     compartments_list = []
     for comp_id, data in sorted_comps:
         services = sorted(
@@ -603,13 +602,13 @@ def _process_compartment_costs(
             key=lambda x: x[1],
             reverse=True
         )[:5]
-        
+
         compartments_list.append({
             "name": data["name"],
             "cost": data["cost"],
             "services": [{"service": s, "cost": c} for s, c in services]
         })
-    
+
     return {
         "total_cost": total,
         "period_start": time_start,
@@ -621,7 +620,7 @@ def _process_compartment_costs(
 def _process_monthly_trend(items: list, months_back: int) -> dict:
     """Process monthly trend data."""
     monthly = {}
-    
+
     for item in items:
         cost = float(item.computed_amount or 0)
         if item.time_usage_started:
@@ -630,28 +629,28 @@ def _process_monthly_trend(items: list, months_back: int) -> dict:
                 monthly[month] += cost
             else:
                 monthly[month] = cost
-    
+
     # Sort by month
     sorted_months = sorted(monthly.items())
-    
+
     monthly_costs = []
     prev_cost = None
     total = 0.0
-    
+
     for month, cost in sorted_months:
         change = None
         if prev_cost is not None and prev_cost > 0:
             change = ((cost - prev_cost) / prev_cost) * 100
-        
+
         monthly_costs.append({
             "month": month,
             "cost": cost,
             "change_percent": change
         })
-        
+
         total += cost
         prev_cost = cost
-    
+
     return {
         "summary": {
             "months_analyzed": len(monthly_costs),
@@ -666,18 +665,18 @@ def _generate_forecast(monthly_costs: list) -> dict:
     """Generate simple linear forecast based on recent months."""
     if len(monthly_costs) < 2:
         return {"estimate": 0, "trend": "insufficient_data"}
-    
+
     costs = [m["cost"] for m in monthly_costs]
-    
+
     # Simple average of last 3 months
     recent = costs[-3:] if len(costs) >= 3 else costs
     avg = sum(recent) / len(recent)
-    
+
     # Calculate trend
     if len(costs) >= 2:
         recent_avg = sum(costs[-2:]) / 2
         older_avg = sum(costs[:-2]) / max(len(costs) - 2, 1) if len(costs) > 2 else costs[0]
-        
+
         if recent_avg > older_avg * 1.1:
             trend = "increasing"
         elif recent_avg < older_avg * 0.9:
@@ -686,7 +685,7 @@ def _generate_forecast(monthly_costs: list) -> dict:
             trend = "stable"
     else:
         trend = "stable"
-    
+
     return {
         "estimate": avg,
         "trend": trend
@@ -698,43 +697,43 @@ def _detect_cost_anomalies(items: list, threshold: float, top_n: int) -> list[di
     # Group by date
     daily_costs = {}
     daily_services = {}
-    
+
     for item in items:
         cost = float(item.computed_amount or 0)
         service = item.service or "Unknown"
-        
+
         if item.time_usage_started:
             date = item.time_usage_started.strftime("%Y-%m-%d")
-            
+
             if date in daily_costs:
                 daily_costs[date] += cost
             else:
                 daily_costs[date] = cost
                 daily_services[date] = {}
-            
+
             if service in daily_services[date]:
                 daily_services[date][service] += cost
             else:
                 daily_services[date][service] = cost
-    
+
     if len(daily_costs) < 3:
         return []
-    
+
     # Calculate statistics
     costs = list(daily_costs.values())
     mean = statistics.mean(costs)
     stdev = statistics.stdev(costs) if len(costs) > 1 else 0
-    
+
     if stdev == 0:
         return []
-    
+
     anomalies = []
     for date, cost in daily_costs.items():
         z_score = (cost - mean) / stdev
-        
+
         if z_score > threshold:
             deviation_pct = ((cost - mean) / mean) * 100 if mean > 0 else 0
-            
+
             # Determine severity
             if z_score > 4:
                 severity = "critical"
@@ -744,7 +743,7 @@ def _detect_cost_anomalies(items: list, threshold: float, top_n: int) -> list[di
                 severity = "medium"
             else:
                 severity = "low"
-            
+
             # Get top contributing services
             services = daily_services.get(date, {})
             contributors = sorted(
@@ -752,7 +751,7 @@ def _detect_cost_anomalies(items: list, threshold: float, top_n: int) -> list[di
                 key=lambda x: x[1],
                 reverse=True
             )[:3]
-            
+
             anomalies.append({
                 "date": date,
                 "cost": cost,
@@ -766,9 +765,9 @@ def _detect_cost_anomalies(items: list, threshold: float, top_n: int) -> list[di
                     ]
                 }
             })
-    
+
     # Sort by severity and return top N
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     anomalies.sort(key=lambda x: (severity_order.get(x["severity"], 4), -x["cost"]))
-    
+
     return anomalies[:top_n]

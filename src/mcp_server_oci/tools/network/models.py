@@ -4,7 +4,6 @@ Pydantic models for OCI Network domain tools.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,16 +41,16 @@ class ListVcnsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    compartment_id: Optional[str] = Field(
+
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID. Uses default if not specified."
     )
-    lifecycle_state: Optional[VcnLifecycleState] = Field(
+    lifecycle_state: VcnLifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -74,7 +73,7 @@ class GetVcnInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     vcn_id: str = Field(
         ...,
         description="VCN OCID"
@@ -104,20 +103,20 @@ class ListSubnetsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    compartment_id: Optional[str] = Field(
+
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID. Uses default if not specified."
     )
-    vcn_id: Optional[str] = Field(
+    vcn_id: str | None = Field(
         default=None,
         description="Filter by VCN OCID"
     )
-    lifecycle_state: Optional[SubnetLifecycleState] = Field(
+    lifecycle_state: SubnetLifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -140,7 +139,7 @@ class GetSubnetInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     subnet_id: str = Field(
         ...,
         description="Subnet OCID"
@@ -162,16 +161,16 @@ class ListSecurityListsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    compartment_id: Optional[str] = Field(
+
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID. Uses default if not specified."
     )
-    vcn_id: Optional[str] = Field(
+    vcn_id: str | None = Field(
         default=None,
         description="Filter by VCN OCID"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -194,12 +193,12 @@ class AnalyzeSecurityRulesInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    vcn_id: Optional[str] = Field(
+
+    vcn_id: str | None = Field(
         default=None,
         description="VCN OCID to analyze. Required if security_list_id not provided."
     )
-    security_list_id: Optional[str] = Field(
+    security_list_id: str | None = Field(
         default=None,
         description="Specific security list OCID to analyze"
     )
@@ -223,9 +222,9 @@ class VcnSummary(BaseModel):
     display_name: str
     cidr_block: str
     lifecycle_state: str
-    dns_label: Optional[str] = None
+    dns_label: str | None = None
     time_created: str
-    subnet_count: Optional[int] = None
+    subnet_count: int | None = None
 
 
 class SubnetSummary(BaseModel):
@@ -234,9 +233,9 @@ class SubnetSummary(BaseModel):
     display_name: str
     cidr_block: str
     lifecycle_state: str
-    availability_domain: Optional[str] = None
+    availability_domain: str | None = None
     is_public: bool
-    dns_label: Optional[str] = None
+    dns_label: str | None = None
     vcn_id: str
 
 
@@ -245,9 +244,9 @@ class SecurityRuleSummary(BaseModel):
     direction: str  # INGRESS or EGRESS
     protocol: str
     source_or_destination: str
-    port_range: Optional[str] = None
+    port_range: str | None = None
     is_stateless: bool = False
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class RiskyRule(BaseModel):

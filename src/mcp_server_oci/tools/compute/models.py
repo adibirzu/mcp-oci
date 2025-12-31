@@ -5,17 +5,12 @@ All models use Pydantic v2 with ConfigDict for validation.
 """
 from __future__ import annotations
 
-from datetime import datetime
 from enum import Enum
-from typing import Optional, List, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class ResponseFormat(str, Enum):
-    """Output format for responses."""
-    MARKDOWN = "markdown"
-    JSON = "json"
+# Import canonical ResponseFormat from core
+from mcp_server_oci.core.formatters import ResponseFormat
 
 
 class LifecycleState(str, Enum):
@@ -42,16 +37,16 @@ class ListInstancesInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    compartment_id: Optional[str] = Field(
+
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to COMPARTMENT_OCID env var)"
     )
-    lifecycle_state: Optional[LifecycleState] = Field(
+    lifecycle_state: LifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state (RUNNING, STOPPED, etc.)"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -83,7 +78,7 @@ class GetInstanceInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     instance_id: str = Field(
         ...,
         description="Instance OCID (e.g., 'ocid1.instance.oc1...')",
@@ -97,7 +92,7 @@ class GetInstanceInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format"
     )
-    
+
     @field_validator('instance_id')
     @classmethod
     def validate_instance_id(cls, v: str) -> str:
@@ -113,7 +108,7 @@ class InstanceActionInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     instance_id: str = Field(
         ...,
         description="Instance OCID to act on",
@@ -131,7 +126,7 @@ class InstanceActionInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format"
     )
-    
+
     @field_validator('instance_id')
     @classmethod
     def validate_instance_id(cls, v: str) -> str:
@@ -147,12 +142,16 @@ class GetInstanceMetricsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     instance_id: str = Field(
         ...,
         description="Instance OCID"
     )
-    metric_names: List[str] = Field(
+    compartment_id: str | None = Field(
+        default=None,
+        description="Compartment OCID (defaults to COMPARTMENT_OCID env var)"
+    )
+    metric_names: list[str] = Field(
         default=["CpuUtilization", "MemoryUtilization"],
         description="Metrics to retrieve"
     )
@@ -161,6 +160,10 @@ class GetInstanceMetricsInput(BaseModel):
         description="Hours of historical data",
         ge=1,
         le=168  # 7 days
+    )
+    time_window: str = Field(
+        default="1h",
+        description="Time window for metrics (e.g., '1h', '24h', '7d')"
     )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
@@ -178,13 +181,13 @@ class InstanceSummary(BaseModel):
     display_name: str = Field(description="Display name")
     lifecycle_state: str = Field(description="Current state")
     shape: str = Field(description="Instance shape")
-    availability_domain: Optional[str] = Field(default=None, description="AD name")
-    fault_domain: Optional[str] = Field(default=None, description="Fault domain")
-    time_created: Optional[str] = Field(default=None, description="Creation time")
-    public_ip: Optional[str] = Field(default=None, description="Public IP if assigned")
-    private_ip: Optional[str] = Field(default=None, description="Private IP")
-    compartment_id: Optional[str] = Field(default=None, description="Compartment OCID")
-    region: Optional[str] = Field(default=None, description="Region")
+    availability_domain: str | None = Field(default=None, description="AD name")
+    fault_domain: str | None = Field(default=None, description="Fault domain")
+    time_created: str | None = Field(default=None, description="Creation time")
+    public_ip: str | None = Field(default=None, description="Public IP if assigned")
+    private_ip: str | None = Field(default=None, description="Private IP")
+    compartment_id: str | None = Field(default=None, description="Compartment OCID")
+    region: str | None = Field(default=None, description="Region")
 
 
 class ListInstancesOutput(BaseModel):
@@ -192,9 +195,9 @@ class ListInstancesOutput(BaseModel):
     total: int = Field(description="Total available (may be approximate)")
     count: int = Field(description="Results in this response")
     offset: int = Field(description="Current offset")
-    instances: List[InstanceSummary] = Field(description="Instance list")
+    instances: list[InstanceSummary] = Field(description="Instance list")
     has_more: bool = Field(description="More results available")
-    next_offset: Optional[int] = Field(default=None, description="Offset for next page")
+    next_offset: int | None = Field(default=None, description="Offset for next page")
 
 
 class InstanceActionOutput(BaseModel):
@@ -202,7 +205,7 @@ class InstanceActionOutput(BaseModel):
     success: bool = Field(description="Whether action was initiated")
     instance_id: str = Field(description="Instance OCID")
     action: str = Field(description="Action performed")
-    previous_state: Optional[str] = Field(default=None, description="State before action")
+    previous_state: str | None = Field(default=None, description="State before action")
     target_state: str = Field(description="Expected final state")
     message: str = Field(description="Status message")
 
@@ -216,7 +219,7 @@ class MetricDataPoint(BaseModel):
 class InstanceMetricsOutput(BaseModel):
     """Output for instance metrics."""
     instance_id: str = Field(description="Instance OCID")
-    instance_name: Optional[str] = Field(default=None, description="Display name")
+    instance_name: str | None = Field(default=None, description="Display name")
     period_start: str = Field(description="Data start time")
     period_end: str = Field(description="Data end time")
     metrics: dict[str, dict] = Field(description="Metrics by name with stats")

@@ -6,7 +6,6 @@ Provides models for metrics, logs, and monitoring operations.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -56,7 +55,7 @@ class GetInstanceMetricsInput(BaseModel):
         description="Compute instance OCID (e.g., 'ocid1.instance.oc1.xxx')",
         min_length=20,
     )
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to instance compartment)",
     )
@@ -99,7 +98,7 @@ class GetMetricsInput(BaseModel):
         description="Resource OCID to get metrics for",
         min_length=20,
     )
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to resource compartment)",
     )
@@ -135,7 +134,7 @@ class ExecuteLogQueryInput(BaseModel):
         description="Log Analytics query string (e.g., \"* | stats count by 'Log Source'\")",
         min_length=1,
     )
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID to scope the query (defaults to env var)",
     )
@@ -164,15 +163,15 @@ class ListAlarmsInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to tenancy root)",
     )
-    lifecycle_state: Optional[str] = Field(
+    lifecycle_state: str | None = Field(
         default=None,
         description="Filter by lifecycle state (e.g., 'ACTIVE', 'INACTIVE')",
     )
-    severity: Optional[str] = Field(
+    severity: str | None = Field(
         default=None,
         description="Filter by severity (e.g., 'CRITICAL', 'WARNING', 'INFO')",
     )
@@ -228,15 +227,15 @@ class ListLogSourcesInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to tenancy)",
     )
-    source_type: Optional[str] = Field(
+    source_type: str | None = Field(
         default=None,
         description="Filter by source type (e.g., 'LOG', 'FILE')",
     )
-    name_contains: Optional[str] = Field(
+    name_contains: str | None = Field(
         default=None,
         description="Filter by name containing string",
     )
@@ -261,7 +260,7 @@ class ObservabilityOverviewInput(BaseModel):
         extra="forbid",
     )
 
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (defaults to tenancy)",
     )

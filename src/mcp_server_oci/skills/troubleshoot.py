@@ -1,82 +1,599 @@
-import json
-from typing import Dict, Any
-from mcp_server_oci.tools.compute.list import list_instances
-from mcp_server_oci.tools.observability.metrics import get_instance_metrics
-from mcp_server_oci.tools.observability.logs import get_logs
+"""
+Troubleshoot Instance Skill - Comprehensive compute instance health analysis.
 
-def troubleshoot_instance(instance_id: str) -> str:
+This skill orchestrates multiple tools to provide:
+- Instance state verification
+- CPU/memory metric analysis
+- Log error detection
+- Actionable recommendations
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastmcp import Context
+from pydantic import Field, field_validator
+
+from mcp_server_oci.core import (
+    BaseSkillInput,
+    ResponseFormat,
+    SkillMetadata,
+    get_client_manager,
+    get_logger,
+)
+from mcp_server_oci.skills.discovery import register_skill_from_metadata
+from mcp_server_oci.skills.executor import SkillExecutor, register_skill
+
+logger = get_logger("oci-mcp.skills.troubleshoot")
+
+
+class TroubleshootInstanceInput(BaseSkillInput):
+    """Input parameters for instance troubleshooting skill."""
+
+    instance_id: str = Field(
+        ...,
+        description="Compute instance OCID to troubleshoot (e.g., 'ocid1.instance.oc1.xxx')",
+        min_length=20,
+    )
+    time_window: str = Field(
+        default="1h",
+        description="Time window for metrics and logs (e.g., '15m', '1h', '24h')",
+    )
+    include_logs: bool = Field(
+        default=True,
+        description="Include log error analysis (requires Log Analytics)",
+    )
+    check_alarms: bool = Field(
+        default=True,
+        description="Check for active alarms related to the instance",
+    )
+
+    @field_validator("instance_id")
+    @classmethod
+    def validate_instance_id(cls, v: str) -> str:
+        if not v.startswith("ocid1.instance."):
+            raise ValueError("Invalid instance OCID format. Expected 'ocid1.instance.oc1...'")
+        return v
+
+
+# Register skill metadata for discovery
+SKILL_METADATA = SkillMetadata(
+    name="oci_skill_troubleshoot_instance",
+    display_name="Troubleshoot Compute Instance",
+    domain="compute",
+    summary="Comprehensive health check aggregating state, metrics, logs, and alarms",
+    full_description="""
+Performs a multi-step diagnostic analysis of a compute instance:
+
+1. **State Check**: Verifies instance exists and is running
+2. **Metrics Analysis**: Fetches CPU and memory utilization with trend detection
+3. **Log Analysis**: Searches for error patterns in Log Analytics (if enabled)
+4. **Alarm Check**: Identifies any active alarms for the instance
+
+Returns a synthesized report with health status and actionable recommendations.
+    """,
+    input_schema=TroubleshootInstanceInput.model_json_schema(),
+    tools_used=[
+        "oci_observability_get_instance_metrics",
+        "oci_observability_execute_log_query",
+        "oci_observability_list_alarms",
+    ],
+    tier=3,
+    estimated_duration="5-30s",
+)
+
+# Register in both skill registries (executor and discovery)
+register_skill(SKILL_METADATA)
+register_skill_from_metadata(SKILL_METADATA)
+
+
+async def troubleshoot_instance(params: TroubleshootInstanceInput, ctx: Context) -> str:
     """
-    Perform a comprehensive health check on an instance.
-    Aggregates state, metrics (CPU), and recent error logs.
-    
+    Perform comprehensive health check on a compute instance.
+
+    Aggregates state, metrics (CPU/memory), recent error logs, and alarms
+    to produce an actionable troubleshooting report.
+
     Args:
-        instance_id: The OCID of the instance to analyze.
+        params: TroubleshootInstanceInput with instance_id and options
+        ctx: MCP Context for progress reporting
+
+    Returns:
+        Troubleshooting report in requested format (markdown or json)
+
+    Example:
+        {"instance_id": "ocid1.instance.oc1.xxx", "time_window": "1h"}
     """
-    report = [f"# Troubleshooting Report: `{instance_id}`\n"]
-    
-    # 1. Check Instance State
-    # We don't have a direct get_instance tool exposed yet (only list),
-    # but we can reuse the logic or client. For now, let's use list filtered by ID if possible
-    # or just assume the user gave us a valid ID and we check metrics.
-    # Actually, let's implement a quick get_instance_state helper or use metrics error to detect missing.
-    
-    report.append("## 1. Instance Status")
-    # Using metrics call as a proxy for existence/reachability for now, 
-    # or we could fetch details. Let's fetch metrics.
-    
-    metrics = get_instance_metrics(instance_id, window="1h", format="json")
-    
-    if "error" in metrics:
-        report.append(f"❌ **Error fetching metrics:** {metrics['error']}")
-        report.append("Possible causes: Instance does not exist, wrong region, or no permissions.")
-        return "\n".join(report)
-        
-    cpu = metrics.get("cpu_metrics", {})
-    avg_cpu = cpu.get("average", 0)
-    
-    status_icon = "✅"
-    if avg_cpu > 80: status_icon = "cx"
-    elif avg_cpu > 50: status_icon = "⚠️"
-        
-    report.append(f"{status_icon} **CPU Utilization (1h):** {avg_cpu:.2f}% (Max: {cpu.get('max', 0):.2f}%)")
-    
-    # 2. Check Logs (Errors)
-    report.append("\n## 2. Recent Errors (Last 1h)")
-    query = f"'Log Source' = 'Linux Syslog Logs' and 'Level' = 'error' and 'Host' = '{instance_id}' | stats count"
-    
-    # Note: This query is a best-guess. Real-world queries depend on log source config.
-    # We'll try a broader search first.
-    broad_query = f"* | where 'resourceId' = '{instance_id}' and 'Log Level' = 'ERROR' | stats count as ErrorCount"
-    
-    logs = get_logs(query=broad_query, time_range="1h", format="json")
-    
-    if isinstance(logs, str) and "Error" in logs:
-        report.append(f"⚠️ **Log Check Failed:** {logs}")
-    elif isinstance(logs, list) and logs:
-        count = logs[0].get("ErrorCount", 0)
-        if count > 0:
-            report.append(f"❌ Found **{count}** error logs in the last hour.")
-            # Fetch samples
-            sample_query = f"* | where 'resourceId' = '{instance_id}' and 'Log Level' = 'ERROR' | head 5"
-            samples = get_logs(query=sample_query, time_range="1h", format="markdown")
-            report.append("\n**Recent Log Samples:**")
-            report.append(str(samples))
+    # Initialize executor
+    executor = SkillExecutor(
+        skill_name="troubleshoot_instance",
+        ctx=ctx,
+        params=params,
+    )
+
+    # Define workflow steps
+    executor.add_step("get_instance", "Fetch instance details")
+    executor.add_step("get_metrics", "Analyze performance metrics", tool_name="get_instance_metrics")
+    if params.include_logs:
+        executor.add_step("check_logs", "Search for error logs", tool_name="execute_log_query")
+    if params.check_alarms:
+        executor.add_step("check_alarms", "Check active alarms", tool_name="list_alarms")
+    executor.add_step("analyze", "Generate recommendations")
+
+    # Storage for findings
+    findings: dict[str, Any] = {
+        "instance_id": params.instance_id,
+        "time_window": params.time_window,
+    }
+    recommendations: list[str] = []
+    overall_success = True
+
+    try:
+        client_manager = get_client_manager()
+
+        # Step 1: Get instance details
+        instance_result = await executor.run_custom_step(
+            "get_instance",
+            lambda: _get_instance_details(client_manager, params.instance_id),
+        )
+
+        if not instance_result.success:
+            return _build_error_response(
+                executor, params,
+                f"Instance not found or inaccessible: {instance_result.error}"
+            )
+
+        instance_data = instance_result.data
+        findings["instance"] = {
+            "name": instance_data.get("display_name", "Unknown"),
+            "state": instance_data.get("lifecycle_state", "UNKNOWN"),
+            "shape": instance_data.get("shape", "Unknown"),
+            "availability_domain": instance_data.get("availability_domain", "Unknown"),
+        }
+
+        # Check if instance is running
+        if instance_data.get("lifecycle_state") != "RUNNING":
+            findings["instance"]["warning"] = f"Instance is {instance_data.get('lifecycle_state')}, not RUNNING"
+            recommendations.append(
+                f"Instance is {instance_data.get('lifecycle_state')}. "
+                "Use oci_compute_start_instance to start it."
+            )
+
+        compartment_id = params.compartment_id or instance_data.get("compartment_id")
+
+        # Step 2: Get metrics
+        metrics_result = await executor.run_custom_step(
+            "get_metrics",
+            lambda: _get_instance_metrics(
+                client_manager, params.instance_id, compartment_id, params.time_window
+            ),
+        )
+
+        if metrics_result.success:
+            metrics = metrics_result.data
+            findings["metrics"] = metrics
+
+            # Analyze CPU
+            cpu_avg = metrics.get("cpu", {}).get("average", 0)
+            cpu_max = metrics.get("cpu", {}).get("max", 0)
+
+            if cpu_avg > 90:
+                findings["metrics"]["cpu_status"] = "CRITICAL"
+                recommendations.append(
+                    f"CPU is critically high ({cpu_avg:.1f}% avg). "
+                    "Consider scaling up the instance shape or investigating high-CPU processes."
+                )
+            elif cpu_avg > 70:
+                findings["metrics"]["cpu_status"] = "WARNING"
+                recommendations.append(
+                    f"CPU is elevated ({cpu_avg:.1f}% avg). Monitor for sustained high usage."
+                )
+            else:
+                findings["metrics"]["cpu_status"] = "OK"
+
+            # Analyze memory if available
+            if "memory" in metrics:
+                mem_avg = metrics["memory"].get("average", 0)
+                if mem_avg > 90:
+                    findings["metrics"]["memory_status"] = "CRITICAL"
+                    recommendations.append(
+                        f"Memory usage is critical ({mem_avg:.1f}% avg). "
+                        "Check for memory leaks or increase instance memory."
+                    )
+                elif mem_avg > 80:
+                    findings["metrics"]["memory_status"] = "WARNING"
+                    recommendations.append(
+                        f"Memory usage is high ({mem_avg:.1f}% avg). Monitor closely."
+                    )
+                else:
+                    findings["metrics"]["memory_status"] = "OK"
         else:
-            report.append("✅ No error logs found in Log Analytics.")
+            findings["metrics"] = {"error": metrics_result.error}
+            overall_success = False
+
+        # Step 3: Check logs (if enabled)
+        if params.include_logs:
+            logs_result = await executor.run_custom_step(
+                "check_logs",
+                lambda: _check_error_logs(
+                    client_manager, params.instance_id, compartment_id, params.time_window
+                ),
+            )
+
+            if logs_result.success:
+                logs_data = logs_result.data
+                findings["logs"] = logs_data
+
+                error_count = logs_data.get("error_count", 0)
+                if error_count > 100:
+                    recommendations.append(
+                        f"High error rate detected: {error_count} errors in {params.time_window}. "
+                        "Review application logs for patterns."
+                    )
+                elif error_count > 10:
+                    recommendations.append(
+                        f"Found {error_count} error logs. Check for recurring issues."
+                    )
+            else:
+                findings["logs"] = {
+                    "status": "unavailable",
+                    "reason": logs_result.error or "Log Analytics not configured",
+                }
+                executor.skip_step("check_logs", "Log Analytics unavailable")
+
+        # Step 4: Check alarms (if enabled)
+        if params.check_alarms:
+            alarms_result = await executor.run_custom_step(
+                "check_alarms",
+                lambda: _check_instance_alarms(
+                    client_manager, params.instance_id, compartment_id
+                ),
+            )
+
+            if alarms_result.success:
+                alarms_data = alarms_result.data
+                findings["alarms"] = alarms_data
+
+                firing_alarms = alarms_data.get("firing", [])
+                if firing_alarms:
+                    for alarm in firing_alarms[:3]:  # Top 3 alarms
+                        recommendations.append(
+                            f"Active alarm: {alarm.get('name')} (severity: {alarm.get('severity')})"
+                        )
+            else:
+                findings["alarms"] = {"error": alarms_result.error}
+
+        # Step 5: Generate final analysis
+        await executor.run_custom_step(
+            "analyze",
+            lambda: _generate_health_summary(findings),
+        )
+
+        # Determine overall health
+        health_status = _calculate_health_status(findings)
+        findings["health_status"] = health_status
+
+        # Add default recommendation if healthy
+        if not recommendations:
+            recommendations.append("Instance appears healthy. No immediate action required.")
+
+        # Build result
+        summary = _generate_summary(findings, health_status)
+        result = executor.build_result(
+            success=overall_success,
+            summary=summary,
+            details=findings,
+            recommendations=recommendations,
+        )
+
+        # Return in requested format
+        if params.response_format == ResponseFormat.JSON:
+            return result.model_dump_json(indent=2)
+        return result.to_markdown()
+
+    except Exception as e:
+        logger.error(f"Troubleshoot skill failed: {e}")
+        return _build_error_response(executor, params, str(e))
+
+
+async def _get_instance_details(client_manager: Any, instance_id: str) -> dict[str, Any]:
+    """Fetch instance details from OCI."""
+    compute = client_manager.compute
+    response = await asyncio.to_thread(
+        compute.get_instance,
+        instance_id=instance_id,
+    )
+    instance = response.data
+    return {
+        "display_name": instance.display_name,
+        "lifecycle_state": instance.lifecycle_state,
+        "shape": instance.shape,
+        "availability_domain": instance.availability_domain,
+        "compartment_id": instance.compartment_id,
+        "time_created": str(instance.time_created) if instance.time_created else None,
+    }
+
+
+async def _get_instance_metrics(
+    client_manager: Any,
+    instance_id: str,
+    compartment_id: str | None,
+    time_window: str,
+) -> dict[str, Any]:
+    """Fetch CPU and memory metrics for an instance."""
+    monitoring = client_manager.monitoring
+
+    # Parse time window
+    end_time = datetime.now(UTC)
+    if time_window.endswith("m"):
+        delta = timedelta(minutes=int(time_window[:-1]))
+    elif time_window.endswith("h"):
+        delta = timedelta(hours=int(time_window[:-1]))
+    elif time_window.endswith("d"):
+        delta = timedelta(days=int(time_window[:-1]))
     else:
-        report.append("ℹ️ No log data returned.")
+        delta = timedelta(hours=1)
+    start_time = end_time - delta
 
-    # 3. Recommendations
-    report.append("\n## 3. Recommendations")
-    if avg_cpu > 90:
-        report.append("- **Critical:** CPU is saturated. Consider scaling up (Change Shape) or investigating top processes.")
-    elif avg_cpu > 50:
-        report.append("- **Monitor:** CPU is elevated. Check for load spikes.")
-    
-    if isinstance(logs, list) and logs and logs[0].get("ErrorCount", 0) > 0:
-        report.append("- **Investigate:** Check application logs for specific error patterns shown above.")
-        
-    if len(report) == 6: # No specific recommendations added
-        report.append("- System appears healthy.")
+    # CPU query
+    cpu_query = f'CpuUtilization[1m]{{resourceId = "{instance_id}"}}.mean()'
+    cpu_response = await asyncio.to_thread(
+        monitoring.summarize_metrics_data,
+        compartment_id=compartment_id,
+        summarize_metrics_data_details={
+            "namespace": "oci_computeagent",
+            "query": cpu_query,
+            "startTime": start_time.isoformat(),
+            "endTime": end_time.isoformat(),
+        },
+    )
 
-    return "\n".join(report)
+    cpu_data = {"current": 0, "average": 0, "max": 0, "min": 100}
+    if cpu_response.data:
+        for item in cpu_response.data:
+            if item.aggregated_datapoints:
+                values = [dp.value for dp in item.aggregated_datapoints if dp.value is not None]
+                if values:
+                    cpu_data["current"] = round(values[-1], 2)
+                    cpu_data["average"] = round(sum(values) / len(values), 2)
+                    cpu_data["max"] = round(max(values), 2)
+                    cpu_data["min"] = round(min(values), 2)
+
+    # Memory query
+    memory_query = f'MemoryUtilization[1m]{{resourceId = "{instance_id}"}}.mean()'
+    memory_response = await asyncio.to_thread(
+        monitoring.summarize_metrics_data,
+        compartment_id=compartment_id,
+        summarize_metrics_data_details={
+            "namespace": "oci_computeagent",
+            "query": memory_query,
+            "startTime": start_time.isoformat(),
+            "endTime": end_time.isoformat(),
+        },
+    )
+
+    memory_data = {"current": 0, "average": 0, "max": 0}
+    if memory_response.data:
+        for item in memory_response.data:
+            if item.aggregated_datapoints:
+                values = [dp.value for dp in item.aggregated_datapoints if dp.value is not None]
+                if values:
+                    memory_data["current"] = round(values[-1], 2)
+                    memory_data["average"] = round(sum(values) / len(values), 2)
+                    memory_data["max"] = round(max(values), 2)
+
+    return {
+        "cpu": cpu_data,
+        "memory": memory_data,
+        "window": time_window,
+    }
+
+
+async def _check_error_logs(
+    client_manager: Any,
+    instance_id: str,
+    compartment_id: str | None,
+    time_window: str,
+) -> dict[str, Any]:
+    """Search for error logs in Log Analytics."""
+    try:
+        from oci.log_analytics import LogAnalyticsClient
+
+        config = client_manager._config
+        log_analytics = LogAnalyticsClient(config, signer=client_manager._signer)
+
+        # Get namespace
+        namespace = os.getenv("LA_NAMESPACE")
+        if not namespace:
+            namespace_resp = await asyncio.to_thread(
+                log_analytics.get_namespace,
+                namespace_name=client_manager.tenancy_id,
+            )
+            namespace = namespace_resp.data.namespace_name
+
+        # Parse time window
+        end_time = datetime.now(UTC)
+        if time_window.endswith("m"):
+            delta = timedelta(minutes=int(time_window[:-1]))
+        elif time_window.endswith("h"):
+            delta = timedelta(hours=int(time_window[:-1]))
+        elif time_window.endswith("d"):
+            delta = timedelta(days=int(time_window[:-1]))
+        else:
+            delta = timedelta(hours=1)
+        start_time = end_time - delta
+
+        # Count error logs
+        count_query = f"* | where 'Entity' = '{instance_id}' and 'Log Level' = 'ERROR' | stats count as ErrorCount"
+        count_response = await asyncio.to_thread(
+            log_analytics.query,
+            namespace_name=namespace,
+            query_details={
+                "compartmentId": compartment_id or client_manager.tenancy_id,
+                "queryString": count_query,
+                "subSystem": "LOG",
+                "maxTotalCount": 1,
+                "timeFilter": {
+                    "timeStart": start_time.isoformat(),
+                    "timeEnd": end_time.isoformat(),
+                },
+            },
+        )
+
+        error_count = 0
+        if count_response.data and count_response.data.results:
+            for row in count_response.data.results:
+                if hasattr(row, "ErrorCount"):
+                    error_count = int(row.ErrorCount)
+                    break
+
+        # Get sample errors if count > 0
+        samples = []
+        if error_count > 0:
+            sample_query = f"* | where 'Entity' = '{instance_id}' and 'Log Level' = 'ERROR' | head 5"
+            sample_response = await asyncio.to_thread(
+                log_analytics.query,
+                namespace_name=namespace,
+                query_details={
+                    "compartmentId": compartment_id or client_manager.tenancy_id,
+                    "queryString": sample_query,
+                    "subSystem": "LOG",
+                    "maxTotalCount": 5,
+                    "timeFilter": {
+                        "timeStart": start_time.isoformat(),
+                        "timeEnd": end_time.isoformat(),
+                    },
+                },
+            )
+            if sample_response.data and sample_response.data.results:
+                for row in sample_response.data.results[:5]:
+                    samples.append(str(row))
+
+        return {
+            "error_count": error_count,
+            "samples": samples,
+            "window": time_window,
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Log Analytics query failed: {e}")
+
+
+async def _check_instance_alarms(
+    client_manager: Any,
+    instance_id: str,
+    compartment_id: str | None,
+) -> dict[str, Any]:
+    """Check for active alarms related to the instance."""
+    monitoring = client_manager.monitoring
+
+    response = await asyncio.to_thread(
+        monitoring.list_alarms,
+        compartment_id=compartment_id or client_manager.tenancy_id,
+        lifecycle_state="ACTIVE",
+        limit=100,
+    )
+
+    # Filter alarms that reference this instance
+    related_alarms = []
+    firing_alarms = []
+
+    for alarm in response.data:
+        # Check if alarm query references this instance
+        if instance_id in (alarm.query or ""):
+            alarm_info = {
+                "id": alarm.id,
+                "name": alarm.display_name,
+                "severity": alarm.severity,
+                "is_firing": alarm.lifecycle_state == "ACTIVE" and hasattr(alarm, "is_firing") and alarm.is_firing,
+            }
+            related_alarms.append(alarm_info)
+            if alarm_info.get("is_firing"):
+                firing_alarms.append(alarm_info)
+
+    return {
+        "total_related": len(related_alarms),
+        "firing_count": len(firing_alarms),
+        "firing": firing_alarms[:5],  # Top 5 firing alarms
+        "all_related": related_alarms[:10],
+    }
+
+
+async def _generate_health_summary(findings: dict[str, Any]) -> str:
+    """Generate a text summary of health findings."""
+    parts = []
+
+    instance = findings.get("instance", {})
+    parts.append(f"Instance {instance.get('name', 'Unknown')} is {instance.get('state', 'UNKNOWN')}")
+
+    if "metrics" in findings and "error" not in findings["metrics"]:
+        cpu = findings["metrics"].get("cpu", {})
+        parts.append(f"CPU: {cpu.get('average', 0):.1f}% avg")
+
+    if "logs" in findings and findings["logs"].get("error_count", 0) > 0:
+        parts.append(f"Errors: {findings['logs']['error_count']}")
+
+    return ". ".join(parts)
+
+
+def _calculate_health_status(findings: dict[str, Any]) -> str:
+    """Calculate overall health status from findings."""
+    # Check instance state
+    if findings.get("instance", {}).get("state") != "RUNNING":
+        return "CRITICAL"
+
+    # Check metrics
+    metrics = findings.get("metrics", {})
+    if metrics.get("cpu_status") == "CRITICAL" or metrics.get("memory_status") == "CRITICAL":
+        return "CRITICAL"
+    if metrics.get("cpu_status") == "WARNING" or metrics.get("memory_status") == "WARNING":
+        return "WARNING"
+
+    # Check alarms
+    alarms = findings.get("alarms", {})
+    if alarms.get("firing_count", 0) > 0:
+        return "WARNING"
+
+    # Check logs
+    logs = findings.get("logs", {})
+    if logs.get("error_count", 0) > 100:
+        return "WARNING"
+
+    return "HEALTHY"
+
+
+def _generate_summary(findings: dict[str, Any], health_status: str) -> str:
+    """Generate a human-readable summary."""
+    instance_name = findings.get("instance", {}).get("name", "Unknown")
+    instance_state = findings.get("instance", {}).get("state", "UNKNOWN")
+
+    cpu_avg = findings.get("metrics", {}).get("cpu", {}).get("average", 0)
+
+    if health_status == "CRITICAL":
+        return f"Instance '{instance_name}' requires immediate attention. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+    elif health_status == "WARNING":
+        return f"Instance '{instance_name}' has warnings. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+    else:
+        return f"Instance '{instance_name}' is healthy. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+
+
+def _build_error_response(
+    executor: SkillExecutor,
+    params: TroubleshootInstanceInput,
+    error: str,
+) -> str:
+    """Build an error response in the requested format."""
+    result = executor.build_result(
+        success=False,
+        summary=f"Troubleshooting failed: {error}",
+        details={"error": error},
+        recommendations=["Verify the instance OCID is correct and you have read permissions."],
+    )
+
+    if params.response_format == ResponseFormat.JSON:
+        return result.model_dump_json(indent=2)
+    return result.to_markdown()

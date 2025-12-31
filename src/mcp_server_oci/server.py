@@ -14,24 +14,37 @@ Environment Variables:
 - OCI_MCP_LOG_LEVEL: Logging level
 - See core/client.py for OCI configuration variables
 """
-from __future__ import annotations
-
 import json
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
 
-from fastmcp import FastMCP, Context
+from fastmcp import Context, FastMCP
 
 from mcp_server_oci.config import get_config
 from mcp_server_oci.core import (
-    get_client_manager,
-    get_logger,
-    init_observability,
-    check_observability_health,
-    ResponseFormat,
-    format_response,
     HealthStatus,
     ServerManifest,
+    check_observability_health,
+    clear_all_caches,
+    get_all_cache_stats,
+    # Cache
+    get_cache,
+    get_client_manager,
+    get_logger,
+    # Shared memory
+    get_shared_store,
+    init_observability,
+)
+
+# Import compute models early for alias tool type hints
+from mcp_server_oci.tools.compute.formatters import ComputeFormatter
+from mcp_server_oci.tools.compute.models import (
+    GetInstanceMetricsInput,
+    InstanceActionInput,
+    ListInstancesInput,
+)
+from mcp_server_oci.tools.compute.tools import (
+    _fetch_instance_ips,
+    _fetch_instance_metrics,
 )
 
 # Get configuration
@@ -51,13 +64,13 @@ async def app_lifespan(server: FastMCP):
     4. Cleans up on shutdown
     """
     logger.info("Starting OCI MCP Server", version=config.server.version)
-    
+
     # Initialize observability (OCI APM + Logging)
     init_observability(
         service_name=config.server.name,
         service_version=config.server.version
     )
-    
+
     # Initialize OCI client
     client_manager = get_client_manager()
     try:
@@ -70,15 +83,28 @@ async def app_lifespan(server: FastMCP):
     except Exception as e:
         logger.warning(f"OCI client initialization failed: {e}")
         # Server can still start - some tools may work without OCI connection
-    
+
+    # Initialize caches (lazy initialization - just ensure they're created)
+    _ = get_cache("static")
+    _ = get_cache("config")
+    _ = get_cache("operational")
+    _ = get_cache("metrics")
+    logger.info("Cache tiers initialized")
+
+    # Initialize shared store (in-memory fallback if ATP not configured)
+    shared_store = get_shared_store()
+    logger.info(f"Shared store initialized: {type(shared_store).__name__}")
+
     # Yield context for tool access
     yield {
         "oci_client": client_manager,
         "config": config,
+        "shared_store": shared_store,
     }
-    
+
     # Cleanup on shutdown
     logger.info("Shutting down OCI MCP Server")
+    await clear_all_caches()
     client_manager.clear_cache()
 
 
@@ -122,8 +148,8 @@ async def oci_ping() -> str:
     """
     client = get_client_manager()
     oci_health = await client.health_check()
-    obs_health = check_observability_health()
-    
+    obs_health = await check_observability_health()
+
     status = HealthStatus(
         healthy=oci_health.get("healthy", False),
         server_name=config.server.name,
@@ -137,7 +163,7 @@ async def oci_ping() -> str:
             "observability": obs_health,
         }
     )
-    
+
     return status.model_dump_json(indent=2)
 
 
@@ -192,14 +218,14 @@ async def oci_list_domains(include_tool_count: bool = True) -> str:
         },
         "skills": {
             "description": "High-level workflow skills that combine multiple operations",
-            "tools": ["troubleshoot_instance"],
+            "tools": ["oci_skill_troubleshoot_instance"],
         },
         "discovery": {
             "description": "Tool discovery and server information",
             "tools": ["oci_ping", "oci_list_domains", "oci_search_tools", "oci_get_manifest"],
         },
     }
-    
+
     # Format output
     lines = ["# Available OCI Domains\n"]
     for name, info in sorted(domains.items()):
@@ -209,7 +235,7 @@ async def oci_list_domains(include_tool_count: bool = True) -> str:
         else:
             lines.append(f"## {name}")
         lines.append(f"{info['description']}\n")
-    
+
     return "\n".join(lines)
 
 
@@ -225,7 +251,7 @@ async def oci_list_domains(include_tool_count: bool = True) -> str:
 )
 async def oci_search_tools(
     query: str,
-    domain: Optional[str] = None,
+    domain: str | None = None,
     detail_level: str = "summary"
 ) -> str:
     """
@@ -247,21 +273,21 @@ async def oci_search_tools(
         {"query": "metrics", "domain": "observability"}
     """
     all_tools = await mcp.get_tools()
-    
+
     results = []
     q = query.lower()
     d = domain.lower() if domain else None
-    
+
     for tool in all_tools:
         name = tool.name
         desc = tool.description or ""
-        
+
         # Domain filtering
         if d:
             # Check if domain string is in name or description
             if d not in name.lower() and d not in desc.lower():
                 continue
-        
+
         # Query matching
         if q in name.lower() or q in desc.lower():
             results.append({
@@ -269,10 +295,10 @@ async def oci_search_tools(
                 "description": desc,
                 "schema": tool.inputSchema if detail_level == "full" else None,
             })
-    
+
     if not results:
         return f"No tools found matching '{query}'. Try a broader query or different domain."
-    
+
     # Format based on detail level
     if detail_level == "name_only":
         return "\n".join(t["name"] for t in results)
@@ -286,6 +312,41 @@ async def oci_search_tools(
         return json.dumps(results, indent=2)
 
 
+@mcp.tool(
+    name="oci_get_cache_stats",
+    annotations={
+        "title": "Get Cache Statistics",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
+async def get_cache_stats() -> str:
+    """
+    Get cache performance statistics for all cache tiers.
+
+    Returns hit rates, eviction counts, and cache sizes for
+    static, config, operational, and metrics caches.
+
+    Useful for monitoring and debugging cache effectiveness.
+    """
+    stats = await get_all_cache_stats()
+
+    lines = ["# Cache Statistics\n"]
+    for tier, tier_stats in stats.items():
+        lines.append(f"## {tier.title()} Cache")
+        lines.append(f"- Hit Rate: {tier_stats['hit_rate']}")
+        lines.append(f"- Hits: {tier_stats['hits']}")
+        lines.append(f"- Misses: {tier_stats['misses']}")
+        lines.append(f"- Evictions: {tier_stats['evictions']}")
+        lines.append(f"- Expirations: {tier_stats['expirations']}")
+        lines.append(f"- Size: {tier_stats['size']}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 @mcp.resource("server://manifest")
 async def get_manifest() -> str:
     """
@@ -297,25 +358,28 @@ async def get_manifest() -> str:
     manifest = ServerManifest(
         name=config.server.name,
         version=config.server.version,
-        description="Unified OCI MCP server with progressive disclosure",
+        description="Unified OCI MCP server with progressive disclosure and skill framework",
         capabilities={
-            "skills": ["compute_management", "observability", "network_management", "security_management", "troubleshooting"],
+            "skills": {
+                "description": "High-level composite workflows that orchestrate multiple tools",
+                "available": ["oci_skill_troubleshoot_instance"],
+                "domains": ["compute", "observability"],
+            },
             "tools": {
-                "tier1_instant": ["oci_ping", "oci_search_tools", "oci_list_domains"],
-                "tier2_api": ["list_instances", "get_instance_metrics", "get_logs", "oci_network_list_vcns", "oci_network_list_subnets", "oci_security_list_users", "oci_security_list_policies"],
-                "tier3_heavy": ["oci_security_audit"],
-                "tier4_admin": ["start_instance", "stop_instance", "restart_instance"],
+                "tier1_instant": ["oci_ping", "oci_search_tools", "oci_list_domains", "oci_get_cache_stats"],
+                "tier2_api": ["oci_compute_list_instances", "oci_observability_get_instance_metrics", "oci_observability_execute_log_query", "oci_network_list_vcns", "oci_network_list_subnets", "oci_security_list_users", "oci_security_list_policies"],
+                "tier3_heavy": ["oci_security_audit", "oci_skill_troubleshoot_instance"],
+                "tier4_admin": ["oci_compute_start_instance", "oci_compute_stop_instance", "oci_compute_restart_instance"],
             }
         },
         domains=[
-            {"name": "compute", "tool_count": 5},
-            {"name": "cost", "tool_count": 5},
-            {"name": "database", "tool_count": 5},
-            {"name": "network", "tool_count": 5},
-            {"name": "security", "tool_count": 6},
-            {"name": "observability", "tool_count": 5},
-            {"name": "skills", "tool_count": 1},
-            {"name": "discovery", "tool_count": 4},
+            {"name": "compute", "tool_count": 5, "skill_count": 1},
+            {"name": "cost", "tool_count": 5, "skill_count": 0},
+            {"name": "database", "tool_count": 5, "skill_count": 0},
+            {"name": "network", "tool_count": 5, "skill_count": 0},
+            {"name": "security", "tool_count": 6, "skill_count": 0},
+            {"name": "observability", "tool_count": 6, "skill_count": 0},
+            {"name": "discovery", "tool_count": 4, "skill_count": 0},
         ],
         environment_variables=[
             "OCI_CONFIG_FILE",
@@ -324,9 +388,9 @@ async def get_manifest() -> str:
             "COMPARTMENT_OCID",
             "ALLOW_MUTATIONS",
         ],
-        usage_guide="Use oci_list_domains() to discover capabilities, then oci_search_tools() to find specific tools.",
+        usage_guide="Use oci_list_domains() to discover capabilities, then oci_search_tools() to find specific tools. Skills are composite operations that combine multiple tools for complex workflows.",
     )
-    
+
     return manifest.model_dump_json(indent=2)
 
 
@@ -335,15 +399,14 @@ async def get_manifest() -> str:
 # =============================================================================
 
 # Import domain registration functions
-from mcp_server_oci.tools.cost import register_cost_tools
+# Import skills registration
+from mcp_server_oci.skills import register_skill_tools
 from mcp_server_oci.tools.compute import register_compute_tools
+from mcp_server_oci.tools.cost import register_cost_tools
 from mcp_server_oci.tools.database import register_database_tools
 from mcp_server_oci.tools.network import register_network_tools
-from mcp_server_oci.tools.security import register_security_tools
 from mcp_server_oci.tools.observability import register_observability_tools
-
-# Import skills
-from mcp_server_oci.skills.troubleshoot import troubleshoot_instance
+from mcp_server_oci.tools.security import register_security_tools
 
 # Register all domain tools
 register_cost_tools(mcp)
@@ -354,18 +417,376 @@ register_security_tools(mcp)
 register_observability_tools(mcp)
 
 # Register skill tools
-mcp.tool(troubleshoot_instance)
+register_skill_tools(mcp)
+
+
+# =============================================================================
+# Tool Aliases (Backward Compatibility)
+# =============================================================================
+# These aliases allow agents using shorter tool names to continue working.
+# The canonical names follow the pattern: oci_{domain}_{action}_{resource}
+# Note: Compute model imports are at the top of the file for type hint resolution.
+
+
+@mcp.tool(
+    name="list_instances",
+    annotations={
+        "title": "List Compute Instances (Alias)",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def list_instances_alias(params: ListInstancesInput, ctx: Context) -> str:
+    """
+    Alias for oci_compute_list_instances.
+
+    List compute instances in a compartment with filtering and pagination.
+    See oci_compute_list_instances for full documentation.
+    """
+    # Get the registered tool and call it
+    tools = await mcp.get_tools()
+    for tool in tools:
+        if tool.name == "oci_compute_list_instances":
+            # Re-use the registered implementation
+            break
+
+    # Direct implementation to avoid circular lookup
+    import asyncio
+    import os
+
+    from mcp_server_oci.core.client import get_client_manager
+    from mcp_server_oci.core.errors import format_error_response, handle_oci_error
+    from mcp_server_oci.core.formatters import ResponseFormat
+
+    try:
+        client_mgr = get_client_manager()
+        compute_client = client_mgr.compute
+
+        compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID")
+        if not compartment_id:
+            return format_error_response(
+                "Compartment OCID required. Provide compartment_id or set COMPARTMENT_OCID env var.",
+                params.response_format.value
+            )
+
+        kwargs = {"compartment_id": compartment_id, "limit": params.limit}
+        if params.lifecycle_state:
+            kwargs["lifecycle_state"] = params.lifecycle_state.value
+
+        response = await asyncio.to_thread(
+            compute_client.list_instances,
+            **kwargs
+        )
+
+        instances = []
+        for inst in response.data:
+            instance_data = {
+                "id": inst.id,
+                "display_name": inst.display_name,
+                "lifecycle_state": inst.lifecycle_state,
+                "shape": inst.shape,
+                "availability_domain": inst.availability_domain,
+                "fault_domain": inst.fault_domain,
+                "time_created": inst.time_created.isoformat() if inst.time_created else None,
+                "compartment_id": inst.compartment_id,
+                "public_ip": None,
+                "private_ip": None,
+            }
+
+            if params.display_name:
+                if params.display_name.lower() not in inst.display_name.lower():
+                    continue
+
+            instances.append(instance_data)
+
+        if params.include_ips and instances:
+            instances = await _fetch_instance_ips(client_mgr, instances)
+
+        output_data = {
+            "total": len(instances),
+            "count": len(instances),
+            "offset": params.offset,
+            "instances": instances,
+            "has_more": len(response.data) == params.limit,
+            "next_offset": params.offset + len(instances) if len(response.data) == params.limit else None
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return ComputeFormatter.to_json(output_data)
+        return ComputeFormatter.instances_markdown(output_data)
+
+    except Exception as e:
+        error = handle_oci_error(e, "listing instances")
+        return format_error_response(error, params.response_format.value)
+
+
+@mcp.tool(
+    name="start_instance",
+    annotations={
+        "title": "Start Compute Instance (Alias)",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def start_instance_alias(params: InstanceActionInput, ctx: Context) -> str:
+    """
+    Alias for oci_compute_start_instance.
+
+    Start a stopped compute instance. Requires ALLOW_MUTATIONS=true.
+    """
+    import asyncio
+    import os
+
+    from mcp_server_oci.core.client import get_client_manager
+    from mcp_server_oci.core.errors import format_error_response, handle_oci_error
+    from mcp_server_oci.core.formatters import ResponseFormat
+
+    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        return format_error_response(
+            "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
+            params.response_format.value
+        )
+
+    try:
+        client_mgr = get_client_manager()
+        compute_client = client_mgr.compute
+
+        current = await asyncio.to_thread(
+            compute_client.get_instance,
+            params.instance_id
+        )
+        previous_state = current.data.lifecycle_state
+
+        await asyncio.to_thread(
+            compute_client.instance_action,
+            params.instance_id,
+            "START"
+        )
+
+        result = {
+            "success": True,
+            "instance_id": params.instance_id,
+            "action": "start",
+            "previous_state": previous_state,
+            "target_state": "RUNNING",
+            "message": "Start action initiated successfully. Instance will be running shortly."
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return ComputeFormatter.to_json(result)
+        return ComputeFormatter.action_result_markdown(result)
+
+    except Exception as e:
+        error = handle_oci_error(e, "starting instance")
+        return format_error_response(error, params.response_format.value)
+
+
+@mcp.tool(
+    name="stop_instance",
+    annotations={
+        "title": "Stop Compute Instance (Alias)",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def stop_instance_alias(params: InstanceActionInput, ctx: Context) -> str:
+    """
+    Alias for oci_compute_stop_instance.
+
+    Stop a running compute instance. Requires ALLOW_MUTATIONS=true.
+    """
+    import asyncio
+    import os
+
+    from mcp_server_oci.core.client import get_client_manager
+    from mcp_server_oci.core.errors import format_error_response, handle_oci_error
+    from mcp_server_oci.core.formatters import ResponseFormat
+
+    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        return format_error_response(
+            "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
+            params.response_format.value
+        )
+
+    try:
+        client_mgr = get_client_manager()
+        compute_client = client_mgr.compute
+
+        current = await asyncio.to_thread(
+            compute_client.get_instance,
+            params.instance_id
+        )
+        previous_state = current.data.lifecycle_state
+
+        action = "RESET" if params.force else "STOP"
+        await asyncio.to_thread(
+            compute_client.instance_action,
+            params.instance_id,
+            action
+        )
+
+        result = {
+            "success": True,
+            "instance_id": params.instance_id,
+            "action": "stop" + (" (forced)" if params.force else ""),
+            "previous_state": previous_state,
+            "target_state": "STOPPED",
+            "message": f"{'Hard' if params.force else 'Soft'} stop initiated. Instance will be stopped shortly."
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return ComputeFormatter.to_json(result)
+        return ComputeFormatter.action_result_markdown(result)
+
+    except Exception as e:
+        error = handle_oci_error(e, "stopping instance")
+        return format_error_response(error, params.response_format.value)
+
+
+@mcp.tool(
+    name="restart_instance",
+    annotations={
+        "title": "Restart Compute Instance (Alias)",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def restart_instance_alias(params: InstanceActionInput, ctx: Context) -> str:
+    """
+    Alias for oci_compute_restart_instance.
+
+    Restart a compute instance. Requires ALLOW_MUTATIONS=true.
+    """
+    import asyncio
+    import os
+
+    from mcp_server_oci.core.client import get_client_manager
+    from mcp_server_oci.core.errors import format_error_response, handle_oci_error
+    from mcp_server_oci.core.formatters import ResponseFormat
+
+    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        return format_error_response(
+            "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
+            params.response_format.value
+        )
+
+    try:
+        client_mgr = get_client_manager()
+        compute_client = client_mgr.compute
+
+        current = await asyncio.to_thread(
+            compute_client.get_instance,
+            params.instance_id
+        )
+        previous_state = current.data.lifecycle_state
+
+        action = "RESET" if params.force else "SOFTRESET"
+        await asyncio.to_thread(
+            compute_client.instance_action,
+            params.instance_id,
+            action
+        )
+
+        result = {
+            "success": True,
+            "instance_id": params.instance_id,
+            "action": "restart" + (" (hard)" if params.force else " (soft)"),
+            "previous_state": previous_state,
+            "target_state": "RUNNING",
+            "message": f"{'Hard' if params.force else 'Soft'} restart initiated. Instance will be running shortly."
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return ComputeFormatter.to_json(result)
+        return ComputeFormatter.action_result_markdown(result)
+
+    except Exception as e:
+        error = handle_oci_error(e, "restarting instance")
+        return format_error_response(error, params.response_format.value)
+
+
+@mcp.tool(
+    name="get_instance_metrics",
+    annotations={
+        "title": "Get Instance Metrics (Alias)",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def get_instance_metrics_alias(params: GetInstanceMetricsInput, ctx: Context) -> str:
+    """
+    Alias for oci_observability_get_instance_metrics.
+
+    Get CPU/Memory metrics for a compute instance.
+    """
+    import os
+
+    from mcp_server_oci.core.client import get_client_manager
+    from mcp_server_oci.core.errors import format_error_response, handle_oci_error
+    from mcp_server_oci.core.formatters import ResponseFormat
+
+    try:
+        client_mgr = get_client_manager()
+
+        compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID")
+        if not compartment_id:
+            return format_error_response(
+                "Compartment OCID required.",
+                params.response_format.value
+            )
+
+        metrics = await _fetch_instance_metrics(
+            client_mgr,
+            params.instance_id,
+            compartment_id
+        )
+
+        result = {
+            "instance_id": params.instance_id,
+            "metrics": metrics,
+            "time_window": params.time_window,
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return ComputeFormatter.to_json(result)
+
+        # Simple markdown output
+        lines = [f"# Instance Metrics: {params.instance_id}\n"]
+        for name, data in metrics.items():
+            lines.append(f"## {name}")
+            if "statistics" in data:
+                stats = data["statistics"]
+                lines.append(f"- Average: {stats.get('average', 'N/A'):.2f}%")
+                lines.append(f"- Max: {stats.get('max', 'N/A'):.2f}%")
+                lines.append(f"- Min: {stats.get('min', 'N/A'):.2f}%")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        error = handle_oci_error(e, "fetching instance metrics")
+        return format_error_response(error, params.response_format.value)
 
 
 # =============================================================================
 # Main Entrypoint
 # =============================================================================
 
-def main():
+def main() -> None:
     """Entry point supporting multiple transports."""
     if config.server.transport == "streamable_http":
         logger.info(f"Starting HTTP server on port {config.server.port}")
-        mcp.run(transport="streamable_http", port=config.server.port)
+        mcp.run(transport="streamable-http", port=config.server.port)
     else:
         logger.info("Starting stdio server")
         mcp.run()
