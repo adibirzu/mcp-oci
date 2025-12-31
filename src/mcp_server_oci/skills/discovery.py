@@ -258,7 +258,7 @@ def auto_register_tool(
     input_schema: dict = None,
 ) -> None:
     """Auto-register a tool in the discovery registry.
-    
+
     Args:
         name: Tool name (e.g., 'oci_compute_list_instances')
         domain: Domain name (e.g., 'compute', 'cost')

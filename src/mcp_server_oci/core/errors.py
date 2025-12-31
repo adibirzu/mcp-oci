@@ -120,11 +120,11 @@ ERROR_MAP: dict[int, tuple[ErrorCategory, str, str]] = {
 def handle_oci_error(e: Exception, context: str | None = None) -> OCIError:
     """
     Convert OCI exceptions to structured errors with actionable suggestions.
-    
+
     Args:
         e: The exception to handle
         context: Optional context about the operation being performed
-        
+
     Returns:
         OCIError with category, message, and suggestion
     """
@@ -132,7 +132,11 @@ def handle_oci_error(e: Exception, context: str | None = None) -> OCIError:
         status = e.status
         category, base_message, suggestion = ERROR_MAP.get(
             status,
-            (ErrorCategory.UNKNOWN, f"Unexpected error (status {status})", "Check the error details and retry.")
+            (
+                ErrorCategory.UNKNOWN,
+                f"Unexpected error (status {status})",
+                "Check the error details and retry."
+            )
         )
 
         message = base_message
@@ -182,17 +186,28 @@ def handle_oci_error(e: Exception, context: str | None = None) -> OCIError:
     )
 
 
-def format_error_response(error: OCIError, response_format: str = "markdown") -> str:
+def format_error_response(
+    error: OCIError | str,
+    response_format: str = "markdown"
+) -> str:
     """
     Format error for tool response based on requested format.
-    
+
     Args:
-        error: The OCIError to format
+        error: The OCIError or error message string to format
         response_format: Output format - "markdown" or "json"
-        
+
     Returns:
         Formatted error string
     """
+    # Convert string to OCIError if needed
+    if isinstance(error, str):
+        error = OCIError(
+            category=ErrorCategory.VALIDATION,
+            message=error,
+            suggestion="Check the input parameters and try again."
+        )
+
     if response_format.lower() == "json":
         return error.to_json()
     return error.to_markdown()
@@ -206,19 +221,20 @@ def create_validation_error(
 ) -> OCIError:
     """
     Create a validation error for invalid input.
-    
+
     Args:
         field: The field name that failed validation
         value: The invalid value
         expected: Description of expected format
         context: Optional context about the operation
-        
+
     Returns:
         OCIError for the validation failure
     """
+    context_str = f" while {context}" if context else ""
     return OCIError(
         category=ErrorCategory.VALIDATION,
-        message=f"Invalid value for '{field}'{f' while {context}' if context else ''}: got '{value}'",
+        message=f"Invalid value for '{field}'{context_str}: got '{value}'",
         suggestion=f"Expected: {expected}",
         details={
             "field": field,
@@ -235,12 +251,12 @@ def create_not_found_error(
 ) -> OCIError:
     """
     Create a not found error for missing resources.
-    
+
     Args:
         resource_type: Type of resource (e.g., "instance", "compartment")
         identifier: The OCID or name that was not found
         context: Optional context about the operation
-        
+
     Returns:
         OCIError for the not found condition
     """
@@ -250,10 +266,14 @@ def create_not_found_error(
     else:
         masked = identifier
 
+    suggestion = (
+        f"Verify the {resource_type} OCID is correct "
+        f"and exists in the specified region."
+    )
     return OCIError(
         category=ErrorCategory.NOT_FOUND,
         message=f"{resource_type} not found: {masked}",
-        suggestion=f"Verify the {resource_type} OCID is correct and exists in the specified region.",
+        suggestion=suggestion,
         details={
             "resource_type": resource_type,
             "identifier": masked

@@ -137,7 +137,8 @@ def register_observability_tools(mcp: FastMCP) -> None:
             if cpu_response.data:
                 for item in cpu_response.data:
                     if item.aggregated_datapoints:
-                        values = [dp.value for dp in item.aggregated_datapoints if dp.value is not None]
+                        datapoints = item.aggregated_datapoints
+                        values = [dp.value for dp in datapoints if dp.value is not None]
                         if values:
                             cpu_data["current"] = round(values[-1], 2)
                             cpu_data["average"] = round(sum(values) / len(values), 2)
@@ -154,7 +155,8 @@ def register_observability_tools(mcp: FastMCP) -> None:
             # Memory metrics
             if params.include_memory:
                 await ctx.report_progress(0.6, "Fetching memory metrics...")
-                memory_query = f"""MemoryUtilization[1m]{{resourceId = "{params.instance_id}"}}.mean()"""
+                inst_id = params.instance_id
+                memory_query = f'MemoryUtilization[1m]{{resourceId = "{inst_id}"}}.mean()'
                 memory_response = await asyncio.to_thread(
                     monitoring.summarize_metrics_data,
                     compartment_id=compartment_id,
@@ -170,7 +172,8 @@ def register_observability_tools(mcp: FastMCP) -> None:
                 if memory_response.data:
                     for item in memory_response.data:
                         if item.aggregated_datapoints:
-                            values = [dp.value for dp in item.aggregated_datapoints if dp.value is not None]
+                            datapoints = item.aggregated_datapoints
+                            values = [dp.value for dp in datapoints if dp.value is not None]
                             if values:
                                 memory_data["current"] = round(values[-1], 2)
                                 memory_data["average"] = round(sum(values) / len(values), 2)
@@ -254,7 +257,11 @@ def register_observability_tools(mcp: FastMCP) -> None:
                 )
                 namespace = namespace_resp.data.namespace_name
 
-            compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID") or oci_client_manager.tenancy_id
+            compartment_id = (
+                params.compartment_id
+                or os.getenv("COMPARTMENT_OCID")
+                or oci_client_manager.tenancy_id
+            )
 
             # Parse time range
             time_delta = _parse_time_range(params.time_range)
@@ -512,18 +519,25 @@ def register_observability_tools(mcp: FastMCP) -> None:
             if params.name_contains:
                 sources = [s for s in sources if params.name_contains.lower() in s.name.lower()]
 
+            def _get_entity_types(s: Any) -> list[str]:
+                if hasattr(s, "entity_types") and s.entity_types:
+                    return [et.name for et in s.entity_types]
+                return []
+
+            sources_data = []
+            for s in sources[:params.limit]:
+                state = getattr(s, "lifecycle_state", "ACTIVE")
+                sources_data.append({
+                    "name": s.name,
+                    "display_name": s.display_name,
+                    "source_type": s.source_type,
+                    "entity_types": _get_entity_types(s),
+                    "lifecycle_state": state,
+                })
+
             data = {
                 "total": len(sources),
-                "sources": [
-                    {
-                        "name": s.name,
-                        "display_name": s.display_name,
-                        "source_type": s.source_type,
-                        "entity_types": [et.name for et in (s.entity_types or [])] if hasattr(s, "entity_types") else [],
-                        "lifecycle_state": s.lifecycle_state if hasattr(s, "lifecycle_state") else "ACTIVE",
-                    }
-                    for s in sources[:params.limit]
-                ],
+                "sources": sources_data,
             }
 
             if params.response_format == ResponseFormat.JSON:
@@ -567,8 +581,10 @@ def register_observability_tools(mcp: FastMCP) -> None:
         try:
             compartment_id = params.compartment_id or oci_client_manager.tenancy_id
 
+            is_root = compartment_id == oci_client_manager.tenancy_id
+            comp_name = "Tenancy Root" if is_root else compartment_id
             data: dict[str, Any] = {
-                "compartment_name": "Tenancy Root" if compartment_id == oci_client_manager.tenancy_id else compartment_id,
+                "compartment_name": comp_name,
                 "recommendations": [],
             }
 
@@ -635,7 +651,9 @@ def register_observability_tools(mcp: FastMCP) -> None:
                     }
 
                 except Exception:
-                    data["log_sources_summary"] = {"error": "Log Analytics not configured or accessible"}
+                    data["log_sources_summary"] = {
+                        "error": "Log Analytics not configured or accessible"
+                    }
 
             await ctx.report_progress(0.9, "Generating overview...")
 

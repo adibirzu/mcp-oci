@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import statistics
 from datetime import datetime, timedelta
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -39,20 +40,20 @@ def register_cost_tools(mcp: FastMCP) -> None:
     )
     async def get_cost_summary(params: CostSummaryInput, ctx: Context) -> str:
         """Get comprehensive cost summary for a time window.
-        
+
         Retrieves total costs, daily/monthly breakdown, and service attribution
         for the specified tenancy and time period.
-        
+
         Args:
             params: CostSummaryInput with tenancy_ocid, time_start, time_end,
                    granularity, and response_format
-        
+
         Returns:
             Cost summary in requested format (markdown or json) including:
             - Total cost for period
             - Daily/monthly breakdown
             - Cost by service (top 10)
-        
+
         Example:
             {"tenancy_ocid": "ocid1.tenancy...", "time_start": "2024-01-01T00:00:00Z",
              "time_end": "2024-01-31T23:59:59Z", "granularity": "DAILY"}
@@ -68,10 +69,12 @@ def register_cost_tools(mcp: FastMCP) -> None:
                 # Build request
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
 
+                start = datetime.fromisoformat(params.time_start.replace('Z', '+00:00'))
+                end = datetime.fromisoformat(params.time_end.replace('Z', '+00:00'))
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
-                    time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
-                    time_usage_ended=datetime.fromisoformat(params.time_end.replace('Z', '+00:00')),
+                    time_usage_started=start,
+                    time_usage_ended=end,
                     granularity=params.granularity.value,
                     query_type="COST",
                     group_by=["service"],
@@ -125,13 +128,13 @@ def register_cost_tools(mcp: FastMCP) -> None:
     )
     async def cost_by_service(params: CostByServiceInput, ctx: Context) -> str:
         """Get top services by cost with compartment breakdown.
-        
+
         Identifies highest-spending services and shows which compartments
         contribute most to each service's cost.
-        
+
         Args:
             params: CostByServiceInput with top_n and filtering options
-        
+
         Returns:
             Service drilldown including:
             - Top N services by cost
@@ -148,10 +151,12 @@ def register_cost_tools(mcp: FastMCP) -> None:
 
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
 
+                start = datetime.fromisoformat(params.time_start.replace('Z', '+00:00'))
+                end = datetime.fromisoformat(params.time_end.replace('Z', '+00:00'))
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
-                    time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
-                    time_usage_ended=datetime.fromisoformat(params.time_end.replace('Z', '+00:00')),
+                    time_usage_started=start,
+                    time_usage_ended=end,
                     granularity="MONTHLY",
                     query_type="COST",
                     group_by=["service"],
@@ -201,13 +206,13 @@ def register_cost_tools(mcp: FastMCP) -> None:
     )
     async def cost_by_compartment(params: CostByCompartmentInput, ctx: Context) -> str:
         """Get daily cost breakdown by compartment and service.
-        
+
         Provides hierarchical cost breakdown showing spending across
         compartments with optional child compartment inclusion.
-        
+
         Args:
             params: CostByCompartmentInput with compartment filtering options
-        
+
         Returns:
             Cost breakdown by compartment including:
             - Compartment hierarchy costs
@@ -232,10 +237,12 @@ def register_cost_tools(mcp: FastMCP) -> None:
 
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
 
+                start = datetime.fromisoformat(params.time_start.replace('Z', '+00:00'))
+                end = datetime.fromisoformat(params.time_end.replace('Z', '+00:00'))
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
-                    time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
-                    time_usage_ended=datetime.fromisoformat(params.time_end.replace('Z', '+00:00')),
+                    time_usage_started=start,
+                    time_usage_ended=end,
                     granularity=params.granularity.value,
                     query_type="COST",
                     group_by=["compartmentId", "service"],
@@ -286,13 +293,13 @@ def register_cost_tools(mcp: FastMCP) -> None:
     )
     async def monthly_trend(params: MonthlyTrendInput, ctx: Context) -> str:
         """Analyze month-over-month cost trends with forecasting.
-        
+
         Provides historical cost trends and projects future spending
         based on historical patterns.
-        
+
         Args:
             params: MonthlyTrendInput with months_back and optional budget_ocid
-        
+
         Returns:
             Trend analysis including:
             - Monthly costs for specified period
@@ -365,13 +372,13 @@ def register_cost_tools(mcp: FastMCP) -> None:
     )
     async def detect_anomalies(params: CostAnomalyInput, ctx: Context) -> str:
         """Find and explain cost spikes and anomalies.
-        
+
         Uses statistical analysis to identify unusual spending patterns
         and provides root cause explanations.
-        
+
         Args:
             params: CostAnomalyInput with threshold and filtering options
-        
+
         Returns:
             Anomaly detection results including:
             - Days with anomalous spending
@@ -388,10 +395,12 @@ def register_cost_tools(mcp: FastMCP) -> None:
 
                 from oci.usage_api.models import RequestSummarizedUsagesDetails
 
+                start = datetime.fromisoformat(params.time_start.replace('Z', '+00:00'))
+                end = datetime.fromisoformat(params.time_end.replace('Z', '+00:00'))
                 request_details = RequestSummarizedUsagesDetails(
                     tenant_id=params.tenancy_ocid,
-                    time_usage_started=datetime.fromisoformat(params.time_start.replace('Z', '+00:00')),
-                    time_usage_ended=datetime.fromisoformat(params.time_end.replace('Z', '+00:00')),
+                    time_usage_started=start,
+                    time_usage_ended=end,
                     granularity="DAILY",
                     query_type="COST",
                     group_by=["service"],
@@ -533,7 +542,7 @@ def _process_service_costs(items: list, top_n: int, time_start: str, time_end: s
     }
 
 
-async def _get_compartment_map(identity_client, tenancy_id: str) -> dict[str, str]:
+async def _get_compartment_map(identity_client: Any, tenancy_id: str) -> dict[str, str]:
     """Build OCID to name mapping for compartments."""
     compartments = {}
 
@@ -596,7 +605,7 @@ def _process_compartment_costs(
     )[:top_n]
 
     compartments_list = []
-    for comp_id, data in sorted_comps:
+    for _comp_id, data in sorted_comps:
         services = sorted(
             data["services"].items(),
             key=lambda x: x[1],

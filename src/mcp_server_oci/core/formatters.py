@@ -236,12 +236,12 @@ def format_response(
 ) -> str:
     """
     Format response based on requested format.
-    
+
     Args:
         data: The data to format
         response_format: Output format (markdown or json)
         markdown_template: Optional function to generate custom markdown
-        
+
     Returns:
         Formatted string response
     """
@@ -292,12 +292,12 @@ def format_success_response(
 ) -> str:
     """
     Format a success response.
-    
+
     Args:
         message: Success message
         data: Optional additional data
         response_format: Output format
-        
+
     Returns:
         Formatted success response
     """

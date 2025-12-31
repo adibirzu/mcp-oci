@@ -128,15 +128,16 @@ class TestToolRegistry:
         assert len(registry._domains["domain1"]) == 2
     
     def test_get_domains(self, populated_registry):
-        """Test getting all domains with tool counts."""
+        """Test getting all domains with tool and skill counts."""
         domains = populated_registry.get_domains()
-        
+
         assert "cost" in domains
         assert "compute" in domains
         assert "database" in domains
-        assert domains["cost"] == 2  # 2 cost tools
-        assert domains["compute"] == 1
-        assert domains["database"] == 1
+        # New API returns {"tools": N, "skills": M} per domain
+        assert domains["cost"]["tools"] == 2  # 2 cost tools
+        assert domains["compute"]["tools"] == 1
+        assert domains["database"]["tools"] == 1
     
     def test_get_domain_tools(self, populated_registry):
         """Test getting tools in a specific domain."""

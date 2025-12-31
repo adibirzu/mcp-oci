@@ -41,16 +41,16 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def list_autonomous_databases(params: ListAutonomousDatabasesInput, ctx: Context) -> str:
         """List Autonomous Databases in a compartment.
-        
+
         Retrieves all Autonomous Databases (ATP, ADW, AJD, APEX) in the specified
         compartment with optional filtering by workload type and lifecycle state.
-        
+
         Args:
             params: ListAutonomousDatabasesInput with compartment_id and filters
-        
+
         Returns:
             List of Autonomous Databases in requested format (markdown or json)
-        
+
         Example:
             {"compartment_id": "ocid1.compartment...", "workload_type": "OLTP", "limit": 20}
         """
@@ -91,14 +91,16 @@ def register_database_tools(mcp: FastMCP) -> None:
 
                     # Convert to dicts
                     items_data = [_adb_to_dict(db) for db in items]
+                    has_more = params.offset + len(items_data) < len(all_items)
+                    next_off = params.offset + len(items_data) if has_more else None
 
                     result = {
                         "total": len(all_items),
                         "count": len(items_data),
                         "offset": params.offset,
                         "items": items_data,
-                        "has_more": params.offset + len(items_data) < len(all_items),
-                        "next_offset": params.offset + len(items_data) if params.offset + len(items_data) < len(all_items) else None
+                        "has_more": has_more,
+                        "next_offset": next_off
                     }
 
                     await ctx.report_progress(0.9, "Formatting output...")
@@ -124,16 +126,16 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def get_autonomous_database(params: GetAutonomousDatabaseInput, ctx: Context) -> str:
         """Get detailed information about a specific Autonomous Database.
-        
+
         Retrieves complete details including configuration, connection strings,
         and current state for an Autonomous Database.
-        
+
         Args:
             params: GetAutonomousDatabaseInput with database_id
-        
+
         Returns:
             Detailed Autonomous Database information
-        
+
         Example:
             {"database_id": "ocid1.autonomousdatabase.oc1..."}
         """
@@ -174,22 +176,25 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def start_autonomous_database(params: StartAutonomousDatabaseInput, ctx: Context) -> str:
         """Start a stopped Autonomous Database.
-        
+
         Initiates the start operation for a stopped Autonomous Database.
         Can optionally wait for the database to reach AVAILABLE state.
-        
+
         Args:
             params: StartAutonomousDatabaseInput with database_id
-        
+
         Returns:
             Result of the start operation
-        
+
         Example:
             {"database_id": "ocid1.autonomousdatabase.oc1...", "wait_for_state": true}
         """
         # Check if mutations are allowed
         if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
-            return "❌ **Error:** Database mutations are disabled. Set ALLOW_MUTATIONS=true to enable."
+            return (
+                "❌ **Error:** Database mutations are disabled. "
+                "Set ALLOW_MUTATIONS=true to enable."
+            )
 
         async with observe_tool("oci_database_start_autonomous", "database", params.model_dump()):
             await ctx.report_progress(0.1, "Starting Autonomous Database...")
@@ -256,21 +261,24 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def stop_autonomous_database(params: StopAutonomousDatabaseInput, ctx: Context) -> str:
         """Stop a running Autonomous Database.
-        
+
         Initiates the stop operation for a running Autonomous Database.
         Stopped databases do not incur compute charges but retain storage.
-        
+
         Args:
             params: StopAutonomousDatabaseInput with database_id
-        
+
         Returns:
             Result of the stop operation
-        
+
         Example:
             {"database_id": "ocid1.autonomousdatabase.oc1...", "wait_for_state": false}
         """
         if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
-            return "❌ **Error:** Database mutations are disabled. Set ALLOW_MUTATIONS=true to enable."
+            return (
+                "❌ **Error:** Database mutations are disabled. "
+                "Set ALLOW_MUTATIONS=true to enable."
+            )
 
         async with observe_tool("oci_database_stop_autonomous", "database", params.model_dump()):
             await ctx.report_progress(0.1, "Stopping Autonomous Database...")
@@ -331,16 +339,16 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def list_db_systems(params: ListDBSystemsInput, ctx: Context) -> str:
         """List DB Systems (BaseDB, Exadata) in a compartment.
-        
+
         Retrieves all DB Systems in the specified compartment with optional
         filtering by lifecycle state and display name.
-        
+
         Args:
             params: ListDBSystemsInput with compartment_id and filters
-        
+
         Returns:
             List of DB Systems in requested format
-        
+
         Example:
             {"compartment_id": "ocid1.compartment...", "lifecycle_state": "AVAILABLE"}
         """
@@ -376,13 +384,15 @@ def register_database_tools(mcp: FastMCP) -> None:
 
                     items_data = [_dbsystem_to_dict(db) for db in items]
 
+                    has_more = params.offset + len(items_data) < len(all_items)
+                    next_offset = params.offset + len(items_data) if has_more else None
                     result = {
                         "total": len(all_items),
                         "count": len(items_data),
                         "offset": params.offset,
                         "items": items_data,
-                        "has_more": params.offset + len(items_data) < len(all_items),
-                        "next_offset": params.offset + len(items_data) if params.offset + len(items_data) < len(all_items) else None
+                        "has_more": has_more,
+                        "next_offset": next_offset,
                     }
 
                     await ctx.report_progress(0.9, "Formatting output...")
@@ -408,16 +418,16 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def get_database_metrics(params: GetDatabaseMetricsInput, ctx: Context) -> str:
         """Get performance metrics for a database.
-        
+
         Retrieves CPU, storage, and other performance metrics for an
         Autonomous Database or DB System over a specified time period.
-        
+
         Args:
             params: GetDatabaseMetricsInput with database_id and time range
-        
+
         Returns:
             Database performance metrics
-        
+
         Example:
             {"database_id": "ocid1.autonomousdatabase.oc1...", "hours_back": 24}
         """
@@ -433,7 +443,6 @@ def register_database_tools(mcp: FastMCP) -> None:
                     await ctx.report_progress(0.2, "Getting database information...")
 
                     db_info = {}
-                    resource_group = ""
                     namespace = "oci_autonomous_database"
 
                     if "autonomousdatabase" in params.database_id:
@@ -442,7 +451,6 @@ def register_database_tools(mcp: FastMCP) -> None:
                             autonomous_database_id=params.database_id
                         )
                         db_info = _adb_to_dict(response.data)
-                        resource_group = params.database_id
                     else:
                         namespace = "oci_database"
                         # DB System metrics
@@ -451,7 +459,6 @@ def register_database_tools(mcp: FastMCP) -> None:
                             db_system_id=params.database_id
                         )
                         db_info = _dbsystem_to_dict(response.data)
-                        resource_group = params.database_id
 
                     await ctx.report_progress(0.4, "Querying metrics...")
 
@@ -485,7 +492,12 @@ def register_database_tools(mcp: FastMCP) -> None:
                             )
 
                             if response.data:
-                                values = [dp.value for item in response.data for dp in (item.aggregated_datapoints or []) if dp.value is not None]
+                                values = [
+                                    dp.value
+                                    for item in response.data
+                                    for dp in (item.aggregated_datapoints or [])
+                                    if dp.value is not None
+                                ]
                                 if values:
                                     metrics_data[metric_name] = {
                                         "current": values[-1] if values else None,
@@ -526,16 +538,16 @@ def register_database_tools(mcp: FastMCP) -> None:
     )
     async def list_database_backups(params: ListBackupsInput, ctx: Context) -> str:
         """List backups for a database or compartment.
-        
+
         Retrieves backup history for an Autonomous Database or DB System,
         or all backups in a compartment.
-        
+
         Args:
             params: ListBackupsInput with database_id or compartment_id
-        
+
         Returns:
             List of database backups
-        
+
         Example:
             {"database_id": "ocid1.autonomousdatabase.oc1...", "limit": 20}
         """
@@ -548,7 +560,11 @@ def register_database_tools(mcp: FastMCP) -> None:
 
                     items = []
 
-                    if params.database_type.value == "autonomous" or (params.database_id and "autonomousdatabase" in params.database_id):
+                    is_autonomous = (
+                        params.database_type.value == "autonomous"
+                        or (params.database_id and "autonomousdatabase" in params.database_id)
+                    )
+                    if is_autonomous:
                         await ctx.report_progress(0.3, "Listing ADB backups...")
 
                         if params.database_id:
@@ -659,7 +675,10 @@ def _adb_backup_to_dict(backup: Any) -> dict:
         "lifecycle_state": backup.lifecycle_state,
         "database_size_in_gbs": getattr(backup, "database_size_in_tbs", 0) * 1024,
         "time_started": str(backup.time_started) if backup.time_started else "",
-        "time_ended": str(backup.time_ended) if hasattr(backup, "time_ended") and backup.time_ended else "",
+        "time_ended": (
+            str(backup.time_ended)
+            if hasattr(backup, "time_ended") and backup.time_ended else ""
+        ),
     }
 
 
@@ -673,5 +692,8 @@ def _dbsystem_backup_to_dict(backup: Any) -> dict:
         "lifecycle_state": backup.lifecycle_state,
         "database_size_in_gbs": getattr(backup, "database_size_in_gbs", 0),
         "time_started": str(backup.time_started) if backup.time_started else "",
-        "time_ended": str(backup.time_ended) if hasattr(backup, "time_ended") and backup.time_ended else "",
+        "time_ended": (
+            str(backup.time_ended)
+            if hasattr(backup, "time_ended") and backup.time_ended else ""
+        ),
     }

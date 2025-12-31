@@ -1,7 +1,8 @@
 # OCI MCP Server Architecture
 
-**Version:** 2.2.0
+**Version:** 2.3.0
 **Last Updated:** 2025-12-31
+**Total Tools:** 44 (including aliases)
 
 ---
 
@@ -502,7 +503,26 @@ result = await context.analyze(data, prompt)
 
 ---
 
-## 15. Planned Enhancements
+## 15. Recent Changes (v2.3.0)
+
+### Code Quality Improvements
+- Fixed `ResponseFormat` enum duplication (now canonical in `core/formatters.py`)
+- Fixed `report_progress()` signature to match FastMCP API
+- Fixed `get_client_manager()` async/sync handling
+- Added `__all__` exports to `core/models.py`
+- Configured mypy to ignore OCI SDK stub errors
+- Reduced ruff errors from 1484 to ~333 (mostly line-length)
+- Reduced mypy errors from 402 to ~290
+
+### Framework Enhancements
+- Skills framework with `SkillExecutor`, `AgentContext`, `SamplingClient`
+- TTL-based tiered caching (`cache.py`)
+- Inter-agent shared memory (`shared_memory.py`)
+- Improved error handling with string/OCIError flexibility
+
+---
+
+## 16. Planned Enhancements
 
 ### Phase 1: Critical Services (Q1)
 - [ ] Object Storage tools
@@ -515,17 +535,18 @@ result = await context.analyze(data, prompt)
 - [ ] Functions tools
 - [ ] API Gateway tools
 
-### Phase 3: Advanced Features (Q3) - Partially Complete
+### Phase 3: Advanced Features (Q3) - Mostly Complete
 - [ ] Streaming/Events tools
 - [ ] Resource Manager (IaC) tools
 - [x] Enhanced skills and workflows (SkillExecutor framework)
 - [x] Caching layer (TTL-based tiered caching)
 - [x] Inter-agent communication (shared memory)
+- [x] Error handling improvements
 - [ ] OpenTelemetry integration (partial - logging complete)
 
 ---
 
-## 16. Testing
+## 17. Testing
 
 ```bash
 # Install dependencies
@@ -549,7 +570,7 @@ uv run ruff check src/
 
 ---
 
-## 17. Related Documentation
+## 18. Related Documentation
 
 - [SKILL.md](./SKILL.md) - Skill definition for AI agents
 - [REVIEW.md](./REVIEW.md) - Comprehensive review and improvement plan

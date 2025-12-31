@@ -23,9 +23,13 @@ class CostFormatter:
         lines = ["# Cost Summary\n"]
 
         # Summary section
-        lines.append(f"**Total Cost:** {Formatter.format_currency(data.get('total_cost', 0))}")
-        lines.append(f"**Period:** {data.get('period_start', 'N/A')} to {data.get('period_end', 'N/A')}")
-        lines.append(f"**Daily Average:** {Formatter.format_currency(data.get('daily_average', 0))}")
+        total = Formatter.format_currency(data.get('total_cost', 0))
+        daily = Formatter.format_currency(data.get('daily_average', 0))
+        start = data.get('period_start', 'N/A')
+        end = data.get('period_end', 'N/A')
+        lines.append(f"**Total Cost:** {total}")
+        lines.append(f"**Period:** {start} to {end}")
+        lines.append(f"**Daily Average:** {daily}")
 
         if data.get('month_over_month_change') is not None:
             change = data['month_over_month_change']
@@ -60,8 +64,9 @@ class CostFormatter:
         # Forecast
         if data.get('forecast'):
             forecast = data['forecast']
+            estimate = Formatter.format_currency(forecast.get('estimate', 0))
             lines.append("## Forecast\n")
-            lines.append(f"**Next Period Estimate:** {Formatter.format_currency(forecast.get('estimate', 0))}")
+            lines.append(f"**Next Period Estimate:** {estimate}")
             if forecast.get('confidence'):
                 lines.append(f"**Confidence:** {forecast['confidence']}%")
 
@@ -72,8 +77,11 @@ class CostFormatter:
         """Format compartment cost breakdown as markdown."""
         lines = ["# Cost by Compartment\n"]
 
-        lines.append(f"**Total:** {Formatter.format_currency(data.get('total_cost', 0))}")
-        lines.append(f"**Period:** {data.get('period_start', 'N/A')} to {data.get('period_end', 'N/A')}")
+        total = Formatter.format_currency(data.get('total_cost', 0))
+        start = data.get('period_start', 'N/A')
+        end = data.get('period_end', 'N/A')
+        lines.append(f"**Total:** {total}")
+        lines.append(f"**Period:** {start} to {end}")
         lines.append("")
 
         for comp in data.get('compartments', []):
@@ -95,8 +103,11 @@ class CostFormatter:
         """Format service drilldown as markdown."""
         lines = ["# Service Cost Drilldown\n"]
 
-        lines.append(f"**Total Analyzed:** {Formatter.format_currency(data.get('total', 0))}")
-        lines.append(f"**Period:** {data.get('period_start', 'N/A')} to {data.get('period_end', 'N/A')}")
+        total = Formatter.format_currency(data.get('total', 0))
+        start = data.get('period_start', 'N/A')
+        end = data.get('period_end', 'N/A')
+        lines.append(f"**Total Analyzed:** {total}")
+        lines.append(f"**Period:** {start} to {end}")
         lines.append("")
 
         for i, svc in enumerate(data.get('services', []), 1):
@@ -122,9 +133,11 @@ class CostFormatter:
         # Summary
         if data.get('summary'):
             summary = data['summary']
+            total_spend = Formatter.format_currency(summary.get('total_spend', 0))
+            avg_monthly = Formatter.format_currency(summary.get('average_monthly', 0))
             lines.append(f"**Period:** Last {summary.get('months_analyzed', 0)} months")
-            lines.append(f"**Total Spend:** {Formatter.format_currency(summary.get('total_spend', 0))}")
-            lines.append(f"**Average Monthly:** {Formatter.format_currency(summary.get('average_monthly', 0))}")
+            lines.append(f"**Total Spend:** {total_spend}")
+            lines.append(f"**Average Monthly:** {avg_monthly}")
             lines.append("")
 
         # Monthly breakdown table
@@ -135,10 +148,7 @@ class CostFormatter:
         for item in data.get('monthly_costs', []):
             cost = Formatter.format_currency(item.get('cost', 0))
             change = item.get('change_percent')
-            if change is not None:
-                change_str = f"{change:+.1f}%"
-            else:
-                change_str = "—"
+            change_str = f"{change:+.1f}%" if change is not None else "—"
             lines.append(f"| {item.get('month', 'Unknown')} | {cost} | {change_str} |")
 
         lines.append("")
@@ -146,9 +156,10 @@ class CostFormatter:
         # Forecast
         if data.get('forecast'):
             forecast = data['forecast']
-            lines.append("## Forecast\n")
-            lines.append(f"**Next Month Estimate:** {Formatter.format_currency(forecast.get('estimate', 0))}")
+            estimate = Formatter.format_currency(forecast.get('estimate', 0))
             trend = forecast.get('trend', 'stable')
+            lines.append("## Forecast\n")
+            lines.append(f"**Next Month Estimate:** {estimate}")
             lines.append(f"**Trend:** {trend.capitalize()}")
 
         # Budget status
@@ -179,7 +190,8 @@ class CostFormatter:
 
         # Detection parameters
         params = data.get('detection_params', {})
-        lines.append(f"**Detection Threshold:** {params.get('threshold_std_dev', 2.0)} standard deviations")
+        threshold = params.get('threshold_std_dev', 2.0)
+        lines.append(f"**Detection Threshold:** {threshold} standard deviations")
         lines.append(f"**Period:** {params.get('period', 'N/A')}")
         lines.append("")
 

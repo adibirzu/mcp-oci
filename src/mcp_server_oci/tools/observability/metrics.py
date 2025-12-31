@@ -54,10 +54,7 @@ def get_instance_metrics(
 
     # Calculate time range
     end_time = datetime.now(UTC)
-    if window == "24h":
-        start_time = end_time - timedelta(days=1)
-    else:
-        start_time = end_time - timedelta(hours=1)
+    start_time = end_time - timedelta(days=1) if window == "24h" else end_time - timedelta(hours=1)
 
     query = f'CpuUtilization[1m]{{resourceId="{instance_id}"}}.mean()'
 

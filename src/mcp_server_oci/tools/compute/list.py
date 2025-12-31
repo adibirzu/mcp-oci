@@ -13,8 +13,10 @@ def _format_markdown(instances: list[dict[str, Any]]) -> str:
     md += "|---|---|---|---|---|\n"
     for inst in instances:
         ips = []
-        if inst.get('public_ip'): ips.append(inst['public_ip'])
-        if inst.get('private_ip'): ips.append(inst['private_ip'])
+        if inst.get('public_ip'):
+            ips.append(inst['public_ip'])
+        if inst.get('private_ip'):
+            ips.append(inst['private_ip'])
         ip_str = ", ".join(ips)
 
         md += f"| {inst['display_name']} | {inst['lifecycle_state']} | {inst['shape']} | {ip_str} | `{inst['id'][-6:]}...` |\n"
@@ -28,7 +30,7 @@ def list_instances(
 ) -> str | list[dict]:
     """
     List compute instances in a compartment.
-    
+
     Args:
         compartment_id: OCID of the compartment (defaults to env var)
         lifecycle_state: Filter by state (RUNNING, STOPPED, etc.)

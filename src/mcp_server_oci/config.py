@@ -112,7 +112,7 @@ class AppConfig:
     @classmethod
     def from_env(cls) -> AppConfig:
         """Load configuration from environment variables.
-        
+
         Environment variables referenced:
         - [Link to Secure Variable: OCI_MCP_NAME]
         - [Link to Secure Variable: OCI_MCP_TRANSPORT]
@@ -177,9 +177,9 @@ class AppConfig:
         missing = []
 
         # OCI config file must exist if using config_file auth
-        if self.oci.auth_method == AuthMethod.CONFIG_FILE:
-            if not self.oci.config_file.exists():
-                missing.append(f"OCI config file not found: {self.oci.config_file}")
+        is_config_auth = self.oci.auth_method == AuthMethod.CONFIG_FILE
+        if is_config_auth and not self.oci.config_file.exists():
+            missing.append(f"OCI config file not found: {self.oci.config_file}")
 
         return missing
 

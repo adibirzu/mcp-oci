@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from mcp_server_oci.core import (
     BaseSkillInput,
+    SkillMetadata,
     SkillProgress,
     SkillResult,
     SkillStep,
@@ -621,14 +622,13 @@ class SkillExecutor:
     async def _report_progress(self) -> None:
         """Report progress to MCP context if available."""
         if self.ctx is not None:
-            try:
+            # FastMCP report_progress takes (progress, total)
+            # Use contextlib.suppress for cleaner exception handling
+            from contextlib import suppress
+            with suppress(Exception):
                 await self.ctx.report_progress(
-                    self.progress.percent_complete / 100,
-                    f"{self.skill_name}: {self.progress.current_step or 'Starting...'}"
+                    self.progress.percent_complete / 100
                 )
-            except Exception:
-                # Progress reporting is best-effort
-                pass
 
 
 # Skill registry for discovery
