@@ -4,7 +4,7 @@ OCI Network domain tool implementations.
 from __future__ import annotations
 
 import os
-from typing import Any, List, Optional
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -12,15 +12,14 @@ from mcp_server_oci.core.client import get_oci_client
 from mcp_server_oci.core.errors import format_error_response, handle_oci_error
 from mcp_server_oci.core.formatters import ResponseFormat
 
-from .models import (
-    ListVcnsInput,
-    GetVcnInput,
-    ListSubnetsInput,
-    GetSubnetInput,
-    ListSecurityListsInput,
-    AnalyzeSecurityRulesInput,
-)
 from .formatters import NetworkFormatter
+from .models import (
+    AnalyzeSecurityRulesInput,
+    GetVcnInput,
+    ListSecurityListsInput,
+    ListSubnetsInput,
+    ListVcnsInput,
+)
 
 
 def _serialize_vcn(vcn: Any) -> dict:
@@ -66,14 +65,14 @@ def _serialize_security_list(sl: Any) -> dict:
             "protocol": rule.protocol,
             "is_stateless": rule.is_stateless if hasattr(rule, 'is_stateless') else False,
         }
-        
+
         if direction == "INGRESS":
             result["source"] = rule.source
             result["source_type"] = rule.source_type if hasattr(rule, 'source_type') else "CIDR_BLOCK"
         else:
             result["destination"] = rule.destination
             result["destination_type"] = rule.destination_type if hasattr(rule, 'destination_type') else "CIDR_BLOCK"
-        
+
         # TCP options
         if hasattr(rule, 'tcp_options') and rule.tcp_options:
             tcp = rule.tcp_options
@@ -88,7 +87,7 @@ def _serialize_security_list(sl: Any) -> dict:
                     "min": tcp.source_port_range.min,
                     "max": tcp.source_port_range.max
                 }
-        
+
         # UDP options
         if hasattr(rule, 'udp_options') and rule.udp_options:
             udp = rule.udp_options
@@ -98,7 +97,7 @@ def _serialize_security_list(sl: Any) -> dict:
                     "min": udp.destination_port_range.min,
                     "max": udp.destination_port_range.max
                 }
-        
+
         # ICMP options
         if hasattr(rule, 'icmp_options') and rule.icmp_options:
             icmp = rule.icmp_options
@@ -106,12 +105,12 @@ def _serialize_security_list(sl: Any) -> dict:
                 "type": icmp.type if hasattr(icmp, 'type') else None,
                 "code": icmp.code if hasattr(icmp, 'code') else None
             }
-        
+
         return result
-    
+
     ingress_rules = [serialize_rule(r, "INGRESS") for r in (sl.ingress_security_rules or [])]
     egress_rules = [serialize_rule(r, "EGRESS") for r in (sl.egress_security_rules or [])]
-    
+
     return {
         "id": sl.id,
         "display_name": sl.display_name,
@@ -124,33 +123,33 @@ def _serialize_security_list(sl: Any) -> dict:
     }
 
 
-def _analyze_risky_rules(security_lists: List[dict]) -> dict:
+def _analyze_risky_rules(security_lists: list[dict]) -> dict:
     """Analyze security rules for potential risks."""
     risky_rules = []
     total_rules = 0
-    
+
     risky_sources = ["0.0.0.0/0", "::/0"]
     risky_ports = [22, 3389, 1521, 3306, 5432, 27017]  # SSH, RDP, Oracle DB, MySQL, PostgreSQL, MongoDB
-    
+
     for sl in security_lists:
         for rule in sl.get("ingress_security_rules", []):
             total_rules += 1
             source = rule.get("source", "")
             protocol = rule.get("protocol", "")
-            
+
             # Check for open to world
             if source in risky_sources:
                 risk_level = "HIGH"
                 reason = f"Rule allows traffic from anywhere ({source})"
                 recommendation = "Restrict source to specific IP ranges or CIDR blocks"
-                
+
                 # Check if it's a sensitive port
                 tcp_options = rule.get("tcp_options", {})
                 if tcp_options:
                     port_range = tcp_options.get("destination_port_range", {})
                     min_port = port_range.get("min")
                     max_port = port_range.get("max")
-                    
+
                     if min_port and max_port:
                         for risky_port in risky_ports:
                             if min_port <= risky_port <= max_port:
@@ -158,7 +157,7 @@ def _analyze_risky_rules(security_lists: List[dict]) -> dict:
                                 reason = f"Rule exposes sensitive port {risky_port} to the internet"
                                 recommendation = f"Restrict access to port {risky_port} to specific IP addresses"
                                 break
-                
+
                 risky_rules.append({
                     "security_list_id": sl.get("id"),
                     "security_list_name": sl.get("display_name"),
@@ -172,10 +171,10 @@ def _analyze_risky_rules(security_lists: List[dict]) -> dict:
                     "reason": reason,
                     "recommendation": recommendation,
                 })
-        
+
         for rule in sl.get("egress_security_rules", []):
             total_rules += 1
-    
+
     return {
         "total_rules": total_rules,
         "risky_rules": risky_rules,
@@ -189,7 +188,7 @@ def _analyze_risky_rules(security_lists: List[dict]) -> dict:
 
 def register_network_tools(mcp: FastMCP) -> None:
     """Register all network domain tools with the MCP server."""
-    
+
     @mcp.tool(
         name="oci_network_list_vcns",
         annotations={
@@ -208,13 +207,13 @@ def register_network_tools(mcp: FastMCP) -> None:
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
         if not compartment_id:
             return "Error: No compartment_id provided and COMPARTMENT_OCID not set."
-        
+
         try:
             client = get_oci_client("virtual_network")
-            
+
             # List VCNs
             response = client.list_vcns(compartment_id=compartment_id, limit=params.limit)
-            
+
             vcns = []
             for vcn in response.data:
                 # Apply filters
@@ -222,15 +221,15 @@ def register_network_tools(mcp: FastMCP) -> None:
                     continue
                 if params.display_name and params.display_name.lower() not in vcn.display_name.lower():
                     continue
-                
+
                 vcn_data = _serialize_vcn(vcn)
-                
+
                 # Count subnets
                 subnet_response = client.list_subnets(compartment_id=compartment_id, vcn_id=vcn.id)
                 vcn_data["subnet_count"] = len(subnet_response.data)
-                
+
                 vcns.append(vcn_data)
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return NetworkFormatter.to_json({
                     "vcns": vcns,
@@ -238,11 +237,11 @@ def register_network_tools(mcp: FastMCP) -> None:
                     "compartment_id": compartment_id
                 })
             return NetworkFormatter.vcn_list_markdown(vcns)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "listing VCNs")
             return format_error_response(error, params.response_format.value)
-    
+
     @mcp.tool(
         name="oci_network_get_vcn",
         annotations={
@@ -260,14 +259,14 @@ def register_network_tools(mcp: FastMCP) -> None:
         """
         try:
             client = get_oci_client("virtual_network")
-            
+
             # Get VCN
             response = client.get_vcn(vcn_id=params.vcn_id)
             vcn_data = _serialize_vcn(response.data)
-            
+
             subnets = None
             security_lists = None
-            
+
             # Get subnets if requested
             if params.include_subnets:
                 subnet_response = client.list_subnets(
@@ -275,7 +274,7 @@ def register_network_tools(mcp: FastMCP) -> None:
                     vcn_id=params.vcn_id
                 )
                 subnets = [_serialize_subnet(s) for s in subnet_response.data]
-            
+
             # Get security lists if requested
             if params.include_security_lists:
                 sl_response = client.list_security_lists(
@@ -283,7 +282,7 @@ def register_network_tools(mcp: FastMCP) -> None:
                     vcn_id=params.vcn_id
                 )
                 security_lists = [_serialize_security_list(sl) for sl in sl_response.data]
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return NetworkFormatter.to_json({
                     "vcn": vcn_data,
@@ -291,11 +290,11 @@ def register_network_tools(mcp: FastMCP) -> None:
                     "security_lists": security_lists
                 })
             return NetworkFormatter.vcn_detail_markdown(vcn_data, subnets, security_lists)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "getting VCN details")
             return format_error_response(error, params.response_format.value)
-    
+
     @mcp.tool(
         name="oci_network_list_subnets",
         annotations={
@@ -314,25 +313,25 @@ def register_network_tools(mcp: FastMCP) -> None:
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
         if not compartment_id:
             return "Error: No compartment_id provided and COMPARTMENT_OCID not set."
-        
+
         try:
             client = get_oci_client("virtual_network")
-            
+
             kwargs = {"compartment_id": compartment_id, "limit": params.limit}
             if params.vcn_id:
                 kwargs["vcn_id"] = params.vcn_id
-            
+
             response = client.list_subnets(**kwargs)
-            
+
             subnets = []
             for subnet in response.data:
                 if params.lifecycle_state and subnet.lifecycle_state != params.lifecycle_state.value:
                     continue
                 if params.display_name and params.display_name.lower() not in subnet.display_name.lower():
                     continue
-                
+
                 subnets.append(_serialize_subnet(subnet))
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return NetworkFormatter.to_json({
                     "subnets": subnets,
@@ -340,11 +339,11 @@ def register_network_tools(mcp: FastMCP) -> None:
                     "compartment_id": compartment_id
                 })
             return NetworkFormatter.subnet_list_markdown(subnets)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "listing subnets")
             return format_error_response(error, params.response_format.value)
-    
+
     @mcp.tool(
         name="oci_network_list_security_lists",
         annotations={
@@ -363,23 +362,23 @@ def register_network_tools(mcp: FastMCP) -> None:
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
         if not compartment_id:
             return "Error: No compartment_id provided and COMPARTMENT_OCID not set."
-        
+
         try:
             client = get_oci_client("virtual_network")
-            
+
             kwargs = {"compartment_id": compartment_id, "limit": params.limit}
             if params.vcn_id:
                 kwargs["vcn_id"] = params.vcn_id
-            
+
             response = client.list_security_lists(**kwargs)
-            
+
             security_lists = []
             for sl in response.data:
                 if params.display_name and params.display_name.lower() not in sl.display_name.lower():
                     continue
-                
+
                 security_lists.append(_serialize_security_list(sl))
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return NetworkFormatter.to_json({
                     "security_lists": security_lists,
@@ -387,11 +386,11 @@ def register_network_tools(mcp: FastMCP) -> None:
                     "compartment_id": compartment_id
                 })
             return NetworkFormatter.security_list_markdown(security_lists)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "listing security lists")
             return format_error_response(error, params.response_format.value)
-    
+
     @mcp.tool(
         name="oci_network_analyze_security",
         annotations={
@@ -410,12 +409,12 @@ def register_network_tools(mcp: FastMCP) -> None:
         """
         if not params.vcn_id and not params.security_list_id:
             return "Error: Either vcn_id or security_list_id must be provided."
-        
+
         try:
             client = get_oci_client("virtual_network")
-            
+
             security_lists = []
-            
+
             if params.security_list_id:
                 # Get specific security list
                 response = client.get_security_list(security_list_id=params.security_list_id)
@@ -424,21 +423,21 @@ def register_network_tools(mcp: FastMCP) -> None:
                 # Get VCN to find compartment
                 vcn_response = client.get_vcn(vcn_id=params.vcn_id)
                 compartment_id = vcn_response.data.compartment_id
-                
+
                 # Get all security lists in the VCN
                 sl_response = client.list_security_lists(
                     compartment_id=compartment_id,
                     vcn_id=params.vcn_id
                 )
                 security_lists = [_serialize_security_list(sl) for sl in sl_response.data]
-            
+
             # Analyze for risks
             analysis = _analyze_risky_rules(security_lists)
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return NetworkFormatter.to_json(analysis)
             return NetworkFormatter.security_analysis_markdown(analysis)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "analyzing security rules")
             return format_error_response(error, params.response_format.value)

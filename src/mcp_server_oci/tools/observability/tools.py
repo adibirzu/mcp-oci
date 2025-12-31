@@ -10,7 +10,7 @@ import asyncio
 import os
 import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -34,7 +34,7 @@ from .models import (
 
 def _parse_time_window(window: TimeWindow) -> tuple[datetime, datetime]:
     """Parse time window enum to start/end datetime."""
-    end_time = datetime.now(timezone.utc)
+    end_time = datetime.now(UTC)
 
     window_map = {
         TimeWindow.MINUTES_15: timedelta(minutes=15),
@@ -258,7 +258,7 @@ def register_observability_tools(mcp: FastMCP) -> None:
 
             # Parse time range
             time_delta = _parse_time_range(params.time_range)
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             start_time = end_time - time_delta
 
             await ctx.report_progress(0.3, "Executing query...")

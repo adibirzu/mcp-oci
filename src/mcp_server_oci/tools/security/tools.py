@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -444,7 +444,7 @@ def register_security_tools(mcp: FastMCP) -> None:
             compartment_id = params.compartment_id or oci_client_manager.tenancy_id
 
             data: dict[str, Any] = {
-                "audit_time": datetime.now(timezone.utc).isoformat(),
+                "audit_time": datetime.now(UTC).isoformat(),
                 "compartment_name": "Tenancy Root" if compartment_id == oci_client_manager.tenancy_id else compartment_id,
                 "security_score": {"overall": 0},
                 "recommendations": [],

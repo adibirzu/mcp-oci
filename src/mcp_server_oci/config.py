@@ -10,7 +10,6 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
@@ -35,7 +34,7 @@ class ServerConfig(BaseModel):
     name: str = Field(default="oci-mcp", description="Server name")
     version: str = Field(default="2.0.0", description="Server version")
     transport: TransportType = Field(
-        default=TransportType.STDIO, 
+        default=TransportType.STDIO,
         description="Transport: stdio or streamable_http"
     )
     port: int = Field(default=8000, description="HTTP port if using streamable_http")
@@ -55,14 +54,14 @@ class OCIConfig(BaseModel):
         description="OCI config file path"
     )
     profile: str = Field(default="DEFAULT", description="OCI config profile")
-    tenancy_ocid: Optional[str] = Field(default=None, description="Override tenancy OCID")
-    region: Optional[str] = Field(default=None, description="Override region")
-    compartment_ocid: Optional[str] = Field(default=None, description="Default compartment OCID")
-    
+    tenancy_ocid: str | None = Field(default=None, description="Override tenancy OCID")
+    region: str | None = Field(default=None, description="Override region")
+    compartment_ocid: str | None = Field(default=None, description="Default compartment OCID")
+
     # Rate limiting
     max_retries: int = Field(default=3, description="Max API retries")
     retry_delay: float = Field(default=1.0, description="Retry delay in seconds")
-    
+
     @field_validator('config_file', mode='before')
     @classmethod
     def expand_path(cls, v: str | Path) -> Path:
@@ -72,17 +71,17 @@ class OCIConfig(BaseModel):
 class APMConfig(BaseModel):
     """OCI APM (Application Performance Monitoring) configuration."""
     enabled: bool = Field(default=False, description="Enable OCI APM tracing")
-    endpoint: Optional[str] = Field(default=None, description="APM data upload endpoint")
-    private_data_key: Optional[str] = Field(default=None, description="APM private data key")
-    domain_id: Optional[str] = Field(default=None, description="APM domain OCID")
+    endpoint: str | None = Field(default=None, description="APM data upload endpoint")
+    private_data_key: str | None = Field(default=None, description="APM private data key")
+    domain_id: str | None = Field(default=None, description="APM domain OCID")
     service_name: str = Field(default="oci-mcp-server", description="Service name for traces")
 
 
 class LoggingConfig(BaseModel):
     """OCI Logging configuration."""
     enabled: bool = Field(default=False, description="Enable OCI Logging integration")
-    log_id: Optional[str] = Field(default=None, description="Log OCID for ingestion")
-    compartment_id: Optional[str] = Field(default=None, description="Compartment for logging")
+    log_id: str | None = Field(default=None, description="Log OCID for ingestion")
+    compartment_id: str | None = Field(default=None, description="Compartment for logging")
     batch_size: int = Field(default=100, description="Log batch size before flush")
     flush_interval: float = Field(default=5.0, description="Flush interval in seconds")
 
@@ -90,10 +89,10 @@ class LoggingConfig(BaseModel):
 class LogAnalyticsConfig(BaseModel):
     """OCI Log Analytics configuration."""
     enabled: bool = Field(default=False, description="Enable Log Analytics upload")
-    namespace: Optional[str] = Field(default=None, description="Log Analytics namespace")
-    log_group_id: Optional[str] = Field(default=None, description="Log group OCID")
+    namespace: str | None = Field(default=None, description="Log Analytics namespace")
+    log_group_id: str | None = Field(default=None, description="Log group OCID")
     source_name: str = Field(default="oci-mcp-server", description="Log source name")
-    entity_id: Optional[str] = Field(default=None, description="Entity OCID (optional)")
+    entity_id: str | None = Field(default=None, description="Entity OCID (optional)")
 
 
 class ObservabilityConfig(BaseModel):
@@ -109,9 +108,9 @@ class AppConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     oci: OCIConfig = field(default_factory=OCIConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
-    
+
     @classmethod
-    def from_env(cls) -> 'AppConfig':
+    def from_env(cls) -> AppConfig:
         """Load configuration from environment variables.
         
         Environment variables referenced:
@@ -134,7 +133,7 @@ class AppConfig:
         - [Link to Secure Variable: OCI_LOGAN_LOG_GROUP_ID]
         """
         load_dotenv()
-        
+
         return cls(
             server=ServerConfig(
                 name=os.getenv("OCI_MCP_NAME", "oci-mcp"),
@@ -172,21 +171,21 @@ class AppConfig:
                 ),
             ),
         )
-    
+
     def validate_required(self) -> list[str]:
         """Validate required configuration and return list of missing items."""
         missing = []
-        
+
         # OCI config file must exist if using config_file auth
         if self.oci.auth_method == AuthMethod.CONFIG_FILE:
             if not self.oci.config_file.exists():
                 missing.append(f"OCI config file not found: {self.oci.config_file}")
-        
+
         return missing
 
 
 # Global config instance (lazy-loaded)
-_config: Optional[AppConfig] = None
+_config: AppConfig | None = None
 
 
 def get_config() -> AppConfig:

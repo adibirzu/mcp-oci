@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,7 +28,7 @@ class BaseCostInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format: 'markdown' for human-readable, 'json' for machine-readable"
@@ -38,7 +37,7 @@ class BaseCostInput(BaseModel):
 
 class CostSummaryInput(BaseCostInput):
     """Input for cost summary queries."""
-    
+
     tenancy_ocid: str = Field(
         ...,
         description="OCI Tenancy OCID (e.g., 'ocid1.tenancy.oc1..aaaaaa')",
@@ -56,14 +55,14 @@ class CostSummaryInput(BaseCostInput):
         default=Granularity.DAILY,
         description="Time granularity: DAILY or MONTHLY"
     )
-    
+
     @field_validator('tenancy_ocid')
     @classmethod
     def validate_tenancy_ocid(cls, v: str) -> str:
         if not v.startswith('ocid1.tenancy.'):
             raise ValueError("Invalid tenancy OCID format. Expected 'ocid1.tenancy.oc1...'")
         return v
-    
+
     @field_validator('time_start', 'time_end')
     @classmethod
     def validate_datetime(cls, v: str) -> str:
@@ -76,7 +75,7 @@ class CostSummaryInput(BaseCostInput):
 
 class CostByCompartmentInput(BaseCostInput):
     """Input for compartment cost breakdown."""
-    
+
     tenancy_ocid: str = Field(
         ...,
         description="OCI Tenancy OCID",
@@ -90,7 +89,7 @@ class CostByCompartmentInput(BaseCostInput):
         ...,
         description="End date in ISO format"
     )
-    scope_compartment_id: Optional[str] = Field(
+    scope_compartment_id: str | None = Field(
         default=None,
         description="Limit to specific compartment OCID"
     )
@@ -118,7 +117,7 @@ class CostByCompartmentInput(BaseCostInput):
 
 class CostByServiceInput(BaseCostInput):
     """Input for service cost drilldown."""
-    
+
     tenancy_ocid: str = Field(
         ...,
         description="OCI Tenancy OCID",
@@ -138,7 +137,7 @@ class CostByServiceInput(BaseCostInput):
         ge=1,
         le=50
     )
-    scope_compartment_id: Optional[str] = Field(
+    scope_compartment_id: str | None = Field(
         default=None,
         description="Limit to specific compartment"
     )
@@ -150,7 +149,7 @@ class CostByServiceInput(BaseCostInput):
 
 class MonthlyTrendInput(BaseCostInput):
     """Input for monthly cost trend analysis."""
-    
+
     tenancy_ocid: str = Field(
         ...,
         description="OCI Tenancy OCID",
@@ -166,7 +165,7 @@ class MonthlyTrendInput(BaseCostInput):
         default=True,
         description="Include cost forecast for next month"
     )
-    budget_ocid: Optional[str] = Field(
+    budget_ocid: str | None = Field(
         default=None,
         description="Budget OCID for variance analysis"
     )
@@ -174,7 +173,7 @@ class MonthlyTrendInput(BaseCostInput):
 
 class CostAnomalyInput(BaseCostInput):
     """Input for cost anomaly detection."""
-    
+
     tenancy_ocid: str = Field(
         ...,
         description="OCI Tenancy OCID",
@@ -200,7 +199,7 @@ class CostAnomalyInput(BaseCostInput):
         ge=1,
         le=50
     )
-    scope_compartment_id: Optional[str] = Field(
+    scope_compartment_id: str | None = Field(
         default=None,
         description="Limit to specific compartment"
     )
@@ -217,8 +216,8 @@ class CostItem(BaseModel):
     date: str
     amount: float
     currency: str = "USD"
-    service: Optional[str] = None
-    compartment: Optional[str] = None
+    service: str | None = None
+    compartment: str | None = None
 
 
 class ServiceCost(BaseModel):
@@ -248,7 +247,7 @@ class CostSummaryOutput(BaseModel):
     daily_average: float
     by_service: list[ServiceCost] = []
     by_compartment: list[CompartmentCost] = []
-    forecast: Optional[dict] = None
+    forecast: dict | None = None
 
 
 class CostAnomaly(BaseModel):
@@ -258,7 +257,7 @@ class CostAnomaly(BaseModel):
     expected_cost: float
     deviation_percent: float
     severity: str  # low, medium, high, critical
-    root_cause: Optional[dict] = None
+    root_cause: dict | None = None
 
 
 class AnomalyDetectionOutput(BaseModel):

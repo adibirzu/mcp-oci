@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 try:
     import oci.exceptions
@@ -33,16 +33,16 @@ class ErrorCategory(str, Enum):
 @dataclass
 class OCIError:
     """Structured OCI error with actionable suggestions."""
-    
+
     category: ErrorCategory
     message: str
     suggestion: str
     details: dict[str, Any] = field(default_factory=dict)
-    
+
     def to_string(self) -> str:
         """Format error as user-friendly string."""
         return f"Error ({self.category.value}): {self.message}\n\nSuggestion: {self.suggestion}"
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Format error as structured dictionary."""
         return {
@@ -52,23 +52,23 @@ class OCIError:
             "suggestion": self.suggestion,
             "details": self.details
         }
-    
+
     def to_json(self) -> str:
         """Format error as JSON string."""
         return json.dumps(self.to_dict(), indent=2)
-    
+
     def to_markdown(self) -> str:
         """Format error as markdown."""
-        md = f"## ❌ Error\n\n"
+        md = "## ❌ Error\n\n"
         md += f"**Category:** {self.category.value}\n"
         md += f"**Message:** {self.message}\n\n"
         md += f"**Suggestion:** {self.suggestion}\n"
-        
+
         if self.details:
             md += "\n### Details\n"
             for key, value in self.details.items():
                 md += f"- **{key}:** {value}\n"
-        
+
         return md
 
 
@@ -117,7 +117,7 @@ ERROR_MAP: dict[int, tuple[ErrorCategory, str, str]] = {
 }
 
 
-def handle_oci_error(e: Exception, context: Optional[str] = None) -> OCIError:
+def handle_oci_error(e: Exception, context: str | None = None) -> OCIError:
     """
     Convert OCI exceptions to structured errors with actionable suggestions.
     
@@ -134,13 +134,13 @@ def handle_oci_error(e: Exception, context: Optional[str] = None) -> OCIError:
             status,
             (ErrorCategory.UNKNOWN, f"Unexpected error (status {status})", "Check the error details and retry.")
         )
-        
+
         message = base_message
         if context:
             message = f"{base_message} while {context}"
         if hasattr(e, 'message') and e.message:
             message = f"{message}: {e.message}"
-        
+
         return OCIError(
             category=category,
             message=message,
@@ -151,21 +151,21 @@ def handle_oci_error(e: Exception, context: Optional[str] = None) -> OCIError:
                 "opc_request_id": getattr(e, 'request_id', None),
             }
         )
-    
+
     if HAS_OCI and isinstance(e, oci.exceptions.ClientError):
         return OCIError(
             category=ErrorCategory.NETWORK,
             message=f"Network error{f' while {context}' if context else ''}: {str(e)}",
             suggestion="Check your network connection and OCI endpoint accessibility."
         )
-    
+
     if HAS_OCI and isinstance(e, oci.exceptions.ConfigFileNotFound):
         return OCIError(
             category=ErrorCategory.AUTHENTICATION,
             message="OCI config file not found",
             suggestion="Ensure ~/.oci/config exists or set OCI_CONFIG_FILE environment variable."
         )
-    
+
     # Handle timeout errors
     if "timeout" in str(e).lower():
         return OCIError(
@@ -173,7 +173,7 @@ def handle_oci_error(e: Exception, context: Optional[str] = None) -> OCIError:
             message=f"Request timeout{f' while {context}' if context else ''}",
             suggestion="The operation took too long. Try with a smaller scope or retry later."
         )
-    
+
     # Generic fallback
     return OCIError(
         category=ErrorCategory.UNKNOWN,
@@ -202,7 +202,7 @@ def create_validation_error(
     field: str,
     value: Any,
     expected: str,
-    context: Optional[str] = None
+    context: str | None = None
 ) -> OCIError:
     """
     Create a validation error for invalid input.
@@ -231,7 +231,7 @@ def create_validation_error(
 def create_not_found_error(
     resource_type: str,
     identifier: str,
-    context: Optional[str] = None
+    context: str | None = None
 ) -> OCIError:
     """
     Create a not found error for missing resources.
@@ -249,7 +249,7 @@ def create_not_found_error(
         masked = f"{identifier[:25]}...{identifier[-5:]}"
     else:
         masked = identifier
-    
+
     return OCIError(
         category=ErrorCategory.NOT_FOUND,
         message=f"{resource_type} not found: {masked}",

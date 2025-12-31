@@ -7,29 +7,24 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Optional
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import Context, FastMCP
 
 from mcp_server_oci.core.client import get_client_manager
-from mcp_server_oci.core.errors import handle_oci_error, format_error_response
+from mcp_server_oci.core.errors import format_error_response, handle_oci_error
 from mcp_server_oci.core.models import ResponseFormat
 
+from .formatters import ComputeFormatter
 from .models import (
-    ListInstancesInput,
     GetInstanceInput,
     InstanceActionInput,
-    GetInstanceMetricsInput,
-    InstanceSummary,
-    ListInstancesOutput,
-    InstanceActionOutput,
+    ListInstancesInput,
 )
-from .formatters import ComputeFormatter
 
 
 def register_compute_tools(mcp: FastMCP) -> None:
     """Register all compute domain tools with the MCP server."""
-    
+
     @mcp.tool(
         name="oci_compute_list_instances",
         annotations={
@@ -57,11 +52,11 @@ def register_compute_tools(mcp: FastMCP) -> None:
             {"compartment_id": "ocid1.compartment...", "lifecycle_state": "RUNNING", "limit": 20}
         """
         await ctx.report_progress(0.1, "Connecting to OCI...")
-        
+
         try:
             client_mgr = await get_client_manager()
             compute_client = client_mgr.compute
-            
+
             # Get compartment ID from params or environment
             compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID")
             if not compartment_id:
@@ -69,22 +64,22 @@ def register_compute_tools(mcp: FastMCP) -> None:
                     "Compartment OCID required. Provide compartment_id or set COMPARTMENT_OCID env var.",
                     params.response_format.value
                 )
-            
+
             await ctx.report_progress(0.3, "Fetching instances...")
-            
+
             # Build query parameters
             kwargs = {"compartment_id": compartment_id, "limit": params.limit}
             if params.lifecycle_state:
                 kwargs["lifecycle_state"] = params.lifecycle_state.value
-            
+
             # Execute API call
             response = await asyncio.to_thread(
                 compute_client.list_instances,
                 **kwargs
             )
-            
+
             await ctx.report_progress(0.6, "Processing results...")
-            
+
             # Process instances
             instances = []
             for inst in response.data:
@@ -100,21 +95,21 @@ def register_compute_tools(mcp: FastMCP) -> None:
                     "public_ip": None,
                     "private_ip": None,
                 }
-                
+
                 # Filter by display name if provided
                 if params.display_name:
                     if params.display_name.lower() not in inst.display_name.lower():
                         continue
-                
+
                 instances.append(instance_data)
-            
+
             # Fetch IPs if requested (slower)
             if params.include_ips and instances:
                 await ctx.report_progress(0.7, "Fetching IP addresses...")
                 instances = await _fetch_instance_ips(client_mgr, instances)
-            
+
             await ctx.report_progress(0.9, "Formatting output...")
-            
+
             # Build output
             output_data = {
                 "total": len(instances),
@@ -124,16 +119,16 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "has_more": len(response.data) == params.limit,
                 "next_offset": params.offset + len(instances) if len(response.data) == params.limit else None
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(output_data)
             return ComputeFormatter.instances_markdown(output_data)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "listing instances")
             return format_error_response(error, params.response_format.value)
-    
-    
+
+
     @mcp.tool(
         name="oci_compute_get_instance",
         annotations={
@@ -157,20 +152,20 @@ def register_compute_tools(mcp: FastMCP) -> None:
             Instance details in requested format
         """
         await ctx.report_progress(0.1, "Fetching instance details...")
-        
+
         try:
             client_mgr = await get_client_manager()
             compute_client = client_mgr.compute
-            
+
             response = await asyncio.to_thread(
                 compute_client.get_instance,
                 params.instance_id
             )
-            
+
             inst = response.data
-            
+
             await ctx.report_progress(0.5, "Processing instance data...")
-            
+
             instance_data = {
                 "id": inst.id,
                 "display_name": inst.display_name,
@@ -184,29 +179,29 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "public_ip": None,
                 "private_ip": None,
             }
-            
+
             # Get IPs
             await ctx.report_progress(0.6, "Fetching network info...")
             instance_data = (await _fetch_instance_ips(client_mgr, [instance_data]))[0]
-            
+
             # Get metrics if requested
             if params.include_metrics:
                 await ctx.report_progress(0.8, "Fetching metrics...")
                 instance_data["metrics"] = await _fetch_instance_metrics(
                     client_mgr, inst.id, inst.compartment_id
                 )
-            
+
             await ctx.report_progress(0.95, "Formatting output...")
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(instance_data)
             return ComputeFormatter.instance_detail_markdown(instance_data)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "getting instance details")
             return format_error_response(error, params.response_format.value)
-    
-    
+
+
     @mcp.tool(
         name="oci_compute_start_instance",
         annotations={
@@ -234,29 +229,29 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
-        
+
         await ctx.report_progress(0.1, "Starting instance...")
-        
+
         try:
             client_mgr = await get_client_manager()
             compute_client = client_mgr.compute
-            
+
             # Get current state first
             current = await asyncio.to_thread(
                 compute_client.get_instance,
                 params.instance_id
             )
             previous_state = current.data.lifecycle_state
-            
+
             await ctx.report_progress(0.3, "Sending start command...")
-            
+
             # Perform action
             await asyncio.to_thread(
                 compute_client.instance_action,
                 params.instance_id,
                 "START"
             )
-            
+
             result = {
                 "success": True,
                 "instance_id": params.instance_id,
@@ -265,16 +260,16 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "target_state": "RUNNING",
                 "message": "Start action initiated successfully. Instance will be running shortly."
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(result)
             return ComputeFormatter.action_result_markdown(result)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "starting instance")
             return format_error_response(error, params.response_format.value)
-    
-    
+
+
     @mcp.tool(
         name="oci_compute_stop_instance",
         annotations={
@@ -302,22 +297,22 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
-        
+
         await ctx.report_progress(0.1, "Stopping instance...")
-        
+
         try:
             client_mgr = await get_client_manager()
             compute_client = client_mgr.compute
-            
+
             # Get current state first
             current = await asyncio.to_thread(
                 compute_client.get_instance,
                 params.instance_id
             )
             previous_state = current.data.lifecycle_state
-            
+
             await ctx.report_progress(0.3, "Sending stop command...")
-            
+
             # Perform action
             action = "RESET" if params.force else "STOP"
             await asyncio.to_thread(
@@ -325,7 +320,7 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 params.instance_id,
                 action
             )
-            
+
             result = {
                 "success": True,
                 "instance_id": params.instance_id,
@@ -334,16 +329,16 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "target_state": "STOPPED",
                 "message": f"{'Hard' if params.force else 'Soft'} stop initiated. Instance will be stopped shortly."
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(result)
             return ComputeFormatter.action_result_markdown(result)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "stopping instance")
             return format_error_response(error, params.response_format.value)
-    
-    
+
+
     @mcp.tool(
         name="oci_compute_restart_instance",
         annotations={
@@ -371,22 +366,22 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
-        
+
         await ctx.report_progress(0.1, "Restarting instance...")
-        
+
         try:
             client_mgr = await get_client_manager()
             compute_client = client_mgr.compute
-            
+
             # Get current state first
             current = await asyncio.to_thread(
                 compute_client.get_instance,
                 params.instance_id
             )
             previous_state = current.data.lifecycle_state
-            
+
             await ctx.report_progress(0.3, "Sending restart command...")
-            
+
             # Perform action
             action = "RESET" if params.force else "SOFTRESET"
             await asyncio.to_thread(
@@ -394,7 +389,7 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 params.instance_id,
                 action
             )
-            
+
             result = {
                 "success": True,
                 "instance_id": params.instance_id,
@@ -403,11 +398,11 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 "target_state": "RUNNING",
                 "message": f"{'Hard' if params.force else 'Soft'} restart initiated. Instance will be running shortly."
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(result)
             return ComputeFormatter.action_result_markdown(result)
-            
+
         except Exception as e:
             error = handle_oci_error(e, "restarting instance")
             return format_error_response(error, params.response_format.value)
@@ -420,11 +415,11 @@ def register_compute_tools(mcp: FastMCP) -> None:
 async def _fetch_instance_ips(client_mgr, instances: list) -> list:
     """Fetch IP addresses for instances."""
     import oci
-    
+
     try:
         network_client = client_mgr.get_client(oci.core.VirtualNetworkClient)
         compute_client = client_mgr.compute
-        
+
         for inst in instances:
             try:
                 # Get VNICs attached to instance
@@ -433,7 +428,7 @@ async def _fetch_instance_ips(client_mgr, instances: list) -> list:
                     compartment_id=inst["compartment_id"],
                     instance_id=inst["id"]
                 )
-                
+
                 for attachment in vnic_attachments.data:
                     if attachment.lifecycle_state == "ATTACHED" and attachment.vnic_id:
                         vnic = await asyncio.to_thread(
@@ -447,33 +442,34 @@ async def _fetch_instance_ips(client_mgr, instances: list) -> list:
             except Exception:
                 # Skip IP fetching errors for individual instances
                 pass
-                
+
     except Exception:
         # Return instances without IPs if network queries fail
         pass
-    
+
     return instances
 
 
 async def _fetch_instance_metrics(client_mgr, instance_id: str, compartment_id: str) -> dict:
     """Fetch recent metrics for an instance."""
-    import oci
     from datetime import datetime, timedelta
-    
+
+    import oci
+
     metrics = {}
-    
+
     try:
         monitoring_client = client_mgr.get_client(oci.monitoring.MonitoringClient)
-        
+
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(hours=1)
-        
+
         metric_names = ["CpuUtilization", "MemoryUtilization"]
-        
+
         for metric_name in metric_names:
             try:
                 query = f'{metric_name}[1h]{{resourceId="{instance_id}"}}.mean()'
-                
+
                 response = await asyncio.to_thread(
                     monitoring_client.summarize_metrics_data,
                     compartment_id,
@@ -484,7 +480,7 @@ async def _fetch_instance_metrics(client_mgr, instance_id: str, compartment_id: 
                         end_time=end_time
                     )
                 )
-                
+
                 if response.data:
                     values = [dp.value for dp in response.data[0].aggregated_datapoints]
                     if values:
@@ -498,9 +494,9 @@ async def _fetch_instance_metrics(client_mgr, instance_id: str, compartment_id: 
             except Exception:
                 # Skip individual metric errors
                 pass
-                
+
     except Exception:
         # Return empty metrics if monitoring fails
         pass
-    
+
     return metrics

@@ -1,5 +1,7 @@
 import oci
-from mcp_server_oci.auth import get_client, get_oci_config, allow_mutations
+
+from mcp_server_oci.auth import allow_mutations, get_client, get_oci_config
+
 
 def start_instance(instance_id: str) -> dict:
     """Start a compute instance."""

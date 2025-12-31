@@ -1,6 +1,6 @@
 import os
 import threading
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
 import oci
 
@@ -8,17 +8,19 @@ import oci
 # Configuration & Authentication
 # =============================================================================
 
-def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
+def get_oci_config(profile_name: str | None = None) -> dict[str, Any]:
     """
     Get OCI configuration with robust fallback:
     1. Resource Principals (OKE/Functions)
     2. Config File (~/.oci/config)
     3. Instance Principals
     """
-    
+
     # 1. Resource Principals Check
     auth_mode = os.getenv("OCI_CLI_AUTH", "").lower()
-    if auth_mode in ("resource_principal", "resource_principals", "resource") or os.getenv("OCI_RESOURCE_PRINCIPAL_VERSION"):
+    rp_version = os.getenv("OCI_RESOURCE_PRINCIPAL_VERSION")
+    is_resource_principal = auth_mode in ("resource_principal", "resource_principals", "resource")
+    if is_resource_principal or rp_version:
         try:
             from oci.auth.signers import get_resource_principals_signer
             signer = get_resource_principals_signer()
@@ -53,11 +55,12 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
                 signer = InstancePrincipalsSecurityTokenSigner()
                 return {"region": signer.region, "signer": signer}
             except Exception as e:
-                raise RuntimeError(
-                    f"Failed to load OCI config from {config_path} or authenticate via Principals. Error: {e}"
-                ) from e
+                msg = f"Failed to load OCI config from {config_path}"
+                msg += " or authenticate via Principals."
+                raise RuntimeError(f"{msg} Error: {e}") from e
     except Exception as e:
-        raise RuntimeError(f"Failed to load OCI config from {config_path} with profile '{profile}': {e}") from e
+        msg = f"Failed to load OCI config from {config_path} with profile '{profile}'"
+        raise RuntimeError(f"{msg}: {e}") from e
 
     # Override region from environment if provided
     env_region = os.getenv("OCI_REGION")
@@ -66,7 +69,7 @@ def get_oci_config(profile_name: Optional[str] = None) -> Dict[str, Any]:
 
     return config
 
-def get_compartment_id() -> Optional[str]:
+def get_compartment_id() -> str | None:
     """Get compartment OCID from environment."""
     return os.getenv("COMPARTMENT_OCID")
 
@@ -79,16 +82,16 @@ def allow_mutations() -> bool:
 # =============================================================================
 
 T = TypeVar("T")
-_client_cache: Dict[Tuple[str, Optional[str], Optional[str]], Any] = {}
+_client_cache: dict[tuple[str, str | None, str | None], Any] = {}
 _client_lock = threading.Lock()
 
-def _fqcn(klass: Type) -> str:
+def _fqcn(klass: type) -> str:
     return f"{klass.__module__}.{klass.__name__}"
 
 def get_client(
-    oci_client_class: Type[T], 
-    profile: Optional[str] = None, 
-    region: Optional[str] = None
+    oci_client_class: type[T],
+    profile: str | None = None,
+    region: str | None = None
 ) -> T:
     """
     Return a cached OCI SDK client instance.
@@ -104,7 +107,7 @@ def get_client(
 
         # Build client kwargs
         client_kwargs = {}
-        
+
         # Retry Strategy
         if os.getenv("OCI_ENABLE_RETRIES", "true").lower() == "true":
              client_kwargs["retry_strategy"] = oci.retry.DEFAULT_RETRY_STRATEGY

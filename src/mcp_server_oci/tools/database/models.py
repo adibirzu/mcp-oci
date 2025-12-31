@@ -4,7 +4,6 @@ Pydantic models for OCI Database domain tools.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -51,21 +50,21 @@ class ListAutonomousDatabasesInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     compartment_id: str = Field(
         ...,
         description="Compartment OCID to list databases from (e.g., 'ocid1.compartment.oc1..aaaaaa')",
         min_length=20
     )
-    workload_type: Optional[ADBWorkloadType] = Field(
+    workload_type: ADBWorkloadType | None = Field(
         default=None,
         description="Filter by workload type: OLTP, DW, AJD, or APEX"
     )
-    lifecycle_state: Optional[LifecycleState] = Field(
+    lifecycle_state: LifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state (e.g., AVAILABLE, STOPPED)"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -84,7 +83,7 @@ class ListAutonomousDatabasesInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format: 'markdown' for human-readable, 'json' for machine-readable"
     )
-    
+
     @field_validator('compartment_id')
     @classmethod
     def validate_compartment_ocid(cls, v: str) -> str:
@@ -100,7 +99,7 @@ class GetAutonomousDatabaseInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     database_id: str = Field(
         ...,
         description="Autonomous Database OCID (e.g., 'ocid1.autonomousdatabase.oc1..aaaaaa')",
@@ -110,7 +109,7 @@ class GetAutonomousDatabaseInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format: 'markdown' for human-readable, 'json' for machine-readable"
     )
-    
+
     @field_validator('database_id')
     @classmethod
     def validate_database_ocid(cls, v: str) -> str:
@@ -126,7 +125,7 @@ class StartAutonomousDatabaseInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     database_id: str = Field(
         ...,
         description="Autonomous Database OCID to start",
@@ -140,7 +139,7 @@ class StartAutonomousDatabaseInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format"
     )
-    
+
     @field_validator('database_id')
     @classmethod
     def validate_database_ocid(cls, v: str) -> str:
@@ -156,7 +155,7 @@ class StopAutonomousDatabaseInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     database_id: str = Field(
         ...,
         description="Autonomous Database OCID to stop",
@@ -170,7 +169,7 @@ class StopAutonomousDatabaseInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format"
     )
-    
+
     @field_validator('database_id')
     @classmethod
     def validate_database_ocid(cls, v: str) -> str:
@@ -186,13 +185,13 @@ class GetDatabaseMetricsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     database_id: str = Field(
         ...,
         description="Database OCID (Autonomous or DB System)",
         min_length=20
     )
-    metric_names: Optional[list[str]] = Field(
+    metric_names: list[str] | None = Field(
         default=None,
         description="Specific metrics to retrieve (e.g., ['CpuUtilization', 'StorageUtilization'])"
     )
@@ -215,17 +214,17 @@ class ListDBSystemsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
+
     compartment_id: str = Field(
         ...,
         description="Compartment OCID to list DB Systems from",
         min_length=20
     )
-    lifecycle_state: Optional[LifecycleState] = Field(
+    lifecycle_state: LifecycleState | None = Field(
         default=None,
         description="Filter by lifecycle state"
     )
-    display_name: Optional[str] = Field(
+    display_name: str | None = Field(
         default=None,
         description="Filter by display name (partial match)"
     )
@@ -244,7 +243,7 @@ class ListDBSystemsInput(BaseModel):
         default=ResponseFormat.MARKDOWN,
         description="Output format"
     )
-    
+
     @field_validator('compartment_id')
     @classmethod
     def validate_compartment_ocid(cls, v: str) -> str:
@@ -260,12 +259,12 @@ class ListBackupsInput(BaseModel):
         validate_assignment=True,
         extra='forbid'
     )
-    
-    database_id: Optional[str] = Field(
+
+    database_id: str | None = Field(
         default=None,
         description="Database OCID to list backups for"
     )
-    compartment_id: Optional[str] = Field(
+    compartment_id: str | None = Field(
         default=None,
         description="Compartment OCID (required if database_id not provided)"
     )
@@ -298,7 +297,7 @@ class AutonomousDatabaseSummary(BaseModel):
     data_storage_size_in_tbs: int
     is_free_tier: bool
     time_created: str
-    connection_strings: Optional[dict] = None
+    connection_strings: dict | None = None
 
 
 class DBSystemSummary(BaseModel):

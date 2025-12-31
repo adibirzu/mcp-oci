@@ -60,6 +60,17 @@ select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "C4", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+warn_return_any = false
+warn_unused_ignores = false
+
+# Ignore missing stubs for untyped libraries
+[[tool.mypy.overrides]]
+module = [
+    "oci.*",
+    "oracledb.*",
+    "opentelemetry.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
