@@ -80,9 +80,11 @@ def register_security_tools(mcp: FastMCP) -> None:
 
             await ctx.report_progress(0.8, "Formatting response...")
 
+            is_root = compartment_id == oci_client_manager.tenancy_id
+            comp_name = "Tenancy Root" if is_root else compartment_id
             data = {
                 "total": len(users),
-                "compartment_name": "Tenancy Root" if compartment_id == oci_client_manager.tenancy_id else compartment_id,
+                "compartment_name": comp_name,
                 "users": [
                     {
                         "id": u.id,
@@ -394,8 +396,10 @@ def register_security_tools(mcp: FastMCP) -> None:
                         "resource_name": p.resource_name,
                         "resource_type": p.resource_type,
                         "region": p.region,
-                        "time_first_detected": str(p.time_first_detected) if p.time_first_detected else None,
-                        "recommendation": p.recommendation if hasattr(p, "recommendation") else None,
+                        "time_first_detected": (
+                            str(p.time_first_detected) if p.time_first_detected else None
+                        ),
+                        "recommendation": getattr(p, "recommendation", None),
                     }
                     for p in problems[:params.limit]
                 ],
@@ -443,9 +447,10 @@ def register_security_tools(mcp: FastMCP) -> None:
         try:
             compartment_id = params.compartment_id or oci_client_manager.tenancy_id
 
+            is_root = compartment_id == oci_client_manager.tenancy_id
             data: dict[str, Any] = {
                 "audit_time": datetime.now(UTC).isoformat(),
-                "compartment_name": "Tenancy Root" if compartment_id == oci_client_manager.tenancy_id else compartment_id,
+                "compartment_name": "Tenancy Root" if is_root else compartment_id,
                 "security_score": {"overall": 0},
                 "recommendations": [],
             }
@@ -529,9 +534,15 @@ def register_security_tools(mcp: FastMCP) -> None:
                     }
 
                     if critical > 0:
-                        data["recommendations"].append(f"Address {critical} critical Cloud Guard problems immediately")
+                        msg = f"Address {critical} critical Cloud Guard problems"
+                        data["recommendations"].append(f"{msg} immediately")
 
-                    cg_score = 90 if critical == 0 and high == 0 else 70 if critical == 0 else 40
+                    if critical == 0 and high == 0:
+                        cg_score = 90
+                    elif critical == 0:
+                        cg_score = 70
+                    else:
+                        cg_score = 40
                     score_components.append(cg_score)
 
                 except Exception:
@@ -566,7 +577,8 @@ def register_security_tools(mcp: FastMCP) -> None:
                                 public_subnets += 1
 
                     if public_subnets > 5:
-                        network_findings.append(f"{public_subnets} public subnets detected - review necessity")
+                        msg = f"{public_subnets} public subnets detected"
+                        network_findings.append(f"{msg} - review necessity")
 
                     data["network_summary"] = {
                         "total_vcns": len(vcns_resp.data),
@@ -588,7 +600,8 @@ def register_security_tools(mcp: FastMCP) -> None:
 
             # Add general recommendations
             if data["security_score"]["overall"] < 70:
-                data["recommendations"].append("Review security configuration as overall score is below threshold")
+                msg = "Review security configuration as overall score"
+                data["recommendations"].append(f"{msg} is below threshold")
 
             await ctx.report_progress(0.9, "Generating report...")
 

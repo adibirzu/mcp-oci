@@ -143,7 +143,9 @@ class AgentContext(BaseModel):
     # Data Storage
     findings: dict[str, Any] = Field(default_factory=dict, description="Discovered information")
     intermediate_results: dict[str, Any] = Field(default_factory=dict, description="Step results")
-    recommendations: list[str] = Field(default_factory=list, description="Generated recommendations")
+    recommendations: list[str] = Field(
+        default_factory=list, description="Generated recommendations"
+    )
 
     # Conversation
     memory: ConversationMemory = Field(default_factory=ConversationMemory)
@@ -234,8 +236,12 @@ class AnalysisRequest(BaseModel):
         # Analysis type instruction
         type_instructions = {
             AnalysisType.SUMMARIZE: "Summarize the following data concisely:",
-            AnalysisType.DIAGNOSE: "Analyze the following data and identify any issues or problems:",
-            AnalysisType.RECOMMEND: "Based on the following data, provide actionable recommendations:",
+            AnalysisType.DIAGNOSE: (
+                "Analyze the following data and identify any issues or problems:"
+            ),
+            AnalysisType.RECOMMEND: (
+                "Based on the following data, provide actionable recommendations:"
+            ),
             AnalysisType.EXPLAIN: "Explain the following in clear, understandable terms:",
             AnalysisType.CLASSIFY: "Classify the following data into appropriate categories:",
             AnalysisType.COMPARE: "Compare the following items and highlight key differences:",
@@ -457,7 +463,7 @@ def create_analysis_request(
     analysis_type: str | AnalysisType,
     data: dict[str, Any],
     question: str = "",
-    **kwargs,
+    **kwargs: Any,
 ) -> AnalysisRequest:
     """Create an analysis request with common defaults."""
     if isinstance(analysis_type, str):

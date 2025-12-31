@@ -55,7 +55,7 @@ def _get_namespace(config: dict[str, Any]) -> str:
         return _CACHED_NAMESPACE
 
     except Exception as e:
-        raise RuntimeError(f"Failed to list Log Analytics namespaces: {str(e)}")
+        raise RuntimeError(f"Failed to list Log Analytics namespaces: {e}") from e
 
 def _format_logs_markdown(results: list[dict[str, Any]]) -> str:
     """Format log query results as a Markdown table."""
@@ -87,7 +87,7 @@ def get_logs(
 ) -> str | list[dict]:
     """
     Run a query against OCI Log Analytics.
-    
+
     Args:
         query: The Log Analytics query string (e.g., "* | stats count by 'Log Source'")
         time_range: Time window (e.g. "60m", "24h", "7d")
@@ -107,7 +107,6 @@ def get_logs(
         # Parse time range simple handling
         from datetime import datetime, timedelta
         now = datetime.now(UTC)
-        time_filter = None
 
         # OCI SDK expects TimeRange object or string?
         # The QueryDetails object takes `time_filter` as TimeRange.

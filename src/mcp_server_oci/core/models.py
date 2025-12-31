@@ -69,7 +69,7 @@ class BaseToolInput(BaseModel):
 
 class OCIContextInput(BaseToolInput):
     """Base model for OCI tools with context injection support.
-    
+
     These fields can be injected by the ToolCatalog.setContext() on the client side.
     """
 
@@ -89,9 +89,14 @@ class OCIContextInput(BaseToolInput):
     @field_validator('compartment_id')
     @classmethod
     def validate_compartment_ocid(cls, v: str | None) -> str | None:
-        if v is not None and not v.startswith('ocid1.compartment.') and not v.startswith('ocid1.tenancy.'):
+        if v is None:
+            return v
+        is_compartment = v.startswith('ocid1.compartment.')
+        is_tenancy = v.startswith('ocid1.tenancy.')
+        if not is_compartment and not is_tenancy:
             raise ValueError(
-                "Invalid compartment OCID format. Expected 'ocid1.compartment.oc1...' or 'ocid1.tenancy.oc1...'"
+                "Invalid compartment OCID format. "
+                "Expected 'ocid1.compartment.oc1...' or 'ocid1.tenancy.oc1...'"
             )
         return v
 
@@ -130,8 +135,9 @@ class TimeRangeInput(OCIContextInput):
     def validate_datetime(cls, v: str) -> str:
         try:
             datetime.fromisoformat(v.replace('Z', '+00:00'))
-        except ValueError:
-            raise ValueError(f"Invalid datetime format: {v}. Use ISO format: YYYY-MM-DDTHH:MM:SSZ")
+        except ValueError as e:
+            msg = f"Invalid datetime format: {v}. Use ISO format: YYYY-MM-DDTHH:MM:SSZ"
+            raise ValueError(msg) from e
         return v
 
 
@@ -235,7 +241,9 @@ class HealthStatus(BaseModel):
     oci_connected: bool = Field(description="Whether OCI is connected")
     auth_method: str | None = Field(default=None, description="OCI authentication method")
     region: str | None = Field(default=None, description="OCI region")
-    observability_enabled: bool = Field(default=False, description="Whether observability is enabled")
+    observability_enabled: bool = Field(
+        default=False, description="Whether observability is enabled"
+    )
     details: dict[str, Any] = Field(
         default_factory=dict,
         description="Detailed health check results"

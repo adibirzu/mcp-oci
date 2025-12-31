@@ -56,6 +56,19 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "C4", "SIM"]
+ignore = [
+    "ANN401",  # Any type hints - acceptable for OCI SDK interop
+    "ANN204",  # Missing return type for __init__ and special methods
+    "E402",    # Module imports not at top - intentional for tool registration
+    "UP046",   # Non-PEP695 generic class - Python 3.12+ syntax
+    "UP047",   # Non-PEP695 generic function - Python 3.12+ syntax
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow Any type hints in files dealing with OCI SDK objects
+"src/mcp_server_oci/tools/*" = ["ANN401"]
+"src/mcp_server_oci/skills/*" = ["ANN401"]
+"src/mcp_server_oci/core/client.py" = ["ANN401"]
 
 [tool.mypy]
 python_version = "3.12"

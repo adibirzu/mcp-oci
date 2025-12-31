@@ -6,6 +6,8 @@ getting details, and lifecycle actions (start/stop/restart).
 """
 from __future__ import annotations
 
+from mcp_server_oci.core.formatters import ResponseFormat
+
 from .formatters import ComputeFormatter
 from .models import (
     GetInstanceInput,
@@ -16,7 +18,6 @@ from .models import (
     LifecycleState,
     ListInstancesInput,
     ListInstancesOutput,
-    ResponseFormat,
 )
 from .tools import register_compute_tools
 

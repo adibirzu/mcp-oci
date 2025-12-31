@@ -1,8 +1,9 @@
 ---
 name: oci-mcp
-version: 2.2.0
+version: 2.3.0
 description: Oracle Cloud Infrastructure MCP server providing comprehensive cloud management capabilities through the Model Context Protocol.
 transport: stdio
+tools: 44
 ---
 
 # OCI MCP Server Skill
@@ -283,3 +284,51 @@ See the `skills/` directory for examples. Key patterns:
 2. Call tools via `executor.call_tool()`
 3. Use `executor.analyze()` for LLM-powered analysis
 4. Return formatted results with recommendations
+
+### Skills Framework Components
+
+| Component | Description |
+|-----------|-------------|
+| `SkillExecutor` | Coordinates tool calls with timing and progress |
+| `AgentContext` | Carries state between skill steps |
+| `SamplingClient` | Enables LLM analysis during skill execution |
+| `SkillProgress` | Tracks step completion percentages |
+
+## Agent Context
+
+For multi-step skills that need to maintain state:
+
+```python
+from mcp_server_oci.skills import AgentContext
+
+context = AgentContext(skill_name="troubleshoot")
+context.add_finding("cpu_high", {"value": 95, "threshold": 80})
+context.add_recommendation("Consider scaling up the instance")
+```
+
+## Inter-Agent Communication
+
+For skills that need to share findings across agent sessions:
+
+```python
+from mcp_server_oci.core import share_finding, get_shared_findings
+
+# Share a finding
+await share_finding(
+    agent_id="troubleshooter",
+    category="performance",
+    severity="warning",
+    message="High CPU on instance xyz"
+)
+
+# Retrieve shared findings
+findings = await get_shared_findings(category="performance")
+```
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.3.0 | 2025-12-31 | Skills framework, caching, shared memory, code quality fixes |
+| 2.2.0 | 2025-12-30 | Tool aliases, observability enhancements |
+| 2.0.0 | 2025-12-28 | FastMCP migration, progressive disclosure |

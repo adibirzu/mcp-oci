@@ -47,7 +47,10 @@ def _serialize_subnet(subnet: Any) -> dict:
         "cidr_block": subnet.cidr_block,
         "lifecycle_state": subnet.lifecycle_state,
         "availability_domain": subnet.availability_domain,
-        "is_public": not subnet.prohibit_public_ip_on_vnic if hasattr(subnet, 'prohibit_public_ip_on_vnic') else True,
+        "is_public": (
+            not subnet.prohibit_public_ip_on_vnic
+            if hasattr(subnet, 'prohibit_public_ip_on_vnic') else True
+        ),
         "dns_label": subnet.dns_label,
         "vcn_id": subnet.vcn_id,
         "route_table_id": subnet.route_table_id,
@@ -68,10 +71,12 @@ def _serialize_security_list(sl: Any) -> dict:
 
         if direction == "INGRESS":
             result["source"] = rule.source
-            result["source_type"] = rule.source_type if hasattr(rule, 'source_type') else "CIDR_BLOCK"
+            src_type = getattr(rule, 'source_type', "CIDR_BLOCK")
+            result["source_type"] = src_type
         else:
             result["destination"] = rule.destination
-            result["destination_type"] = rule.destination_type if hasattr(rule, 'destination_type') else "CIDR_BLOCK"
+            dst_type = getattr(rule, 'destination_type', "CIDR_BLOCK")
+            result["destination_type"] = dst_type
 
         # TCP options
         if hasattr(rule, 'tcp_options') and rule.tcp_options:
@@ -129,7 +134,8 @@ def _analyze_risky_rules(security_lists: list[dict]) -> dict:
     total_rules = 0
 
     risky_sources = ["0.0.0.0/0", "::/0"]
-    risky_ports = [22, 3389, 1521, 3306, 5432, 27017]  # SSH, RDP, Oracle DB, MySQL, PostgreSQL, MongoDB
+    # SSH, RDP, Oracle DB, MySQL, PostgreSQL, MongoDB
+    risky_ports = [22, 3389, 1521, 3306, 5432, 27017]
 
     for sl in security_lists:
         for rule in sl.get("ingress_security_rules", []):
@@ -154,8 +160,14 @@ def _analyze_risky_rules(security_lists: list[dict]) -> dict:
                         for risky_port in risky_ports:
                             if min_port <= risky_port <= max_port:
                                 risk_level = "HIGH"
-                                reason = f"Rule exposes sensitive port {risky_port} to the internet"
-                                recommendation = f"Restrict access to port {risky_port} to specific IP addresses"
+                                reason = (
+                                    f"Rule exposes sensitive port {risky_port} "
+                                    "to the internet"
+                                )
+                                recommendation = (
+                                    f"Restrict access to port {risky_port} "
+                                    "to specific IP addresses"
+                                )
                                 break
 
                 risky_rules.append({
@@ -165,23 +177,32 @@ def _analyze_risky_rules(security_lists: list[dict]) -> dict:
                         "direction": "INGRESS",
                         "protocol": protocol,
                         "source_or_destination": source,
-                        "port_range": str(tcp_options.get("destination_port_range")) if tcp_options else None,
+                        "port_range": (
+                            str(tcp_options.get("destination_port_range"))
+                            if tcp_options else None
+                        ),
                     },
                     "risk_level": risk_level,
                     "reason": reason,
                     "recommendation": recommendation,
                 })
 
-        for rule in sl.get("egress_security_rules", []):
+        for _rule in sl.get("egress_security_rules", []):
             total_rules += 1
 
     return {
         "total_rules": total_rules,
         "risky_rules": risky_rules,
         "summary": {
-            "high_risk": len([r for r in risky_rules if r["risk_level"] == "HIGH"]),
-            "medium_risk": len([r for r in risky_rules if r["risk_level"] == "MEDIUM"]),
-            "low_risk": len([r for r in risky_rules if r["risk_level"] == "LOW"]),
+            "high_risk": len(
+                [r for r in risky_rules if r["risk_level"] == "HIGH"]
+            ),
+            "medium_risk": len(
+                [r for r in risky_rules if r["risk_level"] == "MEDIUM"]
+            ),
+            "low_risk": len(
+                [r for r in risky_rules if r["risk_level"] == "LOW"]
+            ),
         }
     }
 
@@ -201,7 +222,7 @@ def register_network_tools(mcp: FastMCP) -> None:
     )
     async def list_vcns(params: ListVcnsInput) -> str:
         """List Virtual Cloud Networks (VCNs) in a compartment.
-        
+
         Returns VCNs with their CIDR blocks, states, and subnet counts.
         """
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
@@ -219,8 +240,9 @@ def register_network_tools(mcp: FastMCP) -> None:
                 # Apply filters
                 if params.lifecycle_state and vcn.lifecycle_state != params.lifecycle_state.value:
                     continue
-                if params.display_name and params.display_name.lower() not in vcn.display_name.lower():
-                    continue
+                if params.display_name:
+                    if params.display_name.lower() not in vcn.display_name.lower():
+                        continue
 
                 vcn_data = _serialize_vcn(vcn)
 
@@ -254,7 +276,7 @@ def register_network_tools(mcp: FastMCP) -> None:
     )
     async def get_vcn(params: GetVcnInput) -> str:
         """Get detailed information about a specific VCN.
-        
+
         Includes subnets and security lists if requested.
         """
         try:
@@ -307,7 +329,7 @@ def register_network_tools(mcp: FastMCP) -> None:
     )
     async def list_subnets(params: ListSubnetsInput) -> str:
         """List subnets in a compartment or VCN.
-        
+
         Returns subnet CIDR blocks, availability domains, and public/private status.
         """
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
@@ -325,10 +347,12 @@ def register_network_tools(mcp: FastMCP) -> None:
 
             subnets = []
             for subnet in response.data:
-                if params.lifecycle_state and subnet.lifecycle_state != params.lifecycle_state.value:
-                    continue
-                if params.display_name and params.display_name.lower() not in subnet.display_name.lower():
-                    continue
+                if params.lifecycle_state:
+                    if subnet.lifecycle_state != params.lifecycle_state.value:
+                        continue
+                if params.display_name:
+                    if params.display_name.lower() not in subnet.display_name.lower():
+                        continue
 
                 subnets.append(_serialize_subnet(subnet))
 
@@ -356,7 +380,7 @@ def register_network_tools(mcp: FastMCP) -> None:
     )
     async def list_security_lists(params: ListSecurityListsInput) -> str:
         """List security lists with their ingress and egress rules.
-        
+
         Shows rule counts and basic rule information.
         """
         compartment_id = params.compartment_id or os.environ.get("COMPARTMENT_OCID")
@@ -374,8 +398,9 @@ def register_network_tools(mcp: FastMCP) -> None:
 
             security_lists = []
             for sl in response.data:
-                if params.display_name and params.display_name.lower() not in sl.display_name.lower():
-                    continue
+                if params.display_name:
+                    if params.display_name.lower() not in sl.display_name.lower():
+                        continue
 
                 security_lists.append(_serialize_security_list(sl))
 
@@ -403,8 +428,8 @@ def register_network_tools(mcp: FastMCP) -> None:
     )
     async def analyze_security_rules(params: AnalyzeSecurityRulesInput) -> str:
         """Analyze security rules for potential risks.
-        
-        Identifies overly permissive rules (e.g., 0.0.0.0/0) and 
+
+        Identifies overly permissive rules (e.g., 0.0.0.0/0) and
         exposed sensitive ports.
         """
         if not params.vcn_id and not params.security_list_id:

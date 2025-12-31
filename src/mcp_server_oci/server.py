@@ -15,6 +15,7 @@ Environment Variables:
 - See core/client.py for OCI configuration variables
 """
 import json
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastmcp import Context, FastMCP
@@ -53,10 +54,10 @@ logger = get_logger("oci-mcp.server")
 
 
 @asynccontextmanager
-async def app_lifespan(server: FastMCP):
+async def app_lifespan(server: FastMCP) -> AsyncGenerator[None, None]:
     """
     Initialize resources on startup, cleanup on shutdown.
-    
+
     This context manager:
     1. Initializes observability (logging, tracing)
     2. Initializes the OCI client manager
@@ -111,7 +112,7 @@ async def app_lifespan(server: FastMCP):
 # Initialize FastMCP Server with lifespan
 mcp = FastMCP(
     name=config.server.name,
-    instructions="""Oracle Cloud Infrastructure MCP Server providing comprehensive 
+    instructions="""Oracle Cloud Infrastructure MCP Server providing comprehensive
 cloud management capabilities through the Model Context Protocol.
 
 Use `oci_search_tools` to discover available tools.
@@ -139,10 +140,10 @@ Use `oci_ping` to verify server health.
 async def oci_ping() -> str:
     """
     Simple health check to verify the MCP server is responsive.
-    
+
     Returns server status, version, and OCI connection health.
     Should respond in <500ms.
-    
+
     Returns:
         Health status with server info and OCI connection state
     """
@@ -180,13 +181,13 @@ async def oci_ping() -> str:
 async def oci_list_domains(include_tool_count: bool = True) -> str:
     """
     List available OCI tool domains.
-    
+
     Returns all available domains with descriptions and tool counts.
     Use this to understand what capability areas are available.
-    
+
     Args:
         include_tool_count: Include number of tools per domain
-        
+
     Returns:
         List of domains with descriptions
     """
@@ -194,35 +195,61 @@ async def oci_list_domains(include_tool_count: bool = True) -> str:
     domains = {
         "compute": {
             "description": "Instance management, shapes, and performance metrics",
-            "tools": ["list_instances", "start_instance", "stop_instance", "restart_instance", "get_instance_metrics"],
+            "tools": [
+                "list_instances", "start_instance", "stop_instance",
+                "restart_instance", "get_instance_metrics"
+            ],
         },
         "cost": {
-            "description": "Cost analysis, budgeting, forecasting, and FinOps optimization",
-            "tools": ["oci_cost_get_summary", "oci_cost_by_service", "oci_cost_by_compartment", "oci_cost_monthly_trend", "oci_cost_detect_anomalies"],
+            "description": "Cost analysis, budgeting, forecasting, and FinOps",
+            "tools": [
+                "oci_cost_get_summary", "oci_cost_by_service",
+                "oci_cost_by_compartment", "oci_cost_monthly_trend",
+                "oci_cost_detect_anomalies"
+            ],
         },
         "database": {
             "description": "Autonomous Database, DB Systems, and MySQL management",
-            "tools": ["oci_database_list_autonomous", "oci_database_get_autonomous", "oci_database_start_autonomous", "oci_database_stop_autonomous", "oci_database_list_dbsystems"],
+            "tools": [
+                "oci_database_list_autonomous", "oci_database_get_autonomous",
+                "oci_database_start_autonomous", "oci_database_stop_autonomous",
+                "oci_database_list_dbsystems"
+            ],
         },
         "network": {
-            "description": "VCN, Subnet, and Security List management with security analysis",
-            "tools": ["oci_network_list_vcns", "oci_network_get_vcn", "oci_network_list_subnets", "oci_network_list_security_lists", "oci_network_analyze_security"],
+            "description": "VCN, Subnet, Security List management and analysis",
+            "tools": [
+                "oci_network_list_vcns", "oci_network_get_vcn",
+                "oci_network_list_subnets", "oci_network_list_security_lists",
+                "oci_network_analyze_security"
+            ],
         },
         "security": {
             "description": "IAM, Cloud Guard, and security policy management",
-            "tools": ["oci_security_list_users", "oci_security_get_user", "oci_security_list_groups", "oci_security_list_policies", "oci_security_list_cloud_guard_problems", "oci_security_audit"],
+            "tools": [
+                "oci_security_list_users", "oci_security_get_user",
+                "oci_security_list_groups", "oci_security_list_policies",
+                "oci_security_list_cloud_guard_problems", "oci_security_audit"
+            ],
         },
         "observability": {
-            "description": "Logging Analytics, monitoring, alarms, and metrics queries",
-            "tools": ["oci_observability_get_metrics", "oci_observability_list_alarms", "oci_observability_get_alarm", "oci_observability_query_logs", "oci_observability_get_log_source"],
+            "description": "Logging Analytics, monitoring, alarms, and metrics",
+            "tools": [
+                "oci_observability_get_metrics", "oci_observability_list_alarms",
+                "oci_observability_get_alarm", "oci_observability_query_logs",
+                "oci_observability_get_log_source"
+            ],
         },
         "skills": {
-            "description": "High-level workflow skills that combine multiple operations",
+            "description": "High-level workflow skills combining operations",
             "tools": ["oci_skill_troubleshoot_instance"],
         },
         "discovery": {
             "description": "Tool discovery and server information",
-            "tools": ["oci_ping", "oci_list_domains", "oci_search_tools", "oci_get_manifest"],
+            "tools": [
+                "oci_ping", "oci_list_domains",
+                "oci_search_tools", "oci_get_manifest"
+            ],
         },
     }
 
@@ -256,18 +283,18 @@ async def oci_search_tools(
 ) -> str:
     """
     Search for OCI tools matching a query.
-    
+
     Use this to discover available tools before executing them.
     Supports different detail levels for efficient context usage.
-    
+
     Args:
         query: Search keywords (e.g., "cost", "instances", "logs")
         domain: Optional filter by domain (compute, observability, etc.)
         detail_level: Level of detail: 'name_only', 'summary', or 'full'
-        
+
     Returns:
         Matching tools at requested detail level
-        
+
     Example:
         {"query": "instance", "detail_level": "summary"}
         {"query": "metrics", "domain": "observability"}
@@ -283,10 +310,8 @@ async def oci_search_tools(
         desc = tool.description or ""
 
         # Domain filtering
-        if d:
-            # Check if domain string is in name or description
-            if d not in name.lower() and d not in desc.lower():
-                continue
+        if d and d not in name.lower() and d not in desc.lower():
+            continue
 
         # Query matching
         if q in name.lower() or q in desc.lower():
@@ -306,7 +331,9 @@ async def oci_search_tools(
         lines = ["## Matching Tools\n"]
         for t in results:
             lines.append(f"**{t['name']}**")
-            lines.append(f"  {t['description'][:100]}...\n" if len(t['description']) > 100 else f"  {t['description']}\n")
+            desc = t['description']
+            desc_line = f"  {desc[:100]}...\n" if len(desc) > 100 else f"  {desc}\n"
+            lines.append(desc_line)
         return "\n".join(lines)
     else:  # full
         return json.dumps(results, indent=2)
@@ -351,7 +378,7 @@ async def get_cache_stats() -> str:
 async def get_manifest() -> str:
     """
     Return server manifest for client optimization.
-    
+
     Provides server metadata, capabilities, and tool categorization
     for efficient client-side caching and tool discovery.
     """
@@ -366,10 +393,25 @@ async def get_manifest() -> str:
                 "domains": ["compute", "observability"],
             },
             "tools": {
-                "tier1_instant": ["oci_ping", "oci_search_tools", "oci_list_domains", "oci_get_cache_stats"],
-                "tier2_api": ["oci_compute_list_instances", "oci_observability_get_instance_metrics", "oci_observability_execute_log_query", "oci_network_list_vcns", "oci_network_list_subnets", "oci_security_list_users", "oci_security_list_policies"],
-                "tier3_heavy": ["oci_security_audit", "oci_skill_troubleshoot_instance"],
-                "tier4_admin": ["oci_compute_start_instance", "oci_compute_stop_instance", "oci_compute_restart_instance"],
+                "tier1_instant": [
+                    "oci_ping", "oci_search_tools",
+                    "oci_list_domains", "oci_get_cache_stats"
+                ],
+                "tier2_api": [
+                    "oci_compute_list_instances",
+                    "oci_observability_get_instance_metrics",
+                    "oci_observability_execute_log_query",
+                    "oci_network_list_vcns", "oci_network_list_subnets",
+                    "oci_security_list_users", "oci_security_list_policies"
+                ],
+                "tier3_heavy": [
+                    "oci_security_audit", "oci_skill_troubleshoot_instance"
+                ],
+                "tier4_admin": [
+                    "oci_compute_start_instance",
+                    "oci_compute_stop_instance",
+                    "oci_compute_restart_instance"
+                ],
             }
         },
         domains=[
@@ -388,7 +430,11 @@ async def get_manifest() -> str:
             "COMPARTMENT_OCID",
             "ALLOW_MUTATIONS",
         ],
-        usage_guide="Use oci_list_domains() to discover capabilities, then oci_search_tools() to find specific tools. Skills are composite operations that combine multiple tools for complex workflows.",
+        usage_guide=(
+            "Use oci_list_domains() to discover capabilities, then "
+            "oci_search_tools() to find specific tools. Skills are composite "
+            "operations that combine multiple tools for complex workflows."
+        ),
     )
 
     return manifest.model_dump_json(indent=2)
@@ -466,10 +512,11 @@ async def list_instances_alias(params: ListInstancesInput, ctx: Context) -> str:
 
         compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID")
         if not compartment_id:
-            return format_error_response(
-                "Compartment OCID required. Provide compartment_id or set COMPARTMENT_OCID env var.",
-                params.response_format.value
+            msg = (
+                "Compartment OCID required. "
+                "Provide compartment_id or set COMPARTMENT_OCID env var."
             )
+            return format_error_response(msg, params.response_format.value)
 
         kwargs = {"compartment_id": compartment_id, "limit": params.limit}
         if params.lifecycle_state:
@@ -495,22 +542,25 @@ async def list_instances_alias(params: ListInstancesInput, ctx: Context) -> str:
                 "private_ip": None,
             }
 
-            if params.display_name:
-                if params.display_name.lower() not in inst.display_name.lower():
-                    continue
+            # Filter by display name if provided
+            name_filter = params.display_name
+            if name_filter and name_filter.lower() not in inst.display_name.lower():
+                continue
 
             instances.append(instance_data)
 
         if params.include_ips and instances:
             instances = await _fetch_instance_ips(client_mgr, instances)
 
+        has_more = len(response.data) == params.limit
+        next_offset = params.offset + len(instances) if has_more else None
         output_data = {
             "total": len(instances),
             "count": len(instances),
             "offset": params.offset,
             "instances": instances,
-            "has_more": len(response.data) == params.limit,
-            "next_offset": params.offset + len(instances) if len(response.data) == params.limit else None
+            "has_more": has_more,
+            "next_offset": next_offset
         }
 
         if params.response_format == ResponseFormat.JSON:
@@ -545,7 +595,7 @@ async def start_instance_alias(params: InstanceActionInput, ctx: Context) -> str
     from mcp_server_oci.core.errors import format_error_response, handle_oci_error
     from mcp_server_oci.core.formatters import ResponseFormat
 
-    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+    if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
         return format_error_response(
             "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
             params.response_format.value
@@ -608,7 +658,7 @@ async def stop_instance_alias(params: InstanceActionInput, ctx: Context) -> str:
     from mcp_server_oci.core.errors import format_error_response, handle_oci_error
     from mcp_server_oci.core.formatters import ResponseFormat
 
-    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+    if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
         return format_error_response(
             "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
             params.response_format.value
@@ -631,13 +681,14 @@ async def stop_instance_alias(params: InstanceActionInput, ctx: Context) -> str:
             action
         )
 
+        stop_type = "Hard" if params.force else "Soft"
         result = {
             "success": True,
             "instance_id": params.instance_id,
             "action": "stop" + (" (forced)" if params.force else ""),
             "previous_state": previous_state,
             "target_state": "STOPPED",
-            "message": f"{'Hard' if params.force else 'Soft'} stop initiated. Instance will be stopped shortly."
+            "message": f"{stop_type} stop initiated. Instance will be stopped shortly."
         }
 
         if params.response_format == ResponseFormat.JSON:
@@ -672,7 +723,7 @@ async def restart_instance_alias(params: InstanceActionInput, ctx: Context) -> s
     from mcp_server_oci.core.errors import format_error_response, handle_oci_error
     from mcp_server_oci.core.formatters import ResponseFormat
 
-    if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+    if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
         return format_error_response(
             "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
             params.response_format.value
@@ -695,13 +746,14 @@ async def restart_instance_alias(params: InstanceActionInput, ctx: Context) -> s
             action
         )
 
+        restart_type = "Hard" if params.force else "Soft"
         result = {
             "success": True,
             "instance_id": params.instance_id,
             "action": "restart" + (" (hard)" if params.force else " (soft)"),
             "previous_state": previous_state,
             "target_state": "RUNNING",
-            "message": f"{'Hard' if params.force else 'Soft'} restart initiated. Instance will be running shortly."
+            "message": f"{restart_type} restart initiated. Instance will be running."
         }
 
         if params.response_format == ResponseFormat.JSON:

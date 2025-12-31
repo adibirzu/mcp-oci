@@ -3,16 +3,15 @@ OCI Compute domain tool implementations.
 
 Uses FastMCP patterns with Pydantic models and proper error handling.
 """
-from __future__ import annotations
-
 import asyncio
 import os
+from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from fastmcp import Context, FastMCP
 
 from mcp_server_oci.core.client import get_client_manager
 from mcp_server_oci.core.errors import format_error_response, handle_oci_error
-from mcp_server_oci.core.models import ResponseFormat
+from mcp_server_oci.core.formatters import ResponseFormat
 
 from .formatters import ComputeFormatter
 from .models import (
@@ -37,35 +36,32 @@ def register_compute_tools(mcp: FastMCP) -> None:
     )
     async def list_instances(params: ListInstancesInput, ctx: Context) -> str:
         """List compute instances in a compartment with filtering and pagination.
-        
+
         Retrieves instances with their current state, shape, and optionally
         IP addresses. Supports filtering by lifecycle state and display name.
-        
+
         Args:
             params: ListInstancesInput with compartment_id, lifecycle_state,
                    limit, offset, and response_format
-        
+
         Returns:
             Instance list in requested format (markdown table or json)
-        
+
         Example:
             {"compartment_id": "ocid1.compartment...", "lifecycle_state": "RUNNING", "limit": 20}
         """
-        await ctx.report_progress(0.1, "Connecting to OCI...")
-
         try:
-            client_mgr = await get_client_manager()
+            client_mgr = get_client_manager()
             compute_client = client_mgr.compute
 
             # Get compartment ID from params or environment
             compartment_id = params.compartment_id or os.getenv("COMPARTMENT_OCID")
             if not compartment_id:
-                return format_error_response(
-                    "Compartment OCID required. Provide compartment_id or set COMPARTMENT_OCID env var.",
-                    params.response_format.value
+                msg = (
+                    "Compartment OCID required. "
+                    "Provide compartment_id or set COMPARTMENT_OCID env var."
                 )
-
-            await ctx.report_progress(0.3, "Fetching instances...")
+                return format_error_response(msg, params.response_format.value)
 
             # Build query parameters
             kwargs = {"compartment_id": compartment_id, "limit": params.limit}
@@ -77,8 +73,6 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 compute_client.list_instances,
                 **kwargs
             )
-
-            await ctx.report_progress(0.6, "Processing results...")
 
             # Process instances
             instances = []
@@ -97,27 +91,26 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 }
 
                 # Filter by display name if provided
-                if params.display_name:
-                    if params.display_name.lower() not in inst.display_name.lower():
-                        continue
+                name_filter = params.display_name
+                if name_filter and name_filter.lower() not in inst.display_name.lower():
+                    continue
 
                 instances.append(instance_data)
 
             # Fetch IPs if requested (slower)
             if params.include_ips and instances:
-                await ctx.report_progress(0.7, "Fetching IP addresses...")
                 instances = await _fetch_instance_ips(client_mgr, instances)
 
-            await ctx.report_progress(0.9, "Formatting output...")
-
             # Build output
+            has_more = len(response.data) == params.limit
+            next_offset = params.offset + len(instances) if has_more else None
             output_data = {
                 "total": len(instances),
                 "count": len(instances),
                 "offset": params.offset,
                 "instances": instances,
-                "has_more": len(response.data) == params.limit,
-                "next_offset": params.offset + len(instances) if len(response.data) == params.limit else None
+                "has_more": has_more,
+                "next_offset": next_offset,
             }
 
             if params.response_format == ResponseFormat.JSON:
@@ -141,20 +134,18 @@ def register_compute_tools(mcp: FastMCP) -> None:
     )
     async def get_instance(params: GetInstanceInput, ctx: Context) -> str:
         """Get detailed information about a specific compute instance.
-        
+
         Retrieves full instance details including shape configuration,
         network info, and optionally recent metrics.
-        
+
         Args:
             params: GetInstanceInput with instance_id and include_metrics
-        
+
         Returns:
             Instance details in requested format
         """
-        await ctx.report_progress(0.1, "Fetching instance details...")
-
         try:
-            client_mgr = await get_client_manager()
+            client_mgr = get_client_manager()
             compute_client = client_mgr.compute
 
             response = await asyncio.to_thread(
@@ -163,8 +154,6 @@ def register_compute_tools(mcp: FastMCP) -> None:
             )
 
             inst = response.data
-
-            await ctx.report_progress(0.5, "Processing instance data...")
 
             instance_data = {
                 "id": inst.id,
@@ -181,17 +170,13 @@ def register_compute_tools(mcp: FastMCP) -> None:
             }
 
             # Get IPs
-            await ctx.report_progress(0.6, "Fetching network info...")
             instance_data = (await _fetch_instance_ips(client_mgr, [instance_data]))[0]
 
             # Get metrics if requested
             if params.include_metrics:
-                await ctx.report_progress(0.8, "Fetching metrics...")
                 instance_data["metrics"] = await _fetch_instance_metrics(
                     client_mgr, inst.id, inst.compartment_id
                 )
-
-            await ctx.report_progress(0.95, "Formatting output...")
 
             if params.response_format == ResponseFormat.JSON:
                 return ComputeFormatter.to_json(instance_data)
@@ -214,26 +199,24 @@ def register_compute_tools(mcp: FastMCP) -> None:
     )
     async def start_instance(params: InstanceActionInput, ctx: Context) -> str:
         """Start a stopped compute instance.
-        
+
         Initiates the start action on an instance. Requires ALLOW_MUTATIONS=true.
-        
+
         Args:
             params: InstanceActionInput with instance_id
-        
+
         Returns:
             Action result with status
         """
         # Check mutations allowed
-        if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
             return format_error_response(
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
 
-        await ctx.report_progress(0.1, "Starting instance...")
-
         try:
-            client_mgr = await get_client_manager()
+            client_mgr = get_client_manager()
             compute_client = client_mgr.compute
 
             # Get current state first
@@ -242,8 +225,6 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 params.instance_id
             )
             previous_state = current.data.lifecycle_state
-
-            await ctx.report_progress(0.3, "Sending start command...")
 
             # Perform action
             await asyncio.to_thread(
@@ -282,26 +263,24 @@ def register_compute_tools(mcp: FastMCP) -> None:
     )
     async def stop_instance(params: InstanceActionInput, ctx: Context) -> str:
         """Stop a running compute instance.
-        
+
         Initiates the stop action on an instance. Requires ALLOW_MUTATIONS=true.
         Use force=true for a hard stop (RESET action).
-        
+
         Args:
             params: InstanceActionInput with instance_id and force option
-        
+
         Returns:
             Action result with status
         """
-        if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
             return format_error_response(
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
 
-        await ctx.report_progress(0.1, "Stopping instance...")
-
         try:
-            client_mgr = await get_client_manager()
+            client_mgr = get_client_manager()
             compute_client = client_mgr.compute
 
             # Get current state first
@@ -311,8 +290,6 @@ def register_compute_tools(mcp: FastMCP) -> None:
             )
             previous_state = current.data.lifecycle_state
 
-            await ctx.report_progress(0.3, "Sending stop command...")
-
             # Perform action
             action = "RESET" if params.force else "STOP"
             await asyncio.to_thread(
@@ -321,13 +298,14 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 action
             )
 
+            stop_type = "Hard" if params.force else "Soft"
             result = {
                 "success": True,
                 "instance_id": params.instance_id,
                 "action": "stop" + (" (forced)" if params.force else ""),
                 "previous_state": previous_state,
                 "target_state": "STOPPED",
-                "message": f"{'Hard' if params.force else 'Soft'} stop initiated. Instance will be stopped shortly."
+                "message": f"{stop_type} stop initiated. Instance will be stopped shortly.",
             }
 
             if params.response_format == ResponseFormat.JSON:
@@ -351,26 +329,24 @@ def register_compute_tools(mcp: FastMCP) -> None:
     )
     async def restart_instance(params: InstanceActionInput, ctx: Context) -> str:
         """Restart a compute instance (soft reset).
-        
+
         Performs a soft reset on the instance. Requires ALLOW_MUTATIONS=true.
         Use force=true for a hard reset.
-        
+
         Args:
             params: InstanceActionInput with instance_id and force option
-        
+
         Returns:
             Action result with status
         """
-        if not os.getenv("ALLOW_MUTATIONS", "").lower() == "true":
+        if os.getenv("ALLOW_MUTATIONS", "").lower() != "true":
             return format_error_response(
                 "Mutations not allowed. Set ALLOW_MUTATIONS=true to enable.",
                 params.response_format.value
             )
 
-        await ctx.report_progress(0.1, "Restarting instance...")
-
         try:
-            client_mgr = await get_client_manager()
+            client_mgr = get_client_manager()
             compute_client = client_mgr.compute
 
             # Get current state first
@@ -380,8 +356,6 @@ def register_compute_tools(mcp: FastMCP) -> None:
             )
             previous_state = current.data.lifecycle_state
 
-            await ctx.report_progress(0.3, "Sending restart command...")
-
             # Perform action
             action = "RESET" if params.force else "SOFTRESET"
             await asyncio.to_thread(
@@ -390,13 +364,14 @@ def register_compute_tools(mcp: FastMCP) -> None:
                 action
             )
 
+            restart_type = "Hard" if params.force else "Soft"
             result = {
                 "success": True,
                 "instance_id": params.instance_id,
                 "action": "restart" + (" (hard)" if params.force else " (soft)"),
                 "previous_state": previous_state,
                 "target_state": "RUNNING",
-                "message": f"{'Hard' if params.force else 'Soft'} restart initiated. Instance will be running shortly."
+                "message": f"{restart_type} restart initiated. Instance will be running shortly.",
             }
 
             if params.response_format == ResponseFormat.JSON:
@@ -412,7 +387,10 @@ def register_compute_tools(mcp: FastMCP) -> None:
 # Helper Functions
 # =============================================================================
 
-async def _fetch_instance_ips(client_mgr, instances: list) -> list:
+async def _fetch_instance_ips(
+    client_mgr: Any,
+    instances: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Fetch IP addresses for instances."""
     import oci
 
@@ -450,7 +428,11 @@ async def _fetch_instance_ips(client_mgr, instances: list) -> list:
     return instances
 
 
-async def _fetch_instance_metrics(client_mgr, instance_id: str, compartment_id: str) -> dict:
+async def _fetch_instance_metrics(
+    client_mgr: Any,
+    instance_id: str,
+    compartment_id: str
+) -> dict[str, Any]:
     """Fetch recent metrics for an instance."""
     from datetime import datetime, timedelta
 

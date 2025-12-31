@@ -35,11 +35,13 @@ class SecurityFormatter:
         headers = ["Name", "Email", "State", "Created"]
         rows = []
         for user in users:
+            created = user.get("time_created")
+            created_str = Formatter.format_datetime(created) if created else "N/A"
             rows.append([
                 user.get("name", "N/A"),
                 user.get("email", "N/A"),
                 user.get("lifecycle_state", "N/A"),
-                Formatter.format_datetime(user.get("time_created", "")) if user.get("time_created") else "N/A",
+                created_str,
             ])
 
         md += MarkdownFormatter.table(headers, rows)
@@ -61,7 +63,9 @@ class SecurityFormatter:
         md += f"- **OCID:** `{Formatter.format_ocid(user.get('id', ''))}`\n"
         md += f"- **Email:** {user.get('email', 'N/A')}\n"
         md += f"- **State:** {user.get('lifecycle_state', 'N/A')}\n"
-        md += f"- **Created:** {Formatter.format_datetime(user.get('time_created', '')) if user.get('time_created') else 'N/A'}\n"
+        created = user.get('time_created')
+        created_str = Formatter.format_datetime(created) if created else 'N/A'
+        md += f"- **Created:** {created_str}\n"
         md += f"- **Description:** {user.get('description', 'N/A')}\n"
 
         # Groups
@@ -78,10 +82,15 @@ class SecurityFormatter:
             headers = ["Fingerprint", "State", "Created"]
             rows = []
             for key in api_keys:
+                created = key.get("time_created")
+                created_str = (
+                    Formatter.format_datetime(created)
+                    if created else "N/A"
+                )
                 rows.append([
                     key.get("fingerprint", "N/A")[:20] + "...",
                     key.get("lifecycle_state", "N/A"),
-                    Formatter.format_datetime(key.get("time_created", "")) if key.get("time_created") else "N/A",
+                    created_str,
                 ])
             md += MarkdownFormatter.table(headers, rows)
 
@@ -102,10 +111,14 @@ class SecurityFormatter:
         headers = ["Name", "Description", "Created"]
         rows = []
         for group in groups:
+            created = group.get("time_created")
+            created_str = (
+                Formatter.format_datetime(created) if created else "N/A"
+            )
             rows.append([
                 group.get("name", "N/A"),
                 (group.get("description", "N/A") or "N/A")[:50],
-                Formatter.format_datetime(group.get("time_created", "")) if group.get("time_created") else "N/A",
+                created_str,
             ])
 
         md += MarkdownFormatter.table(headers, rows)
@@ -182,11 +195,16 @@ class SecurityFormatter:
             md += f"- **Resource:** {problem.get('resource_name', 'N/A')}\n"
             md += f"- **Type:** {problem.get('resource_type', 'N/A')}\n"
             md += f"- **Region:** {problem.get('region', 'N/A')}\n"
-            md += f"- **First Detected:** {Formatter.format_datetime(problem.get('time_first_detected', '')) if problem.get('time_first_detected') else 'N/A'}\n"
+            detected = problem.get('time_first_detected')
+            detected_str = (
+                Formatter.format_datetime(detected) if detected else 'N/A'
+            )
+            md += f"- **First Detected:** {detected_str}\n"
 
             recommendation = problem.get("recommendation", "")
             if recommendation:
-                md += f"- **Recommendation:** {recommendation[:100]}{'...' if len(recommendation) > 100 else ''}\n"
+                suffix = '...' if len(recommendation) > 100 else ''
+                md += f"- **Recommendation:** {recommendation[:100]}{suffix}\n"
             md += "\n"
 
         return md

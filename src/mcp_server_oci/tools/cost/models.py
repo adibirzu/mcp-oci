@@ -68,8 +68,9 @@ class CostSummaryInput(BaseCostInput):
     def validate_datetime(cls, v: str) -> str:
         try:
             datetime.fromisoformat(v.replace('Z', '+00:00'))
-        except ValueError:
-            raise ValueError(f"Invalid datetime format: {v}. Use ISO format (e.g., '2024-01-01T00:00:00Z').")
+        except ValueError as e:
+            msg = f"Invalid datetime: {v}. Use ISO format (e.g., '2024-01-01T00:00:00Z')."
+            raise ValueError(msg) from e
         return v
 
 

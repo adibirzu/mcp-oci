@@ -4,9 +4,7 @@ Skill tool registrations for MCP server.
 This module handles the registration of skill tools with FastMCP,
 following the same pattern as domain tools (compute, cost, etc.).
 """
-from __future__ import annotations
-
-from mcp.server.fastmcp import Context, FastMCP
+from fastmcp import Context, FastMCP
 
 from .troubleshoot import TroubleshootInstanceInput, troubleshoot_instance
 

@@ -117,11 +117,19 @@ async def troubleshoot_instance(params: TroubleshootInstanceInput, ctx: Context)
 
     # Define workflow steps
     executor.add_step("get_instance", "Fetch instance details")
-    executor.add_step("get_metrics", "Analyze performance metrics", tool_name="get_instance_metrics")
+    executor.add_step(
+        "get_metrics", "Analyze performance metrics",
+        tool_name="get_instance_metrics"
+    )
     if params.include_logs:
-        executor.add_step("check_logs", "Search for error logs", tool_name="execute_log_query")
+        executor.add_step(
+            "check_logs", "Search for error logs",
+            tool_name="execute_log_query"
+        )
     if params.check_alarms:
-        executor.add_step("check_alarms", "Check active alarms", tool_name="list_alarms")
+        executor.add_step(
+            "check_alarms", "Check active alarms", tool_name="list_alarms"
+        )
     executor.add_step("analyze", "Generate recommendations")
 
     # Storage for findings
@@ -157,7 +165,8 @@ async def troubleshoot_instance(params: TroubleshootInstanceInput, ctx: Context)
 
         # Check if instance is running
         if instance_data.get("lifecycle_state") != "RUNNING":
-            findings["instance"]["warning"] = f"Instance is {instance_data.get('lifecycle_state')}, not RUNNING"
+            state = instance_data.get('lifecycle_state')
+            findings["instance"]["warning"] = f"Instance is {state}, not RUNNING"
             recommendations.append(
                 f"Instance is {instance_data.get('lifecycle_state')}. "
                 "Use oci_compute_start_instance to start it."
@@ -179,7 +188,7 @@ async def troubleshoot_instance(params: TroubleshootInstanceInput, ctx: Context)
 
             # Analyze CPU
             cpu_avg = metrics.get("cpu", {}).get("average", 0)
-            cpu_max = metrics.get("cpu", {}).get("max", 0)
+            metrics.get("cpu", {}).get("max", 0)
 
             if cpu_avg > 90:
                 findings["metrics"]["cpu_status"] = "CRITICAL"
@@ -428,7 +437,10 @@ async def _check_error_logs(
         start_time = end_time - delta
 
         # Count error logs
-        count_query = f"* | where 'Entity' = '{instance_id}' and 'Log Level' = 'ERROR' | stats count as ErrorCount"
+        count_query = (
+            f"* | where 'Entity' = '{instance_id}' "
+            f"and 'Log Level' = 'ERROR' | stats count as ErrorCount"
+        )
         count_response = await asyncio.to_thread(
             log_analytics.query,
             namespace_name=namespace,
@@ -454,7 +466,10 @@ async def _check_error_logs(
         # Get sample errors if count > 0
         samples = []
         if error_count > 0:
-            sample_query = f"* | where 'Entity' = '{instance_id}' and 'Log Level' = 'ERROR' | head 5"
+            sample_query = (
+                f"* | where 'Entity' = '{instance_id}' "
+                f"and 'Log Level' = 'ERROR' | head 5"
+            )
             sample_response = await asyncio.to_thread(
                 log_analytics.query,
                 namespace_name=namespace,
@@ -480,7 +495,7 @@ async def _check_error_logs(
         }
 
     except Exception as e:
-        raise RuntimeError(f"Log Analytics query failed: {e}")
+        raise RuntimeError(f"Log Analytics query failed: {e}") from e
 
 
 async def _check_instance_alarms(
@@ -505,11 +520,16 @@ async def _check_instance_alarms(
     for alarm in response.data:
         # Check if alarm query references this instance
         if instance_id in (alarm.query or ""):
+            is_firing = (
+                alarm.lifecycle_state == "ACTIVE"
+                and hasattr(alarm, "is_firing")
+                and alarm.is_firing
+            )
             alarm_info = {
                 "id": alarm.id,
                 "name": alarm.display_name,
                 "severity": alarm.severity,
-                "is_firing": alarm.lifecycle_state == "ACTIVE" and hasattr(alarm, "is_firing") and alarm.is_firing,
+                "is_firing": is_firing,
             }
             related_alarms.append(alarm_info)
             if alarm_info.get("is_firing"):
@@ -548,9 +568,13 @@ def _calculate_health_status(findings: dict[str, Any]) -> str:
 
     # Check metrics
     metrics = findings.get("metrics", {})
-    if metrics.get("cpu_status") == "CRITICAL" or metrics.get("memory_status") == "CRITICAL":
+    cpu_critical = metrics.get("cpu_status") == "CRITICAL"
+    mem_critical = metrics.get("memory_status") == "CRITICAL"
+    if cpu_critical or mem_critical:
         return "CRITICAL"
-    if metrics.get("cpu_status") == "WARNING" or metrics.get("memory_status") == "WARNING":
+    cpu_warn = metrics.get("cpu_status") == "WARNING"
+    mem_warn = metrics.get("memory_status") == "WARNING"
+    if cpu_warn or mem_warn:
         return "WARNING"
 
     # Check alarms
@@ -573,12 +597,22 @@ def _generate_summary(findings: dict[str, Any], health_status: str) -> str:
 
     cpu_avg = findings.get("metrics", {}).get("cpu", {}).get("average", 0)
 
+    cpu_str = f"{cpu_avg:.1f}%"
     if health_status == "CRITICAL":
-        return f"Instance '{instance_name}' requires immediate attention. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+        return (
+            f"Instance '{instance_name}' requires immediate attention. "
+            f"State: {instance_state}, CPU: {cpu_str}"
+        )
     elif health_status == "WARNING":
-        return f"Instance '{instance_name}' has warnings. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+        return (
+            f"Instance '{instance_name}' has warnings. "
+            f"State: {instance_state}, CPU: {cpu_str}"
+        )
     else:
-        return f"Instance '{instance_name}' is healthy. State: {instance_state}, CPU: {cpu_avg:.1f}%"
+        return (
+            f"Instance '{instance_name}' is healthy. "
+            f"State: {instance_state}, CPU: {cpu_str}"
+        )
 
 
 def _build_error_response(

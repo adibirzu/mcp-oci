@@ -24,7 +24,7 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -533,11 +533,11 @@ class ATPSharedStore(InMemorySharedStore):
                 )';
 
             -- Indexes
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_session ON mcp_contexts(session_id)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_resource ON mcp_contexts(resource_id)';
+            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_sess ON mcp_contexts(session_id)';
+            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_res ON mcp_contexts(resource_id)';
             EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_evt_type ON mcp_events(event_type)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_evt_source ON mcp_events(source_agent)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_conv_session ON mcp_conversations(session_id)';
+            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_evt_src ON mcp_events(source_agent)';
+            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_conv_sess ON mcp_conversations(session_id)';
         EXCEPTION
             WHEN OTHERS THEN
                 -- Tables may already exist
@@ -554,7 +554,7 @@ class ATPSharedStore(InMemorySharedStore):
             logger.error(f"Schema initialization failed: {e}")
 
     @asynccontextmanager
-    async def _get_connection(self):
+    async def _get_connection(self) -> AsyncGenerator[Any, None]:
         """Get a connection from the pool."""
         if not self._atp_available or not self._pool:
             raise RuntimeError("ATP not available")

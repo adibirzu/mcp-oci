@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from time import perf_counter
@@ -45,7 +46,7 @@ def configure_logging(
     service_name: str = "oci-mcp-server"
 ) -> None:
     """Configure structured logging.
-    
+
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR)
         json_format: If True, output JSON; otherwise console format
@@ -86,10 +87,10 @@ def configure_logging(
 
 def get_logger(name: str = "oci-mcp") -> structlog.BoundLogger:
     """Get a structured logger instance.
-    
+
     Args:
         name: Logger name
-        
+
     Returns:
         Configured structlog logger
     """
@@ -105,14 +106,14 @@ def init_tracing(
     service_version: str = "2.0.0"
 ) -> Any | None:
     """Initialize OpenTelemetry tracing with OCI APM backend.
-    
+
     This function attempts to initialize OTEL tracing. If the otel
     dependencies are not installed, it returns None gracefully.
-    
+
     Args:
         service_name: Service name for traces
         service_version: Service version
-        
+
     Returns:
         Tracer instance or None if disabled/unavailable
     """
@@ -175,7 +176,8 @@ def init_tracing(
     except ImportError:
         get_logger().info(
             "OpenTelemetry packages not installed",
-            hint="Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp"
+            hint="Install with: pip install opentelemetry-api "
+                 "opentelemetry-sdk opentelemetry-exporter-otlp"
         )
         return None
     except Exception as e:
@@ -251,22 +253,22 @@ async def observe_tool(
     tool_name: str,
     domain: str,
     params: dict[str, Any] | None = None
-):
+) -> AsyncGenerator[None, None]:
     """Context manager for unified tool observability.
-    
+
     Provides:
     - Structured logging (start, success, error)
     - Optional OTEL tracing if configured
     - Duration tracking
-    
+
     Args:
         tool_name: Name of the tool being executed
         domain: Domain the tool belongs to
         params: Tool parameters (sensitive data will be masked)
-        
+
     Yields:
         ToolExecutionContext with logging and timing utilities
-        
+
     Example:
         async with observe_tool("oci_cost_get_summary", "cost", params) as ctx:
             result = await do_work()
@@ -340,10 +342,10 @@ async def observe_tool(
 
 def _sanitize_params(params: dict[str, Any]) -> dict[str, Any]:
     """Remove or mask sensitive data from parameters.
-    
+
     Args:
         params: Original parameters
-        
+
     Returns:
         Sanitized parameters safe for logging
     """
@@ -371,10 +373,10 @@ def _sanitize_params(params: dict[str, Any]) -> dict[str, Any]:
 
 def mask_ocid(ocid: str) -> str:
     """Mask OCID for safe logging.
-    
+
     Args:
         ocid: Full OCID string
-        
+
     Returns:
         Masked OCID showing first 20 and last 5 chars
     """
@@ -389,7 +391,7 @@ def mask_ocid(ocid: str) -> str:
 
 async def check_observability_health() -> dict[str, Any]:
     """Check health of observability components.
-    
+
     Returns:
         Health status for tracing and logging
     """
@@ -417,7 +419,7 @@ def init_observability(
     json_logs: bool = False
 ) -> None:
     """Initialize all observability components.
-    
+
     Args:
         service_name: Service name for tracing/logging
         service_version: Service version

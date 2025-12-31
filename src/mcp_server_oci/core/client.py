@@ -34,13 +34,13 @@ T = TypeVar("T")
 
 class OCIClientManager:
     """Manages OCI SDK clients with proper lifecycle and caching.
-    
+
     This class provides:
     - Lazy client initialization
     - Thread-safe client caching
     - Multiple authentication method support
     - Convenient property access to common clients
-    
+
     Example:
         async with get_oci_client() as client:
             instances = client.compute.list_instances(compartment_id).data
@@ -53,7 +53,7 @@ class OCIClientManager:
         config_file: str | None = None
     ):
         """Initialize the client manager.
-        
+
         Args:
             profile: OCI config profile name (default: from env or DEFAULT)
             region: OCI region override
@@ -77,7 +77,7 @@ class OCIClientManager:
 
     async def initialize(self) -> None:
         """Initialize OCI configuration asynchronously.
-        
+
         This method determines the authentication method and loads
         the appropriate configuration. Safe to call multiple times.
         """
@@ -189,7 +189,7 @@ class OCIClientManager:
     @property
     def tenancy_id(self) -> str:
         """Get the tenancy OCID.
-        
+
         For config file auth, this comes from the config.
         For principals, this requires additional lookup.
         """
@@ -238,14 +238,14 @@ class OCIClientManager:
         region: str | None = None
     ) -> T:
         """Get or create a cached OCI client instance.
-        
+
         Args:
             client_class: OCI SDK client class (e.g., oci.core.ComputeClient)
             region: Optional region override for this client
-            
+
         Returns:
             Cached client instance
-            
+
         Example:
             compute = client.get_client(oci.core.ComputeClient)
         """
@@ -354,7 +354,7 @@ class OCIClientManager:
 
     async def health_check(self) -> dict[str, Any]:
         """Perform a health check on the OCI connection.
-        
+
         Returns:
             Health status with connection details
         """
@@ -366,7 +366,6 @@ class OCIClientManager:
 
         try:
             # Try a simple API call
-            identity = self.identity
             # Get tenancy info (if possible)
             try:
                 tenancy = self.tenancy_id
@@ -394,7 +393,7 @@ _client_manager: OCIClientManager | None = None
 
 def get_client_manager() -> OCIClientManager:
     """Get the global OCI client manager instance.
-    
+
     Creates a new instance if one doesn't exist.
     """
     global _client_manager
@@ -409,14 +408,14 @@ async def get_oci_client(
     region: str | None = None
 ) -> AsyncGenerator[OCIClientManager, None]:
     """Async context manager for OCI client access.
-    
+
     Args:
         profile: Optional OCI profile override
         region: Optional region override
-        
+
     Yields:
         Initialized OCIClientManager
-        
+
     Example:
         async with get_oci_client() as client:
             instances = await asyncio.to_thread(
@@ -442,13 +441,13 @@ oci_client_manager = get_client_manager()
 # Convenience function for sync code
 def get_oci_config(profile_name: str | None = None) -> dict[str, Any]:
     """Get OCI configuration dict (sync compatibility).
-    
+
     This function is provided for backward compatibility with
     the original auth.py interface.
-    
+
     Args:
         profile_name: OCI config profile name
-        
+
     Returns:
         OCI config dictionary
     """
