@@ -67,13 +67,12 @@ from .runbooks import (
 
 # Database troubleshooting skills
 from .troubleshoot_database import (
-    DatabaseConnectionIssue,
     DatabaseIssueType,
-    DatabasePerformanceMetrics,
+    DatabaseType,
     TroubleshootDatabaseInput,
-    TroubleshootDbConnectionsInput,
-    TroubleshootDbPerformanceInput,
-    TroubleshootDbStorageInput,
+    TroubleshootConnectionInput,
+    TroubleshootPerformanceInput,
+    TroubleshootStorageInput,
 )
 
 __all__ = [
@@ -122,11 +121,10 @@ __all__ = [
     "list_runbooks",
     "register_runbook",
     # Database troubleshooting
-    "DatabaseConnectionIssue",
     "DatabaseIssueType",
-    "DatabasePerformanceMetrics",
+    "DatabaseType",
     "TroubleshootDatabaseInput",
-    "TroubleshootDbConnectionsInput",
-    "TroubleshootDbPerformanceInput",
-    "TroubleshootDbStorageInput",
+    "TroubleshootConnectionInput",
+    "TroubleshootPerformanceInput",
+    "TroubleshootStorageInput",
 ]
