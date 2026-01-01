@@ -34,7 +34,7 @@ def get_oci_config(profile_name: str | None = None) -> dict[str, Any]:
                  raise RuntimeError(f"Failed to initialize Resource Principals: {e}") from e
 
     # 2. Config File
-    profile = profile_name or os.getenv("OCI_PROFILE", "DEFAULT")
+    profile = profile_name or os.getenv("OCI_PROFILE") or os.getenv("OCI_CLI_PROFILE", "DEFAULT")
     config_path = os.getenv("OCI_CONFIG_FILE", os.path.expanduser("~/.oci/config"))
 
     try:

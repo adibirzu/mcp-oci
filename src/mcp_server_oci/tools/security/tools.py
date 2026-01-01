@@ -491,7 +491,8 @@ def register_security_tools(mcp: FastMCP) -> None:
                     if any("manage all-resources" in s.lower() for s in p.statements)
                 ]
                 if broad_policies:
-                    iam_findings.append(f"{len(broad_policies)} policies with 'manage all-resources' detected")
+                    msg = f"{len(broad_policies)} policies with 'manage all-resources'"
+                    iam_findings.append(f"{msg} detected")
 
                 data["iam_summary"] = {
                     "total_users": len(users),
@@ -596,7 +597,8 @@ def register_security_tools(mcp: FastMCP) -> None:
 
             # Calculate overall score
             if score_components:
-                data["security_score"]["overall"] = int(sum(score_components) / len(score_components))
+                avg = sum(score_components) / len(score_components)
+                data["security_score"]["overall"] = int(avg)
 
             # Add general recommendations
             if data["security_score"]["overall"] < 70:

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import os
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -264,6 +266,99 @@ class TTLCache:
         return len(self._cache)
 
 
+class RedisTTLCache:
+    """
+    Redis-backed TTL cache.
+
+    Provides the same async interface as TTLCache, but stores values in Redis.
+    Uses in-memory stats tracking for hit/miss accounting.
+    """
+
+    def __init__(
+        self,
+        redis_url: str,
+        prefix: str,
+        default_ttl: float = 300,
+    ) -> None:
+        self._redis_url = redis_url
+        self._prefix = prefix.rstrip(":")
+        self._default_ttl = default_ttl
+        self._stats = CacheStats()
+        self._client = None
+        self._lock = asyncio.Lock()
+
+    def _key(self, key: str) -> str:
+        return f"{self._prefix}:{key}"
+
+    async def _get_client(self):
+        if self._client is None:
+            import redis.asyncio as redis
+
+            self._client = redis.from_url(self._redis_url, decode_responses=True)
+            await self._client.ping()
+        return self._client
+
+    async def get(self, key: str) -> Any | None:
+        """Get value from Redis."""
+        async with self._lock:
+            client = await self._get_client()
+            value = await client.get(self._key(key))
+            if value is None:
+                self._stats.misses += 1
+                return None
+
+            self._stats.hits += 1
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return value
+
+    async def set(self, key: str, value: Any, ttl: float | None = None) -> None:
+        """Set value in Redis with TTL."""
+        if ttl is None:
+            ttl = self._default_ttl
+        if ttl <= 0:
+            return
+
+        payload = json.dumps(value, default=str)
+
+        async with self._lock:
+            client = await self._get_client()
+            await client.setex(self._key(key), int(ttl), payload)
+            self._stats.size += 1
+
+    async def delete(self, key: str) -> bool:
+        """Delete a key from Redis."""
+        async with self._lock:
+            client = await self._get_client()
+            result = await client.delete(self._key(key))
+            if result:
+                self._stats.size = max(0, self._stats.size - 1)
+                return True
+            return False
+
+    async def clear(self) -> None:
+        """Clear all keys for this cache prefix."""
+        async with self._lock:
+            client = await self._get_client()
+            pattern = f"{self._prefix}:*"
+            keys = [k async for k in client.scan_iter(match=pattern)]
+            if keys:
+                await client.delete(*keys)
+            self._stats.size = 0
+
+    def cleanup(self) -> None:
+        """Redis handles expiration; no-op for compatibility."""
+        return None
+
+    @property
+    def stats(self) -> CacheStats:
+        return self._stats
+
+    def __len__(self) -> int:
+        return self._stats.size
+
+
 # =============================================================================
 # Cache Key Generation
 # =============================================================================
@@ -419,15 +514,45 @@ CACHE_TIERS = {
 }
 
 
+def _env_ttl(name: str, default_ttl: float) -> float:
+    env_keys = [f"MCP_CACHE_TTL_{name.upper()}"]
+    if name == "operational":
+        env_keys.extend(["MCP_CACHE_TTL", "MCP_CACHE_TTL_COMPUTE"])
+    if name == "config":
+        env_keys.append("MCP_CACHE_TTL_NETWORKING")
+
+    for key in env_keys:
+        value = os.getenv(key)
+        if value:
+            try:
+                return float(value)
+            except ValueError:
+                logger.warning("Invalid cache TTL override", key=key, value=value)
+    return default_ttl
+
+
+def _apply_cache_overrides() -> None:
+    for tier_name, tier in CACHE_TIERS.items():
+        tier.ttl_seconds = _env_ttl(tier_name, tier.ttl_seconds)
+
+
+def _cache_backend() -> tuple[str, str | None]:
+    backend = os.getenv("MCP_CACHE_BACKEND", "").lower()
+    redis_url = os.getenv("MCP_REDIS_URL") or os.getenv("REDIS_URL")
+    if backend == "redis" or redis_url:
+        return "redis", redis_url
+    return "memory", None
+
+
 # =============================================================================
 # Global Cache Instances
 # =============================================================================
 
 # Main caches for different data tiers
-_static_cache: TTLCache | None = None
-_config_cache: TTLCache | None = None
-_operational_cache: TTLCache | None = None
-_metrics_cache: TTLCache | None = None
+_static_cache: TTLCache | RedisTTLCache | None = None
+_config_cache: TTLCache | RedisTTLCache | None = None
+_operational_cache: TTLCache | RedisTTLCache | None = None
+_metrics_cache: TTLCache | RedisTTLCache | None = None
 
 
 def get_cache(tier: str = "operational") -> TTLCache:
@@ -441,38 +566,69 @@ def get_cache(tier: str = "operational") -> TTLCache:
     """
     global _static_cache, _config_cache, _operational_cache, _metrics_cache
 
+    _apply_cache_overrides()
     tier_config = CACHE_TIERS.get(tier, CACHE_TIERS["operational"])
+    backend, redis_url = _cache_backend()
+    cache_prefix = f"mcp-oci:cache:{tier_config.name}"
 
     if tier == "static":
         if _static_cache is None:
-            _static_cache = TTLCache(
-                max_size=tier_config.max_size,
-                default_ttl=tier_config.ttl_seconds,
-            )
+            if backend == "redis" and redis_url:
+                _static_cache = RedisTTLCache(
+                    redis_url=redis_url,
+                    prefix=cache_prefix,
+                    default_ttl=tier_config.ttl_seconds,
+                )
+            else:
+                _static_cache = TTLCache(
+                    max_size=tier_config.max_size,
+                    default_ttl=tier_config.ttl_seconds,
+                )
         return _static_cache
 
     elif tier == "config":
         if _config_cache is None:
-            _config_cache = TTLCache(
-                max_size=tier_config.max_size,
-                default_ttl=tier_config.ttl_seconds,
-            )
+            if backend == "redis" and redis_url:
+                _config_cache = RedisTTLCache(
+                    redis_url=redis_url,
+                    prefix=cache_prefix,
+                    default_ttl=tier_config.ttl_seconds,
+                )
+            else:
+                _config_cache = TTLCache(
+                    max_size=tier_config.max_size,
+                    default_ttl=tier_config.ttl_seconds,
+                )
         return _config_cache
 
     elif tier == "metrics":
         if _metrics_cache is None:
-            _metrics_cache = TTLCache(
-                max_size=tier_config.max_size,
-                default_ttl=tier_config.ttl_seconds,
-            )
+            if backend == "redis" and redis_url:
+                _metrics_cache = RedisTTLCache(
+                    redis_url=redis_url,
+                    prefix=cache_prefix,
+                    default_ttl=tier_config.ttl_seconds,
+                )
+            else:
+                _metrics_cache = TTLCache(
+                    max_size=tier_config.max_size,
+                    default_ttl=tier_config.ttl_seconds,
+                )
         return _metrics_cache
 
     else:  # operational (default)
         if _operational_cache is None:
-            _operational_cache = TTLCache(
-                max_size=tier_config.max_size,
-                default_ttl=tier_config.ttl_seconds,
-            )
+            if backend == "redis" and redis_url:
+                _operational_cache = RedisTTLCache(
+                    redis_url=redis_url,
+                    prefix=cache_prefix,
+                    default_ttl=tier_config.ttl_seconds,
+                )
+            else:
+                _operational_cache = TTLCache(
+                    max_size=tier_config.max_size,
+                    default_ttl=tier_config.ttl_seconds,
+                )
         return _operational_cache
 
 
@@ -497,3 +653,82 @@ async def clear_all_caches() -> None:
     await get_cache("operational").clear()
     await get_cache("metrics").clear()
     logger.info("All caches cleared")
+
+
+# =============================================================================
+# Batch Operations
+# =============================================================================
+
+async def batch_get(
+    cache: TTLCache,
+    keys: list[str],
+) -> dict[str, Any]:
+    """Get multiple values from cache in a single operation.
+
+    Args:
+        cache: TTLCache instance
+        keys: List of cache keys
+
+    Returns:
+        Dictionary of key -> value for found entries
+    """
+    results = {}
+    for key in keys:
+        value = await cache.get(key)
+        if value is not None:
+            results[key] = value
+    return results
+
+
+async def batch_set(
+    cache: TTLCache,
+    items: dict[str, Any],
+    ttl: float | None = None,
+) -> None:
+    """Set multiple values in cache in a single operation.
+
+    Args:
+        cache: TTLCache instance
+        items: Dictionary of key -> value to cache
+        ttl: Optional TTL override
+    """
+    for key, value in items.items():
+        await cache.set(key, value, ttl)
+
+
+async def prefetch_compartments(
+    compartment_ids: list[str],
+    fetch_fn: Callable[[str], Any],
+) -> dict[str, Any]:
+    """Prefetch compartment data with caching.
+
+    This is useful for warming the cache with frequently accessed compartments.
+
+    Args:
+        compartment_ids: List of compartment OCIDs to prefetch
+        fetch_fn: Async function to fetch compartment data
+
+    Returns:
+        Dictionary of compartment_id -> data
+    """
+    cache = get_cache("config")
+    results = {}
+
+    for comp_id in compartment_ids:
+        cache_key = generate_cache_key(prefix="compartment", compartment_id=comp_id)
+        cached = await cache.get(cache_key)
+
+        if cached is not None:
+            results[comp_id] = cached
+        else:
+            try:
+                if asyncio.iscoroutinefunction(fetch_fn):
+                    data = await fetch_fn(comp_id)
+                else:
+                    data = fetch_fn(comp_id)
+                await cache.set(cache_key, data)
+                results[comp_id] = data
+            except Exception as e:
+                logger.warning(f"Failed to prefetch compartment {comp_id}: {e}")
+
+    return results

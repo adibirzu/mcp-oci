@@ -15,7 +15,8 @@ Environment Variables:
 - ATP_CONNECTION_STRING: Oracle ATP connection string
 - ATP_USER: Database user
 - ATP_PASSWORD: Database password (or use wallet)
-- ATP_WALLET_LOCATION: Path to wallet directory
+- ATP_WALLET_LOCATION / ATP_WALLET_DIR: Path to wallet directory
+- ATP_WALLET_PASSWORD: Wallet password (if different)
 - AGENT_ID: Unique identifier for this agent instance
 """
 from __future__ import annotations
@@ -436,7 +437,8 @@ class ATPSharedStore(InMemorySharedStore):
             # Get credentials
             user = os.getenv("ATP_USER", "ADMIN")
             password = os.getenv("ATP_PASSWORD")
-            wallet_location = os.getenv("ATP_WALLET_LOCATION")
+            wallet_location = os.getenv("ATP_WALLET_LOCATION") or os.getenv("ATP_WALLET_DIR")
+            wallet_password = os.getenv("ATP_WALLET_PASSWORD") or password
 
             if wallet_location:
                 # Use wallet authentication
@@ -446,7 +448,7 @@ class ATPSharedStore(InMemorySharedStore):
                     dsn=self._connection_string,
                     config_dir=wallet_location,
                     wallet_location=wallet_location,
-                    wallet_password=password,
+                    wallet_password=wallet_password,
                     min=2,
                     max=10,
                     increment=1,
@@ -477,78 +479,78 @@ class ATPSharedStore(InMemorySharedStore):
         """Initialize database schema if not exists."""
         if not self._atp_available:
             return
-
-        schema_sql = """
-        BEGIN
-            -- Agent registry table
-            EXECUTE IMMEDIATE '
-                CREATE TABLE IF NOT EXISTS mcp_agents (
-                    agent_id VARCHAR2(100) PRIMARY KEY,
-                    agent_type VARCHAR2(50) NOT NULL,
-                    state VARCHAR2(20) NOT NULL,
-                    last_heartbeat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    capabilities CLOB,
-                    metadata CLOB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )';
-
-            -- Shared context table
-            EXECUTE IMMEDIATE '
-                CREATE TABLE IF NOT EXISTS mcp_contexts (
-                    context_id VARCHAR2(100) PRIMARY KEY,
-                    session_id VARCHAR2(100) NOT NULL,
-                    resource_id VARCHAR2(200),
-                    resource_type VARCHAR2(50),
-                    findings CLOB,
-                    recommendations CLOB,
-                    metadata CLOB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    version NUMBER DEFAULT 1
-                )';
-
-            -- Events table
-            EXECUTE IMMEDIATE '
-                CREATE TABLE IF NOT EXISTS mcp_events (
-                    event_id VARCHAR2(100) PRIMARY KEY,
-                    event_type VARCHAR2(50) NOT NULL,
-                    source_agent VARCHAR2(100) NOT NULL,
-                    target_agent VARCHAR2(100),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    payload CLOB,
-                    ttl_seconds NUMBER DEFAULT 3600,
-                    acknowledged NUMBER(1) DEFAULT 0
-                )';
-
-            -- Conversation history table
-            EXECUTE IMMEDIATE '
-                CREATE TABLE IF NOT EXISTS mcp_conversations (
-                    entry_id VARCHAR2(100) PRIMARY KEY,
-                    session_id VARCHAR2(100) NOT NULL,
-                    agent_id VARCHAR2(100) NOT NULL,
-                    role VARCHAR2(20) NOT NULL,
-                    content CLOB,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    metadata CLOB
-                )';
-
-            -- Indexes
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_sess ON mcp_contexts(session_id)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_ctx_res ON mcp_contexts(resource_id)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_evt_type ON mcp_events(event_type)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_evt_src ON mcp_events(source_agent)';
-            EXECUTE IMMEDIATE 'CREATE INDEX IF NOT EXISTS idx_conv_sess ON mcp_conversations(session_id)';
-        EXCEPTION
-            WHEN OTHERS THEN
-                -- Tables may already exist
-                NULL;
-        END;
-        """
+        ddl_statements = [
+            """
+            CREATE TABLE mcp_agents (
+                agent_id VARCHAR2(100) PRIMARY KEY,
+                agent_type VARCHAR2(50) NOT NULL,
+                state VARCHAR2(20) NOT NULL,
+                last_heartbeat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                capabilities CLOB,
+                metadata CLOB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE mcp_contexts (
+                context_id VARCHAR2(100) PRIMARY KEY,
+                session_id VARCHAR2(100) NOT NULL,
+                resource_id VARCHAR2(200),
+                resource_type VARCHAR2(50),
+                findings CLOB,
+                recommendations CLOB,
+                metadata CLOB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                version NUMBER DEFAULT 1
+            )
+            """,
+            """
+            CREATE TABLE mcp_events (
+                event_id VARCHAR2(100) PRIMARY KEY,
+                event_type VARCHAR2(50) NOT NULL,
+                source_agent VARCHAR2(100) NOT NULL,
+                target_agent VARCHAR2(100),
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                payload CLOB,
+                ttl_seconds NUMBER DEFAULT 3600,
+                acknowledged NUMBER(1) DEFAULT 0
+            )
+            """,
+            """
+            CREATE TABLE mcp_conversations (
+                entry_id VARCHAR2(100) PRIMARY KEY,
+                session_id VARCHAR2(100) NOT NULL,
+                agent_id VARCHAR2(100) NOT NULL,
+                role VARCHAR2(20) NOT NULL,
+                content CLOB,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                metadata CLOB
+            )
+            """,
+            "CREATE INDEX idx_ctx_sess ON mcp_contexts(session_id)",
+            "CREATE INDEX idx_ctx_res ON mcp_contexts(resource_id)",
+            "CREATE INDEX idx_evt_type ON mcp_events(event_type)",
+            "CREATE INDEX idx_evt_src ON mcp_events(source_agent)",
+            "CREATE INDEX ix_conv ON mcp_conversations(session_id)",
+        ]
 
         try:
+            import oracledb
+
             async with self._get_connection() as conn:
-                await conn.execute(schema_sql)
-                await conn.commit()
+                cursor = conn.cursor()
+                for statement in ddl_statements:
+                    stmt = statement.strip()
+                    if not stmt:
+                        continue
+                    try:
+                        await asyncio.to_thread(cursor.execute, stmt)
+                    except oracledb.DatabaseError as e:
+                        error, = e.args
+                        if error.code not in (955, 1408):
+                            raise
+                await asyncio.to_thread(conn.commit)
             logger.info("ATP schema initialized")
         except Exception as e:
             logger.error(f"Schema initialization failed: {e}")
@@ -565,49 +567,278 @@ class ATPSharedStore(InMemorySharedStore):
         finally:
             await asyncio.to_thread(self._pool.release, conn)
 
+    async def _save_agent_to_atp(self, agent: AgentInfo) -> None:
+        """Upsert agent metadata in ATP."""
+        if not self._atp_available:
+            return
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    MERGE INTO mcp_agents a
+                    USING (SELECT :agent_id AS agent_id FROM dual) s
+                    ON (a.agent_id = s.agent_id)
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            agent_type = :agent_type,
+                            state = :state,
+                            last_heartbeat = :last_heartbeat,
+                            capabilities = :capabilities,
+                            metadata = :metadata
+                    WHEN NOT MATCHED THEN
+                        INSERT (agent_id, agent_type, state, last_heartbeat, capabilities, metadata)
+                        VALUES (:agent_id, :agent_type, :state, :last_heartbeat, :capabilities, :metadata)
+                    """,
+                    {
+                        "agent_id": agent.agent_id,
+                        "agent_type": agent.agent_type,
+                        "state": agent.state.value,
+                        "last_heartbeat": agent.last_heartbeat,
+                        "capabilities": json.dumps(agent.capabilities),
+                        "metadata": json.dumps(agent.metadata),
+                    },
+                )
+                await asyncio.to_thread(conn.commit)
+        except Exception as e:
+            logger.error(f"ATP save_agent failed: {e}")
+
+    async def _save_context_to_atp(self, context: SharedContext) -> None:
+        """Persist shared context to ATP."""
+        if not self._atp_available:
+            return
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    MERGE INTO mcp_contexts c
+                    USING (SELECT :context_id AS context_id FROM dual) s
+                    ON (c.context_id = s.context_id)
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            findings = :findings,
+                            recommendations = :recommendations,
+                            metadata = :metadata,
+                            updated_at = CURRENT_TIMESTAMP,
+                            version = version + 1
+                        WHERE version = :expected_version
+                    WHEN NOT MATCHED THEN
+                        INSERT (context_id, session_id, resource_id, resource_type,
+                               findings, recommendations, metadata)
+                        VALUES (:context_id, :session_id, :resource_id, :resource_type,
+                               :findings, :recommendations, :metadata)
+                    """,
+                    {
+                        "context_id": context.context_id,
+                        "findings": json.dumps(context.findings),
+                        "recommendations": json.dumps(context.recommendations),
+                        "metadata": json.dumps(context.metadata),
+                        "expected_version": context.version - 1,
+                        "session_id": context.session_id,
+                        "resource_id": context.resource_id,
+                        "resource_type": context.resource_type,
+                    },
+                )
+                await asyncio.to_thread(conn.commit)
+        except Exception as e:
+            logger.error(f"ATP save_context failed: {e}")
+
+    async def register_agent(
+        self,
+        agent_id: str,
+        agent_type: str,
+        capabilities: list[str],
+        metadata: dict[str, Any] | None = None,
+    ) -> AgentInfo:
+        agent = await super().register_agent(
+            agent_id=agent_id,
+            agent_type=agent_type,
+            capabilities=capabilities,
+            metadata=metadata,
+        )
+        await self._save_agent_to_atp(agent)
+        return agent
+
+    async def update_agent_state(self, agent_id: str, state: AgentState) -> None:
+        await super().update_agent_state(agent_id, state)
+        agent = self._agents.get(agent_id)
+        if agent:
+            await self._save_agent_to_atp(agent)
+
+    async def heartbeat(self, agent_id: str) -> None:
+        await super().heartbeat(agent_id)
+        agent = self._agents.get(agent_id)
+        if agent:
+            await self._save_agent_to_atp(agent)
+
+    async def list_agents(
+        self,
+        agent_type: str | None = None,
+        state: AgentState | None = None,
+    ) -> list[AgentInfo]:
+        if not self._atp_available:
+            return await super().list_agents(agent_type, state)
+
+        try:
+            query = """
+                SELECT agent_id, agent_type, state, last_heartbeat, capabilities, metadata
+                FROM mcp_agents
+                WHERE (:agent_type IS NULL OR agent_type = :agent_type)
+                  AND (:state IS NULL OR state = :state)
+            """
+            params = {
+                "agent_type": agent_type,
+                "state": state.value if state else None,
+            }
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(cursor.execute, query, params)
+                rows = await asyncio.to_thread(cursor.fetchall)
+
+            agents = []
+            for row in rows:
+                # Handle LOB types
+                caps_val = row[4].read() if hasattr(row[4], 'read') else row[4]
+                meta_val = row[5].read() if hasattr(row[5], 'read') else row[5]
+                capabilities = json.loads(caps_val) if caps_val else []
+                metadata = json.loads(meta_val) if meta_val else {}
+                agents.append(
+                    AgentInfo(
+                        agent_id=row[0],
+                        agent_type=row[1],
+                        state=AgentState(row[2]),
+                        last_heartbeat=row[3],
+                        capabilities=capabilities,
+                        metadata=metadata,
+                    )
+                )
+            return agents
+        except Exception as e:
+            logger.error(f"ATP list_agents failed: {e}")
+            return await super().list_agents(agent_type, state)
+
     async def save_context(self, context: SharedContext) -> SharedContext:
         """Save context to ATP (with in-memory fallback)."""
         # Always update in-memory for fast reads
         await super().save_context(context)
+        await self._save_context_to_atp(context)
 
-        if self._atp_available:
-            try:
-                async with self._get_connection() as conn:
-                    cursor = conn.cursor()
-                    await asyncio.to_thread(
-                        cursor.execute,
-                        """
-                        MERGE INTO mcp_contexts c
-                        USING (SELECT :1 AS context_id FROM dual) s
-                        ON (c.context_id = s.context_id)
-                        WHEN MATCHED THEN
-                            UPDATE SET
-                                findings = :2,
-                                recommendations = :3,
-                                metadata = :4,
-                                updated_at = CURRENT_TIMESTAMP,
-                                version = version + 1
-                            WHERE version = :5
-                        WHEN NOT MATCHED THEN
-                            INSERT (context_id, session_id, resource_id, resource_type,
-                                   findings, recommendations, metadata)
-                            VALUES (:1, :6, :7, :8, :2, :3, :4)
-                        """,
-                        [
-                            context.context_id,
-                            json.dumps(context.findings),
-                            json.dumps(context.recommendations),
-                            json.dumps(context.metadata),
-                            context.version - 1,  # Expected version
-                            context.session_id,
-                            context.resource_id,
-                            context.resource_type,
-                        ]
-                    )
-                    await asyncio.to_thread(conn.commit)
-            except Exception as e:
-                logger.error(f"ATP save_context failed: {e}")
+        return context
 
+    async def get_context(self, context_id: str) -> SharedContext | None:
+        """Get shared context by ID (ATP-backed)."""
+        context = await super().get_context(context_id)
+        if context or not self._atp_available:
+            return context
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    SELECT context_id, session_id, resource_id, resource_type,
+                           findings, recommendations, metadata,
+                           created_at, updated_at, version
+                    FROM mcp_contexts
+                    WHERE context_id = :1
+                    """,
+                    [context_id],
+                )
+                row = await asyncio.to_thread(cursor.fetchone)
+                if not row:
+                    return None
+
+            context = SharedContext(
+                context_id=row[0],
+                session_id=row[1],
+                resource_id=row[2],
+                resource_type=row[3],
+                findings=json.loads(row[4]) if row[4] else [],
+                recommendations=json.loads(row[5]) if row[5] else [],
+                metadata=json.loads(row[6]) if row[6] else {},
+                created_at=row[7],
+                updated_at=row[8],
+                version=int(row[9]),
+            )
+            self._contexts[context.context_id] = context
+            return context
+        except Exception as e:
+            logger.error(f"ATP get_context failed: {e}")
+            return None
+
+    async def find_contexts(
+        self,
+        session_id: str | None = None,
+        resource_id: str | None = None,
+        resource_type: str | None = None,
+    ) -> list[SharedContext]:
+        """Find contexts matching criteria (ATP-backed)."""
+        if not self._atp_available:
+            return await super().find_contexts(session_id, resource_id, resource_type)
+
+        try:
+            query = """
+                SELECT context_id, session_id, resource_id, resource_type,
+                       findings, recommendations, metadata,
+                       created_at, updated_at, version
+                FROM mcp_contexts
+                WHERE (:1 IS NULL OR session_id = :1)
+                  AND (:2 IS NULL OR resource_id = :2)
+                  AND (:3 IS NULL OR resource_type = :3)
+                ORDER BY updated_at DESC
+            """
+            params = [session_id, resource_id, resource_type]
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(cursor.execute, query, params)
+                rows = await asyncio.to_thread(cursor.fetchall)
+
+            contexts = []
+            for row in rows:
+                context = SharedContext(
+                    context_id=row[0],
+                    session_id=row[1],
+                    resource_id=row[2],
+                    resource_type=row[3],
+                    findings=json.loads(row[4]) if row[4] else [],
+                    recommendations=json.loads(row[5]) if row[5] else [],
+                    metadata=json.loads(row[6]) if row[6] else {},
+                    created_at=row[7],
+                    updated_at=row[8],
+                    version=int(row[9]),
+                )
+                contexts.append(context)
+                self._contexts[context.context_id] = context
+
+            return contexts
+        except Exception as e:
+            logger.error(f"ATP find_contexts failed: {e}")
+            return await super().find_contexts(session_id, resource_id, resource_type)
+
+    async def add_finding(
+        self,
+        context_id: str,
+        finding: dict[str, Any],
+    ) -> SharedContext:
+        """Add a finding to existing context (ATP-backed)."""
+        context = await super().add_finding(context_id, finding)
+        await self._save_context_to_atp(context)
+        return context
+
+    async def add_recommendation(
+        self,
+        context_id: str,
+        recommendation: str,
+    ) -> SharedContext:
+        """Add a recommendation to existing context (ATP-backed)."""
+        context = await super().add_recommendation(context_id, recommendation)
+        await self._save_context_to_atp(context)
         return context
 
     async def publish_event(self, event: SharedEvent) -> SharedEvent:
@@ -640,6 +871,158 @@ class ATPSharedStore(InMemorySharedStore):
                 logger.error(f"ATP publish_event failed: {e}")
 
         return event
+
+    async def get_recent_events(
+        self,
+        event_type: EventType | None = None,
+        source_agent: str | None = None,
+        since: datetime | None = None,
+        limit: int = 100,
+    ) -> list[SharedEvent]:
+        """Get recent events matching criteria (ATP-backed)."""
+        if not self._atp_available:
+            return await super().get_recent_events(event_type, source_agent, since, limit)
+
+        try:
+            query = """
+                SELECT event_id, event_type, source_agent, target_agent,
+                       timestamp, payload, ttl_seconds, acknowledged
+                FROM mcp_events
+                WHERE (:event_type IS NULL OR event_type = :event_type)
+                  AND (:source_agent IS NULL OR source_agent = :source_agent)
+                  AND (:since IS NULL OR timestamp > :since)
+                ORDER BY timestamp DESC
+            """
+            params = {
+                "event_type": event_type.value if event_type else None,
+                "source_agent": source_agent,
+                "since": since,
+            }
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(cursor.execute, query, params)
+                rows = await asyncio.to_thread(cursor.fetchmany, limit)
+
+            events = []
+            now = datetime.now(UTC)
+            for row in rows:
+                timestamp = row[4]
+                ttl_seconds = int(row[6]) if row[6] is not None else 3600
+                if (now - timestamp).total_seconds() > ttl_seconds:
+                    continue
+                # Handle LOB types
+                payload_val = row[5].read() if hasattr(row[5], 'read') else row[5]
+                events.append(
+                    SharedEvent(
+                        event_id=row[0],
+                        event_type=EventType(row[1]),
+                        source_agent=row[2],
+                        target_agent=row[3],
+                        timestamp=timestamp,
+                        payload=json.loads(payload_val) if payload_val else {},
+                        ttl_seconds=ttl_seconds,
+                        requires_ack=bool(row[7]),
+                    )
+                )
+            return events[:limit]
+        except Exception as e:
+            logger.error(f"ATP get_recent_events failed: {e}")
+            return await super().get_recent_events(event_type, source_agent, since, limit)
+
+    async def save_conversation_entry(self, entry: ConversationEntry) -> None:
+        """Save a conversation entry (ATP-backed)."""
+        await super().save_conversation_entry(entry)
+        if not self._atp_available:
+            return
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    INSERT INTO mcp_conversations
+                    (entry_id, session_id, agent_id, role, content, timestamp, metadata)
+                    VALUES (:1, :2, :3, :4, :5, :6, :7)
+                    """,
+                    [
+                        entry.entry_id,
+                        entry.session_id,
+                        entry.agent_id,
+                        entry.role,
+                        entry.content,
+                        entry.timestamp,
+                        json.dumps(entry.metadata),
+                    ],
+                )
+                await asyncio.to_thread(conn.commit)
+        except Exception as e:
+            logger.error(f"ATP save_conversation_entry failed: {e}")
+
+    async def get_conversation_history(
+        self,
+        session_id: str,
+        limit: int = 50,
+    ) -> list[ConversationEntry]:
+        """Get conversation history for a session (ATP-backed)."""
+        if not self._atp_available:
+            return await super().get_conversation_history(session_id, limit)
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    SELECT entry_id, session_id, agent_id, role, content,
+                           timestamp, metadata
+                    FROM mcp_conversations
+                    WHERE session_id = :1
+                    ORDER BY timestamp ASC
+                    """,
+                    [session_id],
+                )
+                rows = await asyncio.to_thread(cursor.fetchall)
+
+            entries = [
+                ConversationEntry(
+                    entry_id=row[0],
+                    session_id=row[1],
+                    agent_id=row[2],
+                    role=row[3],
+                    content=row[4],
+                    timestamp=row[5],
+                    metadata=json.loads(row[6]) if row[6] else {},
+                )
+                for row in rows
+            ]
+            return entries[-limit:]
+        except Exception as e:
+            logger.error(f"ATP get_conversation_history failed: {e}")
+            return await super().get_conversation_history(session_id, limit)
+
+    async def cleanup_expired(self) -> int:
+        """Clean up expired events in memory and ATP."""
+        expired_count = await super().cleanup_expired()
+        if not self._atp_available:
+            return expired_count
+
+        try:
+            async with self._get_connection() as conn:
+                cursor = conn.cursor()
+                await asyncio.to_thread(
+                    cursor.execute,
+                    """
+                    DELETE FROM mcp_events
+                    WHERE timestamp < (SYSTIMESTAMP - NUMTODSINTERVAL(ttl_seconds, 'SECOND'))
+                    """,
+                )
+                count = cursor.rowcount or 0
+                await asyncio.to_thread(conn.commit)
+                return expired_count + count
+        except Exception as e:
+            logger.error(f"ATP cleanup_expired failed: {e}")
+            return expired_count
 
 
 # =============================================================================

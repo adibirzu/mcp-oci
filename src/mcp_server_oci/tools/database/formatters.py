@@ -46,7 +46,8 @@ class DatabaseFormatter:
 
         # Pagination info
         if data.get("has_more"):
-            md += f"\n*More results available. Use offset={data.get('next_offset', 0)} to continue.*\n"
+            next_off = data.get('next_offset', 0)
+            md += f"\n*More results available. Use offset={next_off} to continue.*\n"
 
         return md
 
@@ -66,7 +67,8 @@ class DatabaseFormatter:
         md += f"- **OCPUs:** {db.get('cpu_core_count', 0)}\n"
         md += f"- **Storage:** {db.get('data_storage_size_in_tbs', 0)} TB\n"
         md += f"- **Free Tier:** {'Yes' if db.get('is_free_tier') else 'No'}\n"
-        md += f"- **Auto Scaling:** {'Enabled' if db.get('is_auto_scaling_enabled') else 'Disabled'}\n"
+        auto_scale = 'Enabled' if db.get('is_auto_scaling_enabled') else 'Disabled'
+        md += f"- **Auto Scaling:** {auto_scale}\n"
         md += f"- **Created:** {Formatter.format_datetime(db.get('time_created', ''))}\n\n"
 
         # Connection info
@@ -114,7 +116,8 @@ class DatabaseFormatter:
         md += MarkdownFormatter.table(headers, rows)
 
         if data.get("has_more"):
-            md += f"\n*More results available. Use offset={data.get('next_offset', 0)} to continue.*\n"
+            next_off = data.get('next_offset', 0)
+            md += f"\n*More results available. Use offset={next_off} to continue.*\n"
 
         return md
 
@@ -171,7 +174,9 @@ class DatabaseFormatter:
         return md
 
     @staticmethod
-    def action_result_markdown(action: str, database: dict, success: bool, message: str = "") -> str:
+    def action_result_markdown(
+        action: str, database: dict, success: bool, message: str = ""
+    ) -> str:
         """Format database action result as markdown."""
         md = MarkdownFormatter.header(f"Database {action.title()}", 1)
 

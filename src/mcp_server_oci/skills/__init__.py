@@ -9,6 +9,8 @@ Key components:
 - executor: SkillExecutor for coordinating tool calls with progress tracking
 - agent: Agent context, conversation memory, and LLM sampling utilities
 - troubleshoot: Instance troubleshooting skill
+- troubleshoot_database: Database-specific troubleshooting skills
+- runbooks: Declarative runbook framework for multi-step workflows
 - discovery: Tool and skill registration and discovery utilities
 - tools: MCP tool registration for skills
 """
@@ -46,6 +48,34 @@ from .executor import (
 )
 from .tools import register_skill_tools
 
+# Runbook framework
+from .runbooks import (
+    RunbookDefinition,
+    RunbookExecutor,
+    RunbookRegistry,
+    RunbookResult,
+    RunbookStatus,
+    RunbookStep,
+    SeverityLevel,
+    StepResult,
+    StepStatus,
+    execute_runbook,
+    get_runbook,
+    list_runbooks,
+    register_runbook,
+)
+
+# Database troubleshooting skills
+from .troubleshoot_database import (
+    DatabaseConnectionIssue,
+    DatabaseIssueType,
+    DatabasePerformanceMetrics,
+    TroubleshootDatabaseInput,
+    TroubleshootDbConnectionsInput,
+    TroubleshootDbPerformanceInput,
+    TroubleshootDbStorageInput,
+)
+
 __all__ = [
     # Executor
     "SkillExecutor",
@@ -77,4 +107,26 @@ __all__ = [
     "create_recommendation_request",
     # Tool registration
     "register_skill_tools",
+    # Runbooks
+    "RunbookDefinition",
+    "RunbookExecutor",
+    "RunbookRegistry",
+    "RunbookResult",
+    "RunbookStatus",
+    "RunbookStep",
+    "SeverityLevel",
+    "StepResult",
+    "StepStatus",
+    "execute_runbook",
+    "get_runbook",
+    "list_runbooks",
+    "register_runbook",
+    # Database troubleshooting
+    "DatabaseConnectionIssue",
+    "DatabaseIssueType",
+    "DatabasePerformanceMetrics",
+    "TroubleshootDatabaseInput",
+    "TroubleshootDbConnectionsInput",
+    "TroubleshootDbPerformanceInput",
+    "TroubleshootDbStorageInput",
 ]

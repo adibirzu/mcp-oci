@@ -23,6 +23,7 @@ dependencies = [
     "httpx>=0.25.0",
     "python-dotenv>=1.0.0",
     "structlog>=24.0.0",
+    "redis>=5.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +63,7 @@ ignore = [
     "E402",    # Module imports not at top - intentional for tool registration
     "UP046",   # Non-PEP695 generic class - Python 3.12+ syntax
     "UP047",   # Non-PEP695 generic function - Python 3.12+ syntax
+    "SIM102",  # Nested if statements - kept for line length compliance
 ]
 
 [tool.ruff.lint.per-file-ignores]

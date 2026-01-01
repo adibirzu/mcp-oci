@@ -47,7 +47,8 @@ def get_instance_metrics(
             inst = compute_client.get_instance(instance_id).data
             comp_id = inst.compartment_id
         except Exception:
-             return {"error": "Could not determine compartment ID. Set COMPARTMENT_OCID or provide explicitly."}
+            msg = "Could not determine compartment ID. Set COMPARTMENT_OCID."
+            return {"error": msg}
 
     config = get_oci_config()
     monitoring_client = get_client(oci.monitoring.MonitoringClient, region=config.get("region"))

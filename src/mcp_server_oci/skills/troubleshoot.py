@@ -548,7 +548,9 @@ async def _generate_health_summary(findings: dict[str, Any]) -> str:
     parts = []
 
     instance = findings.get("instance", {})
-    parts.append(f"Instance {instance.get('name', 'Unknown')} is {instance.get('state', 'UNKNOWN')}")
+    name = instance.get('name', 'Unknown')
+    state = instance.get('state', 'UNKNOWN')
+    parts.append(f"Instance {name} is {state}")
 
     if "metrics" in findings and "error" not in findings["metrics"]:
         cpu = findings["metrics"].get("cpu", {})

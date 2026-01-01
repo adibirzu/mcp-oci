@@ -145,7 +145,7 @@ class AppConfig:
             oci=OCIConfig(
                 auth_method=AuthMethod(os.getenv("OCI_AUTH_METHOD", "config_file")),
                 config_file=Path(os.getenv("OCI_CONFIG_FILE", "~/.oci/config")),
-                profile=os.getenv("OCI_PROFILE", "DEFAULT"),
+                profile=os.getenv("OCI_PROFILE") or os.getenv("OCI_CLI_PROFILE", "DEFAULT"),
                 tenancy_ocid=os.getenv("OCI_TENANCY_OCID"),
                 region=os.getenv("OCI_REGION"),
                 compartment_ocid=os.getenv("COMPARTMENT_OCID"),

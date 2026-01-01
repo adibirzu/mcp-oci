@@ -1,9 +1,9 @@
 ---
 name: oci-mcp
-version: 2.3.0
+version: 2.5.0
 description: Oracle Cloud Infrastructure MCP server providing comprehensive cloud management capabilities through the Model Context Protocol.
 transport: stdio
-tools: 44
+tools: 52
 ---
 
 # OCI MCP Server Skill
@@ -329,6 +329,7 @@ findings = await get_shared_findings(category="performance")
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.4.0 | 2025-12-31 | Batch caching, agent catalog integration, tool registry |
 | 2.3.0 | 2025-12-31 | Skills framework, caching, shared memory, code quality fixes |
 | 2.2.0 | 2025-12-30 | Tool aliases, observability enhancements |
 | 2.0.0 | 2025-12-28 | FastMCP migration, progressive disclosure |

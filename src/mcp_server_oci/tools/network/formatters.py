@@ -45,7 +45,9 @@ class NetworkFormatter:
         return md
 
     @staticmethod
-    def vcn_detail_markdown(vcn: dict, subnets: list[dict] = None, security_lists: list[dict] = None) -> str:
+    def vcn_detail_markdown(
+        vcn: dict, subnets: list[dict] = None, security_lists: list[dict] = None
+    ) -> str:
         """Format VCN detail as markdown."""
         md = MarkdownFormatter.header(f"VCN: {vcn.get('display_name', 'Unknown')}", 1)
 
@@ -230,7 +232,8 @@ class NetworkFormatter:
             md += MarkdownFormatter.header("⚠️ Risky Rules", 2)
 
             for rule in risky_rules:
-                risk_icon = {"HIGH": "🔴", "MEDIUM": "🟠", "LOW": "🟡"}.get(rule.get("risk_level", ""), "⚪")
+                risk_icons = {"HIGH": "🔴", "MEDIUM": "🟠", "LOW": "🟡"}
+                risk_icon = risk_icons.get(rule.get("risk_level", ""), "⚪")
                 md += f"\n### {risk_icon} {rule.get('security_list_name', 'Unknown')}\n"
                 md += f"**Risk Level:** {rule.get('risk_level', 'N/A')}\n"
                 md += f"**Reason:** {rule.get('reason', 'N/A')}\n"

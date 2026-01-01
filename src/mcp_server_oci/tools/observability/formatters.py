@@ -144,7 +144,8 @@ class ObservabilityFormatter:
             [
                 Formatter.format_datetime(e.get("timestamp", ""), human_readable=True),
                 e.get("status", "N/A"),
-                e.get("message", "")[:50] + "..." if len(e.get("message", "")) > 50 else e.get("message", ""),
+                (e.get("message", "")[:50] + "...")
+                if len(e.get("message", "")) > 50 else e.get("message", ""),
             ]
             for e in events[:30]
         ]
