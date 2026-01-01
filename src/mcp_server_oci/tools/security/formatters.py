@@ -222,14 +222,21 @@ class SecurityFormatter:
         if score:
             md += "## Security Score\n"
             overall = score.get("overall", 0)
-            grade = "🟢 Good" if overall >= 80 else "🟡 Fair" if overall >= 60 else "🔴 Needs Attention"
+            if overall >= 80:
+                grade = "🟢 Good"
+            elif overall >= 60:
+                grade = "🟡 Fair"
+            else:
+                grade = "🔴 Needs Attention"
             md += f"**Overall Score:** {overall}/100 - {grade}\n\n"
 
         # IAM Summary
         iam = data.get("iam_summary", {})
         if iam:
             md += "## IAM Summary\n"
-            md += f"- **Users:** {iam.get('total_users', 0)} (Active: {iam.get('active_users', 0)})\n"
+            total = iam.get('total_users', 0)
+            active = iam.get('active_users', 0)
+            md += f"- **Users:** {total} (Active: {active})\n"
             md += f"- **Groups:** {iam.get('total_groups', 0)}\n"
             md += f"- **Policies:** {iam.get('total_policies', 0)}\n"
 

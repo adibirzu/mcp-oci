@@ -18,12 +18,16 @@ from .cache import (
     CacheEntry,
     CacheStats,
     CacheTier,
+    RedisTTLCache,
     TTLCache,
+    batch_get,
+    batch_set,
     cached,
     clear_all_caches,
     generate_cache_key,
     get_all_cache_stats,
     get_cache,
+    prefetch_compartments,
 )
 from .client import OCIClientManager, get_client_manager, get_oci_client, get_oci_config
 from .errors import (
@@ -130,6 +134,7 @@ __all__ = [
     "check_observability_health",
     # Cache
     "TTLCache",
+    "RedisTTLCache",
     "CacheEntry",
     "CacheStats",
     "CacheTier",
@@ -139,6 +144,9 @@ __all__ = [
     "clear_all_caches",
     "generate_cache_key",
     "cached",
+    "batch_get",
+    "batch_set",
+    "prefetch_compartments",
     # Shared Memory
     "EventType",
     "AgentState",

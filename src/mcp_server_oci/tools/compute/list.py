@@ -19,7 +19,11 @@ def _format_markdown(instances: list[dict[str, Any]]) -> str:
             ips.append(inst['private_ip'])
         ip_str = ", ".join(ips)
 
-        md += f"| {inst['display_name']} | {inst['lifecycle_state']} | {inst['shape']} | {ip_str} | `{inst['id'][-6:]}...` |\n"
+        short_id = f"`{inst['id'][-6:]}...`"
+        md += (
+            f"| {inst['display_name']} | {inst['lifecycle_state']} "
+            f"| {inst['shape']} | {ip_str} | {short_id} |\n"
+        )
     return md
 
 def list_instances(

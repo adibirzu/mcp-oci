@@ -105,7 +105,9 @@ class SkillExecutor:
                 details={"status": status, "metrics": metrics, "diagnosis": diagnosis},
                 recommendations=["Consider scaling up"]
             )
-            return result.to_markdown() if params.response_format == ResponseFormat.MARKDOWN else result.model_dump_json()
+            if params.response_format == ResponseFormat.MARKDOWN:
+                return result.to_markdown()
+            return result.model_dump_json()
     """
 
     def __init__(
@@ -403,7 +405,8 @@ class SkillExecutor:
 
         Args:
             step_name: The step name (must have been added with add_step)
-            analysis_type: Type of analysis (summarize, diagnose, recommend, explain, classify, compare)
+            analysis_type: Type of analysis (summarize, diagnose, recommend,
+                explain, classify, compare)
             data: Data to analyze
             question: Specific question to answer
             constraints: List of constraints for the analysis

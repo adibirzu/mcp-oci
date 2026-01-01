@@ -53,7 +53,7 @@ class ListAutonomousDatabasesInput(BaseModel):
 
     compartment_id: str = Field(
         ...,
-        description="Compartment OCID to list databases from (e.g., 'ocid1.compartment.oc1..aaaaaa')",
+        description="Compartment OCID to list databases from",
         min_length=20
     )
     workload_type: ADBWorkloadType | None = Field(
@@ -114,7 +114,8 @@ class GetAutonomousDatabaseInput(BaseModel):
     @classmethod
     def validate_database_ocid(cls, v: str) -> str:
         if not v.startswith('ocid1.autonomousdatabase.'):
-            raise ValueError("Invalid Autonomous Database OCID. Expected 'ocid1.autonomousdatabase.*'")
+            msg = "Invalid Autonomous Database OCID. Expected 'ocid1.autonomousdatabase.*'"
+            raise ValueError(msg)
         return v
 
 

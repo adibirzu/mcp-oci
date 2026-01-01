@@ -84,7 +84,8 @@ class ComputeFormatter:
 
         # Pagination info
         if data.get("has_more"):
-            md += f"\n*More results available. Use `offset={data.get('next_offset')}` to see next page.*\n"
+            next_off = data.get('next_offset')
+            md += f"\n*More results available. Use `offset={next_off}` to see next page.*\n"
 
         return md
 

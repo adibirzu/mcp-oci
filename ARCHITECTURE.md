@@ -1,8 +1,8 @@
 # OCI MCP Server Architecture
 
-**Version:** 2.3.0
-**Last Updated:** 2025-12-31
-**Total Tools:** 44 (including aliases)
+**Version:** 2.5.0
+**Last Updated:** 2026-01-01
+**Total Tools:** 52 (including aliases, runbooks, and skills)
 
 ---
 
@@ -81,7 +81,9 @@ src/mcp_server_oci/
     ├── executor.py           # Skill executor with progress tracking
     ├── discovery.py          # Tool discovery and registry
     ├── tools.py              # Skill tool registration
-    ├── troubleshoot.py       # Troubleshooting workflows
+    ├── troubleshoot.py       # Instance troubleshooting workflows
+    ├── troubleshoot_database.py  # Database-specific troubleshooting
+    ├── runbooks.py           # Declarative runbook framework
     └── SKILL.md              # Skills domain documentation
 ```
 
@@ -379,7 +381,7 @@ oci_compute_list_instances(limit=10)  # Get first 10 instances
 
 ---
 
-## 10. Adding New Tools
+## 12. Adding New Tools
 
 ### Step 1: Create Domain Directory
 ```
@@ -429,7 +431,7 @@ register_new_domain_tools(mcp)
 
 ---
 
-## 14. Skills Architecture
+## 13. Skills Architecture
 
 Skills are high-level operations that orchestrate multiple tools.
 
@@ -503,18 +505,273 @@ result = await context.analyze(data, prompt)
 
 ---
 
-## 15. Recent Changes (v2.3.0)
+## 14. Runbook Framework
 
-### Code Quality Improvements
+The server includes a declarative runbook framework for multi-step operational workflows.
+
+### Runbook Structure
+
+```python
+from mcp_server_oci.skills import RunbookDefinition, RunbookStep
+
+runbook = RunbookDefinition(
+    id="db-health-check",
+    name="Database Health Check",
+    version="1.0.0",
+    description="Comprehensive health check for autonomous databases",
+    category="monitoring",  # monitoring, troubleshooting, capacity, security, maintenance
+    target_resource_type="autonomous_database",
+    thresholds={
+        "cpu_usage_critical": 90,
+        "cpu_usage_warning": 70,
+        "storage_pct_critical": 90,
+    },
+    steps=[
+        RunbookStep(
+            id="check_availability",
+            name="Check Database Availability",
+            tool_name="oci_database_get_autonomous",
+            params={"database_id": "${resource_id}"},
+        ),
+        RunbookStep(
+            id="check_cpu",
+            name="Check CPU Utilization",
+            tool_name="oci_database_get_performance_metrics",
+            params={"database_id": "${resource_id}", "metric": "cpu"},
+            condition="cpu_usage > 50",  # Only run if CPU is elevated
+        ),
+    ],
+)
+```
+
+### Built-in Runbooks
+
+| Runbook ID | Category | Description |
+|------------|----------|-------------|
+| `db-health-check` | monitoring | Comprehensive database health assessment |
+| `db-performance-investigation` | troubleshooting | Deep-dive performance analysis |
+| `db-storage-capacity` | capacity | Storage usage and growth analysis |
+| `db-connection-investigation` | troubleshooting | Connection and session diagnostics |
+| `db-security-audit` | security | Security posture assessment |
+| `db-maintenance-readiness` | maintenance | Pre-maintenance health check |
+
+### Runbook Execution
+
+```python
+from mcp_server_oci.skills import execute_runbook, list_runbooks
+
+# List available runbooks
+runbooks = list_runbooks(category="monitoring")
+
+# Execute a runbook
+result = await execute_runbook(
+    runbook_id="db-health-check",
+    resource_id="ocid1.autonomousdatabase...",
+    session_id="session-123",
+    variables={"include_awr": True},
+    tool_executor=my_tool_executor,
+)
+
+# Result includes all step results, findings, and recommendations
+print(f"Status: {result.status}")
+print(f"Findings: {len(result.findings)}")
+print(f"Recommendations: {result.recommendations}")
+```
+
+### Safe Expression Evaluator
+
+Runbook conditions use a secure regex-based expression evaluator (no arbitrary code execution):
+
+```python
+# Supported expressions:
+"cpu_usage > 80"        # Numeric comparisons
+"storage_pct >= 90"     # Greater than or equal
+"blocked_sessions == 0" # Equality
+"include_awr == True"   # Boolean checks
+```
+
+---
+
+## 15. Database Troubleshooting Skills
+
+The server includes specialized database troubleshooting skills:
+
+### Skills Available
+
+| Skill | Description | Use Case |
+|-------|-------------|----------|
+| `oci_skill_troubleshoot_database` | Comprehensive health check | General database issues |
+| `oci_skill_troubleshoot_db_performance` | Performance deep-dive | Slow queries, high CPU |
+| `oci_skill_troubleshoot_db_connections` | Connection diagnostics | Connection failures, pooling |
+| `oci_skill_troubleshoot_db_storage` | Storage analysis | Space issues, growth planning |
+
+### Usage
+
+```python
+# General troubleshooting
+from mcp_server_oci.skills import TroubleshootDatabaseInput
+
+input_params = TroubleshootDatabaseInput(
+    database_id="ocid1.autonomousdatabase...",
+    issue_type="performance",  # general, performance, connection, storage
+    include_recommendations=True,
+)
+```
+
+### Issue Types
+
+| Type | Checks Performed |
+|------|-----------------|
+| `general` | Availability, basic metrics, recent alerts |
+| `performance` | CPU, memory, I/O, wait events, top SQL |
+| `connection` | Pool status, session counts, blocking locks |
+| `storage` | Tablespace usage, growth rate, backup size |
+
+---
+
+## 16. Dynamic Tool Registration
+
+The Coordinator supports dynamic tool and skill registration at runtime.
+
+### DynamicToolManager
+
+```python
+from src.mcp.dynamic_manager import DynamicToolManager, initialize_dynamic_manager
+
+# Initialize and start
+manager = await initialize_dynamic_manager()
+
+# Register a custom tool
+await manager.register_custom_tool(
+    name="my_custom_tool",
+    description="Does something custom",
+    handler=my_handler,
+    input_schema={"type": "object", "properties": {...}},
+    domains=["database"],
+    tier=2,
+)
+
+# Register a runbook as a skill
+await manager.register_runbook_skill(
+    runbook_id="db-health-check",
+    name="Database Health Check",
+    description="Comprehensive health check",
+    category="monitoring",
+    executor=runbook_executor,
+)
+```
+
+### Event-Driven Updates
+
+The manager emits events when tools change:
+
+```python
+from src.mcp.dynamic_manager import UpdateEvent
+
+manager.on_update(
+    UpdateEvent.TOOLS_ADDED,
+    lambda event: print(f"New tools: {event.tools_affected}")
+)
+
+manager.on_update(
+    UpdateEvent.RUNBOOKS_REGISTERED,
+    lambda event: print(f"Runbook registered: {event.details}")
+)
+```
+
+### Orchestrator Integration
+
+The ParallelOrchestrator automatically receives updates:
+
+```python
+from src.agents.coordinator.orchestrator import ParallelOrchestrator
+
+orchestrator = ParallelOrchestrator(
+    agent_catalog=agent_catalog,
+    tool_catalog=tool_catalog,
+    llm=llm,
+)
+
+# Start dynamic updates
+await orchestrator.start_dynamic_manager()
+
+# Register a runbook directly
+await orchestrator.register_runbook(
+    runbook_id="db-health-check",
+    name="Database Health Check",
+    description="...",
+    category="monitoring",
+)
+
+# Check dynamic status
+status = orchestrator.get_dynamic_status()
+```
+
+---
+
+## 17. Recent Changes
+
+### v2.5.0 (2026-01-01)
+
+#### Database Troubleshooting Skills
+- Added `oci_skill_troubleshoot_database` for comprehensive database health checks
+- Added `oci_skill_troubleshoot_db_performance` for performance deep-dives
+- Added `oci_skill_troubleshoot_db_connections` for connection diagnostics
+- Added `oci_skill_troubleshoot_db_storage` for storage analysis
+
+#### Runbook Framework
+- New declarative runbook framework in `skills/runbooks.py`
+- 6 built-in database runbooks (health-check, performance, storage, connections, security, maintenance)
+- Safe expression evaluator for condition checking (regex-based, no code execution)
+- Multi-step workflow orchestration with dependency management
+- Automatic finding aggregation and recommendation generation
+
+#### Dynamic Tool Registration
+- New `DynamicToolManager` in Coordinator for runtime tool/skill registration
+- Event-driven updates when MCP servers add/remove tools
+- Automatic sync between ServerRegistry, ToolCatalog, and AgentCatalog
+- Hot-reload support for new features without restart
+
+#### Orchestrator Integration
+- ParallelOrchestrator now integrates with DynamicToolManager
+- Callbacks for tool updates, runbook registrations, sync completions
+- `start_dynamic_manager()` and `stop_dynamic_manager()` lifecycle methods
+- `register_runbook()` for direct runbook registration
+
+#### ATP Shared Memory Fixes
+- Fixed SQL MERGE statements with named parameters (positional params fail when reused)
+- Fixed Oracle LOB handling for CLOB columns (requires `.read()` method)
+- All 15 ATP tables created and verified (6 Coordinator + 9 MCP-OCI)
+
+### v2.4.0 (2025-12-31)
+
+#### Performance Enhancements
+- Added batch caching operations (`batch_get`, `batch_set`)
+- Added `prefetch_compartments` for cache warming
+- Improved agent catalog with MCP tool registry
+
+#### Agent Catalog Integration
+- Added comprehensive MCP tool registry by domain (`MCP_DOMAIN_TOOLS`)
+- Added tool alias resolution (`TOOL_ALIASES`)
+- New catalog helpers: `get_tools_for_domain()`, `find_tool_domain()`, `get_agent_for_tool()`
+- Enhanced domain capabilities mapping
+
+#### Documentation Updates
+- Updated SKILL.md with new version
+- Updated agent catalogs with new features
+
+### v2.3.0 (2025-12-31)
+
+#### Code Quality Improvements
 - Fixed `ResponseFormat` enum duplication (now canonical in `core/formatters.py`)
 - Fixed `report_progress()` signature to match FastMCP API
 - Fixed `get_client_manager()` async/sync handling
 - Added `__all__` exports to `core/models.py`
 - Configured mypy to ignore OCI SDK stub errors
-- Reduced ruff errors from 1484 to ~333 (mostly line-length)
+- Reduced ruff errors from 1484 to 0
 - Reduced mypy errors from 402 to ~290
 
-### Framework Enhancements
+#### Framework Enhancements
 - Skills framework with `SkillExecutor`, `AgentContext`, `SamplingClient`
 - TTL-based tiered caching (`cache.py`)
 - Inter-agent shared memory (`shared_memory.py`)
@@ -522,7 +779,7 @@ result = await context.analyze(data, prompt)
 
 ---
 
-## 16. Planned Enhancements
+## 18. Planned Enhancements
 
 ### Phase 1: Critical Services (Q1)
 - [ ] Object Storage tools
@@ -544,9 +801,17 @@ result = await context.analyze(data, prompt)
 - [x] Error handling improvements
 - [ ] OpenTelemetry integration (partial - logging complete)
 
+### Phase 4: Operational Excellence (Q4) - In Progress
+- [x] Runbook framework for operational workflows
+- [x] Database troubleshooting skills
+- [x] Dynamic tool registration
+- [x] ATP shared memory for inter-agent communication
+- [ ] Multi-region support
+- [ ] Disaster recovery workflows
+
 ---
 
-## 17. Testing
+## 19. Testing
 
 ```bash
 # Install dependencies
@@ -570,7 +835,7 @@ uv run ruff check src/
 
 ---
 
-## 18. Related Documentation
+## 20. Related Documentation
 
 - [SKILL.md](./SKILL.md) - Skill definition for AI agents
 - [REVIEW.md](./REVIEW.md) - Comprehensive review and improvement plan

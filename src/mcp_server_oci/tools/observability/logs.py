@@ -33,7 +33,11 @@ def _get_namespace(config: dict[str, Any]) -> str:
     # if it's the root compartment, or explicitly in config.
     tenancy_id = config.get("tenancy") or os.getenv("TENANCY_OCID") or get_compartment_id()
     if not tenancy_id:
-        raise ValueError("Cannot resolve Tenancy OCID for Log Analytics namespace lookup. Set TENANCY_OCID or COMPARTMENT_OCID.")
+        msg = (
+            "Cannot resolve Tenancy OCID for Log Analytics namespace lookup. "
+            "Set TENANCY_OCID or COMPARTMENT_OCID."
+        )
+        raise ValueError(msg)
 
     client = get_client(oci.log_analytics.LogAnalyticsClient, region=config.get("region"))
 
@@ -49,7 +53,11 @@ def _get_namespace(config: dict[str, Any]) -> str:
         # The old server errored if multiple. Let's error for safety.
         if len(items) > 1:
             names = [ns.namespace_name for ns in items]
-            raise ValueError(f"Multiple Log Analytics namespaces found: {names}. Set LA_NAMESPACE env var to select one.")
+            msg = (
+                f"Multiple Log Analytics namespaces found: {names}. "
+                "Set LA_NAMESPACE env var to select one."
+            )
+            raise ValueError(msg)
 
         _CACHED_NAMESPACE = items[0].namespace_name
         return _CACHED_NAMESPACE
