@@ -12,9 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       - name: Prepare OCI config
         env:
           OCI_CONFIG_B64: ${{ secrets.OCI_CONFIG_B64 }}
@@ -23,11 +25,7 @@ jobs:
           echo "$OCI_CONFIG_B64" | base64 -d > $HOME/.oci/config
           chmod 600 $HOME/.oci/config
       - name: Install deps
-        run: |
-          python -m venv .venv
-          . .venv/bin/activate
-          pip install -U pip
-          pip install -e .[dev]
+        run: uv sync --all-extras
       - name: Run integration tests (Frankfurt)
         env:
           OCI_INTEGRATION: '1'
@@ -37,6 +35,4 @@ jobs:
           TEST_LOGANALYTICS_NAMESPACE: ${{ secrets.TEST_LOGANALYTICS_NAMESPACE }}
           TEST_OCI_OS_BUCKET: ${{ secrets.TEST_OCI_OS_BUCKET }}
           TEST_OCI_OS_NAMESPACE: ${{ secrets.TEST_OCI_OS_NAMESPACE }}
-        run: |
-          . .venv/bin/activate
-          pytest -q tests/integration
+        run: uv run pytest -q tests/integration
