@@ -51,7 +51,8 @@
       "oci_profile": "DEFAULT",
       "oci_region": "eu-frankfurt-1",
       "namespace_tools": false,
-      "health_check_interval": 30
+      "health_check_interval": 30,
+      "tags": ["oci", "built-in"]
     },
     {
       "name": "oci-compute",
@@ -61,19 +62,20 @@
       "command": "python",
       "args": ["-m", "mcp_server_oci.server"],
       "env": {
-        "PYTHONPATH": "src",
         "OCI_MCP_TRANSPORT": "stdio",
         "ALLOW_MUTATIONS": "false"
       },
       "auth_method": "oci_config",
       "oci_profile": "DEFAULT",
       "oci_region": "eu-frankfurt-1",
+      "pythonpath": ["src"],
       "namespace_tools": true,
-      "health_check_interval": 30
+      "health_check_interval": 30,
+      "tags": ["oci", "compute"]
     },
     {
       "name": "remote-mcp",
-      "description": "Remote MCP Server (streamable HTTP)",
+      "description": "Remote MCP Server (streamable HTTP with OAuth)",
       "enabled": false,
       "transport": "streamable_http",
       "url": "https://remote-mcp.example.com/mcp",
@@ -82,11 +84,12 @@
       "namespace_tools": true,
       "health_check_interval": 60,
       "connect_timeout": 10.0,
-      "request_timeout": 60.0
+      "request_timeout": 60.0,
+      "tags": ["external", "remote"]
     },
     {
       "name": "oci-rp",
-      "description": "OCI MCP Server with Resource Principals (OKE/Functions)",
+      "description": "OCI MCP Server with Resource Principals (OKE / Functions)",
       "enabled": false,
       "transport": "stdio",
       "command": "python",
@@ -94,9 +97,40 @@
       "auth_method": "resource_principal",
       "oci_region": "eu-frankfurt-1",
       "namespace_tools": true,
-      "health_check_interval": 30
+      "health_check_interval": 30,
+      "tags": ["oci", "cloud-native"]
+    },
+    {
+      "name": "ext-filesystem",
+      "description": "Example: external filesystem MCP server (npx)",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
+      "auth_method": "none",
+      "namespace_tools": true,
+      "tags": ["external", "filesystem"]
+    },
+    {
+      "name": "ext-github",
+      "description": "Example: external Python MCP server from another project with its own venv",
+      "enabled": false,
+      "transport": "stdio",
+      "venv": "/home/user/projects/mcp-github/.venv",
+      "args": ["-m", "mcp_github.server"],
+      "cwd": "/home/user/projects/mcp-github",
+      "pythonpath": ["/home/user/projects/mcp-github/src"],
+      "auth_method": "none",
+      "namespace_tools": true,
+      "tags": ["external", "github"]
     }
   ],
+
+  "backends_dir": null,
+
+  "scan_paths": [],
+
+  "include_configs": [],
 
   "enable_audit_log": true,
   "enable_metrics": true

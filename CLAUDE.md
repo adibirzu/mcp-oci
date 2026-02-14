@@ -26,6 +26,15 @@ uv run oci-mcp-gateway --port 9000 --no-auth --log-level DEBUG
 
 # Run gateway with environment variables
 MCP_GATEWAY_CONFIG=gateway.json MCP_GATEWAY_PORT=9000 uv run oci-mcp-gateway
+
+# Discover MCP servers from directories
+uv run oci-mcp-gateway --scan ~/projects --discover-only
+
+# Load backend configs from a drop-in directory
+uv run oci-mcp-gateway --backends-dir ./backends.d
+
+# Scan + run (discovered backends are disabled by default)
+uv run oci-mcp-gateway --config gateway.json --scan ~/projects
 ```
 
 ### Code Quality
@@ -51,6 +60,7 @@ src/mcp_server_oci/
 │   ├── __init__.py     # Package exports
 │   ├── __main__.py     # CLI entry point
 │   ├── config.py       # Gateway + backend configuration models
+│   ├── discovery.py    # Auto-discovery of MCP servers from dirs/projects
 │   ├── auth.py         # OAuth/Bearer authentication provider
 │   ├── registry.py     # Backend server registry + health monitoring
 │   └── server.py       # Gateway server (proxy aggregation, routing)
@@ -88,6 +98,9 @@ Agent (OAuth Bearer) --> [Gateway :9000/mcp] --> Backend A (stdio, .oci/config)
 - **Health monitoring**: Automatic health checks with quarantine/recovery
 - **Audit logging**: All tool invocations logged with client identity
 - **Per-tool access control**: Scope-based authorization per tool
+- **Auto-discovery**: Scan directories for MCP servers (.mcp.json, pyproject.toml, FastMCP scripts)
+- **Multi-project support**: Backends from different folders/repos with independent venvs and PYTHONPATH
+- **Drop-in config**: Load backend definitions from a `backends.d/` directory
 
 ### Backend Transport Types
 | Transport | Use Case | Connection |
@@ -117,6 +130,32 @@ Agent (OAuth Bearer) --> [Gateway :9000/mcp] --> Backend A (stdio, .oci/config)
 | `MCP_GATEWAY_JWT_ISSUER` | - | Expected JWT issuer |
 | `MCP_GATEWAY_JWT_AUDIENCE` | - | Expected JWT audience |
 | `MCP_GATEWAY_LOG_LEVEL` | `INFO` | Log level |
+| `MCP_GATEWAY_BACKENDS_DIR` | - | Directory of backend config fragments |
+| `MCP_GATEWAY_SCAN_PATHS` | - | Colon-separated dirs to scan for MCP servers |
+
+### Auto-Discovery
+
+The gateway can discover MCP servers from external projects:
+
+```bash
+# Scan directories for MCP servers (prints JSON, does not start)
+oci-mcp-gateway --scan ~/projects --discover-only
+
+# Discovered backends are disabled by default for operator review
+# Enable them in gateway.json or via backends.d/ drop-in configs
+```
+
+Discovery checks for:
+1. `.mcp.json` / `mcp.json` -- standard MCP client config (authoritative)
+2. `pyproject.toml` -- projects with MCP-related entry points
+3. `server.py` / `main.py` / `app.py` -- Python files with FastMCP patterns
+4. `src/` layout -- packages with `server.py` inside `src/<pkg>/`
+
+External project backends support:
+- **`venv`**: Path to virtual environment (gateway uses its Python binary)
+- **`pythonpath`**: Additional PYTHONPATH entries for the backend process
+- **`cwd`**: Working directory for the backend subprocess
+- **`tags`**: Categorization labels (e.g. `auto-discovered`, `project:name`)
 
 ## Key Patterns
 
