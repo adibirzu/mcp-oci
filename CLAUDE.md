@@ -11,8 +11,30 @@ OCI MCP Server is a Model Context Protocol server for Oracle Cloud Infrastructur
 ### Development
 ```bash
 uv sync                           # Install dependencies
-uv run python -m mcp_server_oci.server  # Run server (stdio)
+uv run python -m mcp_server_oci.server  # Run MCP server (stdio)
+uv run python -m mcp_server_oci.gateway # Run MCP Gateway (streamable HTTP)
 uv run python tests/smoke_test.py       # Run smoke tests
+```
+
+### Gateway
+```bash
+# Run gateway with config file
+uv run oci-mcp-gateway --config gateway.json
+
+# Run gateway with CLI options
+uv run oci-mcp-gateway --port 9000 --no-auth --log-level DEBUG
+
+# Run gateway with environment variables
+MCP_GATEWAY_CONFIG=gateway.json MCP_GATEWAY_PORT=9000 uv run oci-mcp-gateway
+
+# Discover MCP servers from directories
+uv run oci-mcp-gateway --scan ~/projects --discover-only
+
+# Load backend configs from a drop-in directory
+uv run oci-mcp-gateway --backends-dir ./backends.d
+
+# Scan + run (discovered backends are disabled by default)
+uv run oci-mcp-gateway --config gateway.json --scan ~/projects
 ```
 
 ### Code Quality
@@ -34,6 +56,14 @@ src/mcp_server_oci/
 │   ├── formatters.py   # Markdown/JSON response formatters
 │   ├── models.py       # Base Pydantic models (ResponseFormat, etc.)
 │   └── observability.py # OTEL tracing and structured logging
+├── gateway/            # MCP Gateway (aggregating proxy)
+│   ├── __init__.py     # Package exports
+│   ├── __main__.py     # CLI entry point
+│   ├── config.py       # Gateway + backend configuration models
+│   ├── discovery.py    # Auto-discovery of MCP servers from dirs/projects
+│   ├── auth.py         # OAuth/Bearer authentication provider
+│   ├── registry.py     # Backend server registry + health monitoring
+│   └── server.py       # Gateway server (proxy aggregation, routing)
 ├── tools/
 │   ├── discovery.py    # Progressive disclosure: search_tools, list_domains
 │   ├── compute/        # Compute domain tools
@@ -45,6 +75,87 @@ src/mcp_server_oci/
 └── skills/
     └── troubleshoot.py # High-level workflow skills
 ```
+
+## MCP Gateway
+
+The gateway is an aggregating reverse proxy that exposes multiple backend MCP
+servers through a single Streamable HTTP endpoint with OAuth/Bearer authentication.
+
+### Architecture
+```
+Agent (OAuth Bearer) --> [Gateway :9000/mcp] --> Backend A (stdio, .oci/config)
+                                              --> Backend B (HTTP, resource principal)
+                                              --> Backend C (in-process)
+                                              --> External MCP servers
+```
+
+### Key Features
+- **Streamable HTTP** transport for the client-facing endpoint (MCP 2025-06-18+)
+- **OAuth 2.1 / Bearer token** authentication (JWT or static tokens)
+- **Multi-transport backends**: stdio, streamable HTTP, or in-process
+- **Multi-auth backends**: .oci/config, resource principals, instance principals, bearer tokens
+- **Tool namespacing**: Backend tools prefixed to avoid collisions
+- **Health monitoring**: Automatic health checks with quarantine/recovery
+- **Audit logging**: All tool invocations logged with client identity
+- **Per-tool access control**: Scope-based authorization per tool
+- **Auto-discovery**: Scan directories for MCP servers (.mcp.json, pyproject.toml, FastMCP scripts)
+- **Multi-project support**: Backends from different folders/repos with independent venvs and PYTHONPATH
+- **Drop-in config**: Load backend definitions from a `backends.d/` directory
+
+### Backend Transport Types
+| Transport | Use Case | Connection |
+|-----------|----------|------------|
+| `stdio` | Local MCP servers | Spawns subprocess |
+| `streamable_http` | Remote MCP servers | HTTP client |
+| `in_process` | Same-process servers | Direct import |
+
+### Backend Authentication Methods
+| Method | Use Case | Config |
+|--------|----------|--------|
+| `oci_config` | Local development | `~/.oci/config` file |
+| `resource_principal` | OKE / Functions | Auto-detected |
+| `instance_principal` | Compute instances | Auto-detected |
+| `bearer_token` | Remote MCP servers | Token in config |
+| `none` | No auth needed | - |
+
+### Gateway Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_GATEWAY_CONFIG` | - | Path to gateway JSON config |
+| `MCP_GATEWAY_HOST` | `0.0.0.0` | Listen address |
+| `MCP_GATEWAY_PORT` | `9000` | Listen port |
+| `MCP_GATEWAY_PATH` | `/mcp` | Endpoint path |
+| `MCP_GATEWAY_AUTH_ENABLED` | `true` | Enable OAuth/Bearer auth |
+| `MCP_GATEWAY_JWT_PUBLIC_KEY` | - | Path to JWT public key PEM |
+| `MCP_GATEWAY_JWT_ISSUER` | - | Expected JWT issuer |
+| `MCP_GATEWAY_JWT_AUDIENCE` | - | Expected JWT audience |
+| `MCP_GATEWAY_LOG_LEVEL` | `INFO` | Log level |
+| `MCP_GATEWAY_BACKENDS_DIR` | - | Directory of backend config fragments |
+| `MCP_GATEWAY_SCAN_PATHS` | - | Colon-separated dirs to scan for MCP servers |
+
+### Auto-Discovery
+
+The gateway can discover MCP servers from external projects:
+
+```bash
+# Scan directories for MCP servers (prints JSON, does not start)
+oci-mcp-gateway --scan ~/projects --discover-only
+
+# Discovered backends are disabled by default for operator review
+# Enable them in gateway.json or via backends.d/ drop-in configs
+```
+
+Discovery checks for:
+1. `.mcp.json` / `mcp.json` -- standard MCP client config (authoritative)
+2. `pyproject.toml` -- projects with MCP-related entry points
+3. `server.py` / `main.py` / `app.py` -- Python files with FastMCP patterns
+4. `src/` layout -- packages with `server.py` inside `src/<pkg>/`
+
+External project backends support:
+- **`venv`**: Path to virtual environment (gateway uses its Python binary)
+- **`pythonpath`**: Additional PYTHONPATH entries for the backend process
+- **`cwd`**: Working directory for the backend subprocess
+- **`tags`**: Categorization labels (e.g. `auto-discovered`, `project:name`)
 
 ## Key Patterns
 

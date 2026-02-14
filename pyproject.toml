@@ -7,7 +7,7 @@ license = "MIT"
 authors = [
     { name = "Adrian Birzu", email = "adibirzu@gmail.com" }
 ]
-keywords = ["oci", "oracle", "cloud", "mcp", "ai", "llm", "fastmcp"]
+keywords = ["oci", "oracle", "cloud", "mcp", "ai", "llm", "fastmcp", "gateway"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -34,6 +34,9 @@ dev = [
     "ruff>=0.3.0",
     "mypy>=1.8.0",
 ]
+gateway = [
+    "PyJWT[crypto]>=2.8.0",
+]
 otel = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
@@ -43,6 +46,7 @@ otel = [
 
 [project.scripts]
 oci-mcp = "mcp_server_oci.server:main"
+oci-mcp-gateway = "mcp_server_oci.gateway.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -71,6 +75,7 @@ ignore = [
 "src/mcp_server_oci/tools/*" = ["ANN401"]
 "src/mcp_server_oci/skills/*" = ["ANN401"]
 "src/mcp_server_oci/core/client.py" = ["ANN401"]
+"src/mcp_server_oci/gateway/*" = ["ANN401"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -84,6 +89,7 @@ module = [
     "oci.*",
     "oracledb.*",
     "opentelemetry.*",
+    "jwt.*",
 ]
 ignore_missing_imports = true
 
