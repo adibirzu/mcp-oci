@@ -8,41 +8,30 @@ on:
 
 jobs:
   lint:
-    name: Lint (Python ${{ matrix.python-version }})
+    name: Lint (Python ${{ matrix.python-version }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12", "3.13"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install tools and package
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install ruff black mypy
-      - name: Ruff check (core)
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Ruff check
         shell: bash
-        run: |
-          ruff check \
-            mcp_servers \
-            mcp_oci_common \
-            --ignore=F401,F841,E701,E402,F811,F821 || true
-      - name: Black check (core)
-        shell: bash
-        run: |
-          black --check \
-            mcp_servers \
-            mcp_oci_common || true
+        run: uv run ruff check src/
       - name: MyPy (best-effort)
-        run: |
-          mypy mcp_servers mcp_oci_common || true
+        shell: bash
+        run: uv run mypy src/ || true
 
   test:
     name: Tests (Py ${{ matrix.python-version }} / ${{ matrix.os }})
@@ -51,24 +40,27 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12", "3.13"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[oci]
-          pip install pytest pytest-cov
-      - name: Run unit tests with coverage (skip integration)
+        run: uv sync --all-extras
+      - name: Run unit tests with coverage
         env:
           PYTHONWARNINGS: ignore
         run: |
-          pytest -q --ignore=tests/integration --ignore=mcp_servers --cov=mcp_servers --cov=mcp_oci_common --cov-report=xml --cov-report=term-missing --cov-fail-under=1
+          uv run pytest -q --ignore=tests/integration \
+            --cov=src/mcp_server_oci \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=1
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v4
@@ -76,21 +68,3 @@ jobs:
           files: ./coverage.xml
           flags: ${{ matrix.os }},py${{ matrix.python-version }}
           verbose: true
-
-  # docs:
-  #   name: Docs Check
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Setup Node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         cache: 'npm'
-  #         cache-dependency-path: docs/docusaurus/package-lock.json
-  #     - name: Build Docusaurus site
-  #       run: |
-  #         cd docs/docusaurus
-  #         npm ci
-  #         npm run build

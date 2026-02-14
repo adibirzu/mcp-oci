@@ -1,0 +1,137 @@
+{
+  "name": "oci-mcp-gateway",
+  "version": "1.0.0",
+  "host": "0.0.0.0",
+  "port": 9000,
+  "path": "/mcp",
+  "log_level": "INFO",
+  "stateless": false,
+
+  "auth": {
+    "enabled": true,
+
+    "jwt_public_key_file": null,
+    "jwt_issuer": null,
+    "jwt_audience": null,
+    "jwt_algorithms": ["RS256"],
+
+    "static_tokens": {
+      "dev-token-001": {
+        "client_id": "dev-agent",
+        "scopes": ["read:tools", "write:tools", "admin:gateway"]
+      },
+      "readonly-token-002": {
+        "client_id": "readonly-agent",
+        "scopes": ["read:tools"]
+      }
+    },
+
+    "required_scopes": [],
+
+    "tool_scopes": {
+      "oci_compute_start_instance": ["write:tools"],
+      "oci_compute_stop_instance": ["write:tools"],
+      "oci_compute_restart_instance": ["write:tools"],
+      "oci_database_start_autonomous": ["write:tools"],
+      "oci_database_stop_autonomous": ["write:tools"]
+    },
+
+    "cors_origins": ["*"]
+  },
+
+  "backends": [
+    {
+      "name": "oci",
+      "description": "OCI MCP Server - Oracle Cloud Infrastructure management (in-process)",
+      "enabled": true,
+      "transport": "in_process",
+      "module": "mcp_server_oci.server",
+      "server_attr": "mcp",
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "oci_region": "eu-frankfurt-1",
+      "namespace_tools": false,
+      "health_check_interval": 30,
+      "tags": ["oci", "built-in"]
+    },
+    {
+      "name": "oci-compute",
+      "description": "OCI Compute MCP Server (stdio subprocess)",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server_oci.server"],
+      "env": {
+        "OCI_MCP_TRANSPORT": "stdio",
+        "ALLOW_MUTATIONS": "false"
+      },
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "oci_region": "eu-frankfurt-1",
+      "pythonpath": ["src"],
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "tags": ["oci", "compute"]
+    },
+    {
+      "name": "remote-mcp",
+      "description": "Remote MCP Server (streamable HTTP with OAuth)",
+      "enabled": false,
+      "transport": "streamable_http",
+      "url": "https://remote-mcp.example.com/mcp",
+      "bearer_token": null,
+      "auth_method": "bearer_token",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["external", "remote"]
+    },
+    {
+      "name": "oci-rp",
+      "description": "OCI MCP Server with Resource Principals (OKE / Functions)",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server_oci.server"],
+      "auth_method": "resource_principal",
+      "oci_region": "eu-frankfurt-1",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "tags": ["oci", "cloud-native"]
+    },
+    {
+      "name": "ext-filesystem",
+      "description": "Example: external filesystem MCP server (npx)",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
+      "auth_method": "none",
+      "namespace_tools": true,
+      "tags": ["external", "filesystem"]
+    },
+    {
+      "name": "ext-github",
+      "description": "Example: external Python MCP server from another project with its own venv",
+      "enabled": false,
+      "transport": "stdio",
+      "venv": "/home/user/projects/mcp-github/.venv",
+      "args": ["-m", "mcp_github.server"],
+      "cwd": "/home/user/projects/mcp-github",
+      "pythonpath": ["/home/user/projects/mcp-github/src"],
+      "auth_method": "none",
+      "namespace_tools": true,
+      "tags": ["external", "github"]
+    }
+  ],
+
+  "backends_dir": null,
+
+  "scan_paths": [],
+
+  "include_configs": [],
+
+  "enable_audit_log": true,
+  "enable_metrics": true
+}
