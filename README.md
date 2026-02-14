@@ -1,41 +1,54 @@
 # OCI MCP Server
 
-A professional-grade Oracle Cloud Infrastructure (OCI) MCP server built with FastMCP, implementing Anthropic's best practices for AI agent tool integration.
+A production-grade Oracle Cloud Infrastructure (OCI) MCP server and multi-backend gateway built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk), implementing the [Model Context Protocol](https://modelcontextprotocol.io/) (2025-06-18+) for AI agent tool integration.
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![MCP Protocol](https://img.shields.io/badge/MCP-1.0-green.svg)](https://modelcontextprotocol.io/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--06--18-green.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- **Progressive Disclosure** - Tools are discoverable on-demand, not loaded upfront
+### OCI MCP Server
+- **Progressive Disclosure** - Tools are discoverable on-demand via `search_tools` / `list_domains`
 - **Dual Response Formats** - Markdown (human-readable) and JSON (machine-readable)
+- **Six Tool Domains** - Compute, Cost, Database, Network, Observability, Security
 - **Skills Architecture** - High-level workflow skills combining multiple tools
 - **Context Efficiency** - Pagination, filtering, and summarization built-in
-- **Multiple Domains** - Cost, Compute, Observability (extensible to more)
-- **Secure by Default** - Environment-based configuration, no hardcoded credentials
+- **Secure by Default** - Environment-based configuration, no hardcoded credentials, mutations disabled by default
+
+### MCP Gateway
+- **Aggregating Reverse Proxy** - Expose multiple MCP servers through a single Streamable HTTP endpoint
+- **OAuth 2.1 / Bearer Token Auth** - JWT verification or static tokens for development
+- **Multi-Transport Backends** - Connect to servers via stdio, Streamable HTTP, or in-process
+- **Auto-Discovery** - Scan directories for MCP servers (`.mcp.json`, `pyproject.toml`, FastMCP patterns)
+- **Multi-Project Support** - Backends from different folders/repos with independent venvs and PYTHONPATH
+- **Health Monitoring** - Automatic health checks with quarantine and recovery
+- **Audit Logging** - All tool invocations logged with client identity
+- **Drop-in Config** - Load backend definitions from a `backends.d/` directory
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - OCI CLI configured (`~/.oci/config`)
-- [uv](https://github.com/astral-sh/uv) package manager (recommended)
+- [uv](https://github.com/astral-sh/uv) package manager
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/mcp-oci-new.git
-cd mcp-oci-new
+git clone https://github.com/adibirzu/mcp-oci.git
+cd mcp-oci
 
-# Create virtual environment and install dependencies
+# Install dependencies
 uv sync
 
-# Copy and configure environment
-cp .env.example .env.local
-# Edit .env.local with your settings
+# Install with gateway extras (JWT support)
+uv sync --extra gateway
+
+# Install with all extras
+uv sync --all-extras
 ```
 
 ### Configuration
@@ -50,30 +63,64 @@ OCI_CLI_PROFILE=DEFAULT
 # Optional: Override region/tenancy
 # OCI_REGION=us-ashburn-1
 # OCI_TENANCY_OCID=ocid1.tenancy.oc1..xxx
+
+# Optional: Enable write operations (disabled by default)
+# ALLOW_MUTATIONS=true
 ```
 
-### Running the Server
+### Running the OCI MCP Server
 
 ```bash
-# Standard I/O mode (for MCP clients)
+# Standard I/O mode (for MCP clients like Claude Desktop, Cursor, etc.)
 uv run python -m mcp_server_oci.server
 
-# HTTP mode (for testing/debugging)
+# Streamable HTTP mode (for remote access)
 OCI_MCP_TRANSPORT=streamable_http uv run python -m mcp_server_oci.server
+```
+
+### Running the MCP Gateway
+
+```bash
+# Run gateway with config file
+uv run oci-mcp-gateway --config gateway.json
+
+# Run with CLI options
+uv run oci-mcp-gateway --port 9000 --no-auth --log-level DEBUG
+
+# Discover MCP servers from project directories
+uv run oci-mcp-gateway --scan ~/projects --discover-only
+
+# Run gateway with auto-discovered + configured backends
+uv run oci-mcp-gateway --config gateway.json --scan ~/projects
 ```
 
 ### MCP Client Configuration
 
-Add to your MCP client configuration (e.g., Claude Desktop, Cline):
+Add to your MCP client configuration (e.g., Claude Desktop, Cursor, Cline):
 
 ```json
 {
   "mcpServers": {
     "oci-mcp": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/mcp-oci-new", "python", "-m", "mcp_server_oci.server"],
+      "args": ["run", "--directory", "/path/to/mcp-oci", "python", "-m", "mcp_server_oci.server"],
       "env": {
         "OCI_CLI_PROFILE": "DEFAULT"
+      }
+    }
+  }
+}
+```
+
+Or connect through the gateway for multi-server aggregation:
+
+```json
+{
+  "mcpServers": {
+    "oci-gateway": {
+      "url": "http://localhost:9000/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-token>"
       }
     }
   }
@@ -84,22 +131,108 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cline):
 
 ```
 src/mcp_server_oci/
-├── server.py              # FastMCP server entry point
-├── config.py              # Configuration management
+├── __init__.py             # Package init (version 2.0.0)
+├── __main__.py             # Server module entry point
+├── server.py               # FastMCP server entry point, tool registration
+├── config.py               # Environment configuration (Pydantic)
 ├── core/
-│   ├── client.py          # OCI SDK client wrapper
-│   ├── errors.py          # Structured error handling
-│   ├── formatters.py      # Response formatters
-│   ├── models.py          # Base Pydantic models
-│   └── observability.py   # Tracing and logging
+│   ├── client.py           # OCI SDK client manager (async, multi-auth)
+│   ├── errors.py           # Structured OCIError with suggestions
+│   ├── formatters.py       # Markdown/JSON response formatters
+│   ├── models.py           # Base Pydantic models (pagination, time ranges, etc.)
+│   ├── observability.py    # OpenTelemetry tracing + structured logging
+│   ├── cache.py            # TTL-based caching (in-memory + Redis)
+│   └── shared_memory.py    # Inter-agent shared store (in-memory + Oracle ATP)
+├── gateway/
+│   ├── __main__.py         # Gateway CLI entry point
+│   ├── config.py           # Gateway + backend configuration models
+│   ├── discovery.py        # Auto-discovery of MCP servers from directories
+│   ├── auth.py             # OAuth 2.1 / Bearer token authentication
+│   ├── registry.py         # Backend lifecycle + health monitoring
+│   └── server.py           # Gateway proxy aggregation + audit logging
 ├── tools/
-│   ├── discovery.py       # Tool discovery (search_tools, list_domains)
-│   ├── compute/           # Compute domain tools
-│   ├── cost/              # Cost/FinOps domain tools
-│   └── observability/     # Monitoring/Logging tools
+│   ├── discovery.py        # Progressive disclosure (search_tools, list_domains)
+│   ├── compute/            # Compute domain (instances, metrics, actions)
+│   ├── cost/               # Cost/FinOps domain (summaries, trends, anomalies)
+│   ├── database/           # Database domain (management, backups)
+│   ├── network/            # Network domain (VCNs, subnets, security lists)
+│   ├── observability/      # Monitoring domain (logs, metrics, alarms)
+│   └── security/           # Security domain (policies, IAM)
 └── skills/
-    └── troubleshoot.py    # High-level workflow skills
+    ├── troubleshoot.py     # Compute instance troubleshooting skill
+    ├── troubleshoot_database.py  # Database troubleshooting skill
+    ├── agent.py            # Agent orchestration
+    ├── executor.py         # Skill step execution
+    ├── runbooks.py         # Predefined runbook workflows
+    └── discovery.py        # Skill catalog discovery
 ```
+
+## MCP Gateway
+
+The gateway is an aggregating reverse proxy that exposes multiple backend MCP servers through a single Streamable HTTP endpoint with OAuth/Bearer authentication.
+
+### Gateway Architecture
+
+```
+                          ┌──────────────────────────────────────────────┐
+                          │            MCP Gateway (:9000/mcp)           │
+                          │                                              │
+Agent ──(OAuth Bearer)──▶ │  Auth ─▶ Route ─▶ Proxy ─▶ Audit           │
+                          │                                              │
+                          └────┬──────────┬──────────┬──────────┬───────┘
+                               │          │          │          │
+                               ▼          ▼          ▼          ▼
+                          OCI MCP     Remote MCP   External    In-Process
+                          (stdio)     (HTTP+OAuth)  Servers     Servers
+                                                   (stdio)
+```
+
+### Backend Transport Types
+
+| Transport | Use Case | Connection |
+|-----------|----------|------------|
+| `stdio` | Local MCP servers | Spawns subprocess |
+| `streamable_http` | Remote MCP servers | HTTP client |
+| `in_process` | Same-process servers | Direct Python import |
+
+### Backend Authentication Methods
+
+| Method | Use Case | Config |
+|--------|----------|--------|
+| `oci_config` | Local development | `~/.oci/config` file |
+| `resource_principal` | OKE / Functions | Auto-detected from environment |
+| `instance_principal` | OCI Compute instances | Auto-detected from environment |
+| `bearer_token` | Remote MCP servers | Token in config |
+| `api_key` | OCI API key auth | API key in config |
+| `none` | No auth needed | - |
+
+### Auto-Discovery
+
+The gateway can discover MCP servers from external projects and directories:
+
+```bash
+# Scan directories for MCP servers (prints JSON, does not start)
+oci-mcp-gateway --scan ~/projects --discover-only
+
+# Discovered backends are disabled by default for operator review
+# Enable them in gateway.json or via backends.d/ drop-in configs
+```
+
+Discovery checks for:
+1. **`.mcp.json` / `mcp.json`** - Standard MCP client config (authoritative)
+2. **`pyproject.toml`** - Projects with MCP-related entry points
+3. **`server.py` / `main.py` / `app.py`** - Python files with FastMCP patterns
+4. **`src/` layout** - Packages with `server.py` inside `src/<pkg>/`
+
+External project backends support:
+- **`venv`** - Path to virtual environment (gateway uses its Python binary)
+- **`pythonpath`** - Additional PYTHONPATH entries for the backend process
+- **`cwd`** - Working directory for the backend subprocess
+- **`tags`** - Categorization labels (e.g. `auto-discovered`, `project:name`)
+
+### Gateway Configuration
+
+See [`gateway.example.json`](gateway.example.json) for a complete configuration example.
 
 ## Available Tools
 
@@ -129,6 +262,16 @@ src/mcp_server_oci/
 | `oci_cost_monthly_trend` | Monthly trend with forecast |
 | `oci_cost_detect_anomalies` | Detect cost spikes and anomalies |
 
+### Database Domain
+| Tool | Description |
+|------|-------------|
+| `oci_database_*` | Database management and backup tools |
+
+### Network Domain
+| Tool | Description |
+|------|-------------|
+| `oci_network_*` | VCN, subnet, and security list tools |
+
 ### Observability Domain
 | Tool | Description |
 |------|-------------|
@@ -136,10 +279,23 @@ src/mcp_server_oci/
 | `oci_observability_get_logs` | Query Logging Analytics |
 | `oci_observability_list_alarms` | List monitoring alarms |
 
+### Security Domain
+| Tool | Description |
+|------|-------------|
+| `oci_security_*` | Security policies and IAM tools |
+
 ### Skills (Workflows)
 | Skill | Description |
 |-------|-------------|
 | `oci_skill_troubleshoot_instance` | Comprehensive instance troubleshooting |
+| `oci_skill_troubleshoot_database` | Database issue diagnosis |
+
+### Gateway Management Tools
+| Tool | Description |
+|------|-------------|
+| `gateway_health` | Gateway and backend health status |
+| `gateway_list_backends` | List all backends with status |
+| `gateway_audit_log` | Recent tool invocation audit log |
 
 ## Usage Examples
 
@@ -177,6 +333,50 @@ result = await oci_compute_list_instances(
 # Returns: {"items": [...], "total": 10, "has_more": false}
 ```
 
+## Environment Variables
+
+### OCI MCP Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OCI_CONFIG_FILE` | `~/.oci/config` | Path to OCI config file |
+| `OCI_CLI_PROFILE` | `DEFAULT` | OCI config profile name |
+| `OCI_REGION` | From config | Override region |
+| `OCI_TENANCY_OCID` | From config | Override tenancy |
+| `COMPARTMENT_OCID` | - | Default compartment |
+| `ALLOW_MUTATIONS` | `false` | Enable write operations |
+| `OCI_MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `streamable_http` |
+| `OCI_MCP_PORT` | `8000` | HTTP port (if using `streamable_http`) |
+| `OCI_MCP_LOG_LEVEL` | `INFO` | Logging level |
+| `REDIS_URL` | - | Redis URL for caching (fallback: in-memory) |
+
+### MCP Gateway
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_GATEWAY_CONFIG` | - | Path to gateway JSON config |
+| `MCP_GATEWAY_HOST` | `0.0.0.0` | Listen address |
+| `MCP_GATEWAY_PORT` | `9000` | Listen port |
+| `MCP_GATEWAY_PATH` | `/mcp` | Endpoint path |
+| `MCP_GATEWAY_AUTH_ENABLED` | `true` | Enable OAuth/Bearer auth |
+| `MCP_GATEWAY_JWT_PUBLIC_KEY` | - | Path to JWT public key PEM |
+| `MCP_GATEWAY_JWT_ISSUER` | - | Expected JWT issuer |
+| `MCP_GATEWAY_JWT_AUDIENCE` | - | Expected JWT audience |
+| `MCP_GATEWAY_LOG_LEVEL` | `INFO` | Log level |
+| `MCP_GATEWAY_BACKENDS_DIR` | - | Directory of backend config fragments |
+| `MCP_GATEWAY_SCAN_PATHS` | - | Colon-separated dirs to scan for MCP servers |
+
+### Observability
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OCI_APM_ENDPOINT` | - | OCI APM data upload endpoint |
+| `OCI_APM_PRIVATE_DATA_KEY` | - | APM private data key |
+| `OCI_APM_DOMAIN_ID` | - | APM domain OCID |
+| `OCI_LOGGING_ENABLED` | `false` | Enable OCI Logging integration |
+| `OCI_LOGGING_LOG_ID` | - | Log OCID for ingestion |
+| `OCI_LOGAN_NAMESPACE` | - | Log Analytics namespace |
+
 ## Development
 
 ### Running Tests
@@ -185,7 +385,10 @@ result = await oci_compute_list_instances(
 # Unit tests
 uv run pytest tests/
 
-# Smoke test (tool registration check)
+# Unit tests with coverage
+uv run pytest tests/ --ignore=tests/integration --cov=src/mcp_server_oci --cov-report=term-missing
+
+# Smoke test
 uv run python tests/smoke_test.py
 ```
 
@@ -199,16 +402,16 @@ uv run ruff check src/
 uv run mypy src/
 ```
 
-### Adding a New Domain
+### Adding a New Tool Domain
 
 1. Create directory structure:
    ```
    src/mcp_server_oci/tools/newdomain/
    ├── __init__.py
-   ├── SKILL.md
-   ├── models.py
-   ├── tools.py
-   └── formatters.py
+   ├── SKILL.md        # Domain documentation
+   ├── models.py       # Pydantic input models
+   ├── tools.py        # @mcp.tool implementations
+   └── formatters.py   # Markdown/JSON formatters
    ```
 
 2. Register in `server.py`:
@@ -217,26 +420,25 @@ uv run mypy src/
    register_newdomain_tools(mcp)
    ```
 
-## Environment Variables
+### CI/CD
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OCI_CONFIG_FILE` | No | `~/.oci/config` | Path to OCI config file |
-| `OCI_CLI_PROFILE` | No | `DEFAULT` | OCI config profile name |
-| `OCI_REGION` | No | From config | Override region |
-| `OCI_TENANCY_OCID` | No | From config | Override tenancy |
-| `COMPARTMENT_OCID` | No | - | Default compartment |
-| `ALLOW_MUTATIONS` | No | `false` | Enable write operations |
-| `OCI_MCP_TRANSPORT` | No | `stdio` | Transport: stdio or streamable_http |
-| `OCI_MCP_PORT` | No | `8000` | HTTP port (if using HTTP transport) |
-| `OCI_MCP_LOG_LEVEL` | No | `INFO` | Logging level |
+The project uses GitHub Actions for continuous integration:
+
+| Workflow | Trigger | Description |
+|----------|---------|-------------|
+| **CI** | Push/PR to main | Lint (ruff), type check (mypy), unit tests with coverage across Python 3.12/3.13 on Linux, macOS, Windows |
+| **Integration** | Manual / `integration-*` tags | Integration tests against live OCI resources (requires secrets) |
+| **Secret Scan** | Push/PR | Gitleaks secret scanning with SARIF upload to GitHub Security |
 
 ## Security
 
 - **No hardcoded credentials** - All sensitive data via environment variables
 - **Config file isolation** - Uses OCI SDK standard config locations
-- **Mutation protection** - Write operations disabled by default
+- **Mutation protection** - Write operations disabled by default (`ALLOW_MUTATIONS=false`)
 - **Input validation** - Pydantic v2 models with strict validation
+- **OAuth 2.1 authentication** - JWT verification for gateway clients
+- **Per-tool access control** - Scope-based authorization in the gateway
+- **Secret scanning** - Gitleaks CI pipeline with vendor allowlist
 
 ## License
 
@@ -248,7 +450,6 @@ Contributions welcome! Please read the [CONTRIBUTING](CONTRIBUTING.md) guide fir
 
 ## Related Resources
 
-- [OCI MCP Server Standard v2.0](docs/OCI_MCP_SERVER_STANDARD_V2_1.md)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [FastMCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [OCI SDK for Python](https://docs.oracle.com/en-us/iaas/tools/python/latest/)
