@@ -184,15 +184,18 @@ def _build_proxy_configs(backends: list[BackendConfig]) -> dict[str, Any]:
     for backend in backends:
         try:
             if backend.transport == BackendTransport.STDIO:
-                if not backend.command:
+                # resolve_command() handles venv discovery
+                command = backend.resolve_command()
+                if not command and not backend.command:
                     logger.warning(
                         "Skipping stdio backend without command",
                         backend=backend.name,
                     )
                     continue
 
+                # to_env_dict() merges OCI auth + pythonpath
                 proxy_cfg: dict[str, Any] = {
-                    "command": backend.command,
+                    "command": command,
                     "args": backend.args,
                     "env": backend.to_env_dict(),
                 }

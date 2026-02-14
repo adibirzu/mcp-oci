@@ -160,6 +160,35 @@ class BackendConfig(BaseModel):
         description="Request timeout in seconds",
     )
 
+    # -- External project support --
+
+    venv: str | None = Field(
+        default=None,
+        description=(
+            "Path to a virtual environment. If set, the gateway uses "
+            "this venv's python instead of 'command' for stdio backends."
+        ),
+    )
+    pythonpath: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional PYTHONPATH entries injected into the backend's "
+            "environment. Useful for servers in different project trees."
+        ),
+    )
+    pip_packages: list[str] = Field(
+        default_factory=list,
+        description=(
+            "pip packages the gateway will verify (and optionally install) "
+            "before launching the backend. For documentation / pre-flight "
+            "checks only -- the gateway does NOT auto-install by default."
+        ),
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Categorization tags (e.g. 'oci', 'external', 'auto-discovered').",
+    )
+
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
@@ -172,10 +201,25 @@ class BackendConfig(BaseModel):
             raise ValueError(msg)
         return v
 
+    def resolve_command(self) -> str:
+        """Return the effective command for a stdio backend.
+
+        If *venv* is configured, its python binary is used.
+        Otherwise, *command* is used as-is.
+        """
+        if self.venv:
+            for candidate in ("bin/python", "Scripts/python.exe"):
+                python = Path(self.venv).expanduser() / candidate
+                if python.exists():
+                    return str(python)
+
+        return self.command or "python"
+
     def to_env_dict(self) -> dict[str, str]:
         """Build environment dict for the backend process, including OCI auth."""
         env = dict(self.env)
 
+        # OCI authentication
         if self.auth_method == BackendAuthMethod.OCI_CONFIG:
             if self.oci_profile:
                 env["OCI_PROFILE"] = self.oci_profile
@@ -191,6 +235,14 @@ class BackendConfig(BaseModel):
             env["OCI_CLI_AUTH"] = "instance_principal"
             if self.oci_region:
                 env["OCI_REGION"] = self.oci_region
+
+        # Extra PYTHONPATH
+        if self.pythonpath:
+            existing = env.get("PYTHONPATH", "")
+            parts = [p for p in self.pythonpath if p]
+            if existing:
+                parts.append(existing)
+            env["PYTHONPATH"] = os.pathsep.join(parts)
 
         return env
 
@@ -308,6 +360,31 @@ class GatewayConfig(BaseModel):
         description="List of backend MCP servers to aggregate",
     )
 
+    # -- Discovery & multi-project support --
+
+    backends_dir: str | None = Field(
+        default=None,
+        description=(
+            "Directory of *.json backend config fragments. "
+            "Each file is loaded and merged into the backends list."
+        ),
+    )
+    scan_paths: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Directories to scan for MCP servers. The gateway will "
+            "look for .mcp.json, pyproject.toml, or server.py files "
+            "and auto-generate BackendConfig entries (disabled by default)."
+        ),
+    )
+    include_configs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional gateway JSON config files to merge in. "
+            "Only the 'backends' key is merged from included files."
+        ),
+    )
+
     # Observability
     enable_audit_log: bool = Field(
         default=True,
@@ -324,19 +401,22 @@ class GatewayConfig(BaseModel):
 
 
 def load_gateway_config(config_path: str | None = None) -> GatewayConfig:
-    """Load gateway configuration from file and environment.
+    """Load gateway configuration from file, environment, and discovery.
 
-    Priority:
-    1. Environment variables override file values
-    2. Config file provides base configuration
-    3. Defaults used for anything unspecified
+    Priority (highest to lowest):
+    1. Environment variables
+    2. Primary config file (--config / MCP_GATEWAY_CONFIG)
+    3. include_configs files (backends merged)
+    4. backends_dir directory (backends merged)
+    5. scan_paths auto-discovery (backends merged, disabled by default)
+    6. Built-in defaults
 
     Args:
         config_path: Path to JSON config file. Falls back to
                      MCP_GATEWAY_CONFIG env var.
 
     Returns:
-        Validated GatewayConfig instance
+        Validated GatewayConfig instance with all backends merged.
     """
     load_dotenv()
 
@@ -360,10 +440,20 @@ def load_gateway_config(config_path: str | None = None) -> GatewayConfig:
     if os.getenv("MCP_GATEWAY_NAME"):
         env_overrides["name"] = os.getenv("MCP_GATEWAY_NAME")
 
+    # Discovery env overrides
+    if os.getenv("MCP_GATEWAY_BACKENDS_DIR"):
+        env_overrides["backends_dir"] = os.getenv("MCP_GATEWAY_BACKENDS_DIR")
+    if os.getenv("MCP_GATEWAY_SCAN_PATHS"):
+        raw_paths = os.getenv("MCP_GATEWAY_SCAN_PATHS", "")
+        env_overrides["scan_paths"] = [
+            p.strip() for p in raw_paths.split(os.pathsep) if p.strip()
+        ]
+
     # Auth overrides from environment
     if os.getenv("MCP_GATEWAY_AUTH_ENABLED") is not None:
         auth = file_data.get("auth", {})
-        auth["enabled"] = os.getenv("MCP_GATEWAY_AUTH_ENABLED", "true").lower() == "true"
+        auth_enabled = os.getenv("MCP_GATEWAY_AUTH_ENABLED", "true")
+        auth["enabled"] = auth_enabled.lower() == "true"
 
         if os.getenv("MCP_GATEWAY_JWT_PUBLIC_KEY"):
             auth["jwt_public_key_file"] = os.getenv("MCP_GATEWAY_JWT_PUBLIC_KEY")
@@ -375,4 +465,46 @@ def load_gateway_config(config_path: str | None = None) -> GatewayConfig:
         env_overrides["auth"] = auth
 
     merged = {**file_data, **env_overrides}
-    return GatewayConfig(**merged)
+    config = GatewayConfig(**merged)
+
+    # -- Post-load: merge backends from additional sources --
+    seen_names = {b.name for b in config.backends}
+
+    # 1. Merge include_configs
+    for include_path in config.include_configs:
+        inc_path = Path(include_path).expanduser()
+        if inc_path.exists():
+            try:
+                inc_data = json.loads(inc_path.read_text())
+                for b_data in inc_data.get("backends", []):
+                    b = BackendConfig(**b_data)
+                    if b.name not in seen_names:
+                        config.backends.append(b)
+                        seen_names.add(b.name)
+            except Exception as e:
+                import structlog
+                structlog.get_logger("oci-mcp.gateway.config").warning(
+                    "Failed to load include config",
+                    path=str(inc_path),
+                    error=str(e),
+                )
+
+    # 2. Merge backends_dir
+    if config.backends_dir:
+        from .discovery import load_backends_dir
+
+        for b in load_backends_dir(config.backends_dir):
+            if b.name not in seen_names:
+                config.backends.append(b)
+                seen_names.add(b.name)
+
+    # 3. Auto-discover from scan_paths
+    if config.scan_paths:
+        from .discovery import discover_backends
+
+        for b in discover_backends(config.scan_paths, recursive=True):
+            if b.name not in seen_names:
+                config.backends.append(b)
+                seen_names.add(b.name)
+
+    return config
