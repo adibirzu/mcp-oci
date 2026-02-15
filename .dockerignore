@@ -2,6 +2,8 @@
 .venv
 **/__pycache__/
 *.py[cod]
+*.egg-info
+.eggs
 
 # VCS and metadata
 .git
@@ -21,3 +23,18 @@ build/
 # Env files
 .env
 .env.*
+
+# Testing and CI
+.pytest_cache
+.coverage
+htmlcov
+coverage.xml
+tests/
+evaluations/
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

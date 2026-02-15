@@ -1,0 +1,59 @@
+# ──────────────────────────────────────────────────────────────────
+# Gateway ConfigMap - gateway.json configuration
+#
+# This ConfigMap holds the gateway configuration. In production,
+# sensitive values (tokens, keys) should be in Secrets instead.
+#
+# Usage:
+#   kubectl apply -f gateway-configmap.yaml -n mcp
+# ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp-gateway
+    app.kubernetes.io/component: config
+data:
+  gateway.json: |
+    {
+      "name": "oci-mcp-gateway",
+      "version": "1.0.0",
+      "host": "0.0.0.0",
+      "port": 9000,
+      "path": "/mcp",
+      "log_level": "INFO",
+      "stateless": true,
+
+      "auth": {
+        "enabled": true,
+        "jwt_public_key_file": "/etc/mcp/jwt/public.pem",
+        "jwt_issuer": "https://auth.example.com",
+        "jwt_audience": "oci-mcp-gateway",
+        "jwt_algorithms": ["RS256"],
+        "static_tokens": {},
+        "required_scopes": [],
+        "tool_scopes": {},
+        "cors_origins": ["*"]
+      },
+
+      "backends": [
+        {
+          "name": "oci-mcp",
+          "description": "OCI MCP Server (in-cluster, Streamable HTTP)",
+          "enabled": true,
+          "transport": "streamable_http",
+          "url": "http://oci-mcp-server.mcp.svc.cluster.local:8000/mcp",
+          "auth_method": "none",
+          "namespace_tools": false,
+          "health_check_interval": 30,
+          "connect_timeout": 10.0,
+          "request_timeout": 60.0,
+          "tags": ["oci", "in-cluster"]
+        }
+      ],
+
+      "enable_audit_log": true,
+      "enable_metrics": true
+    }
