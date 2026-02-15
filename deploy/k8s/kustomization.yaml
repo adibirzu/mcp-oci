@@ -1,0 +1,17 @@
+# ──────────────────────────────────────────────────────────────────
+# Kustomize base - apply all manifests with:
+#   kubectl apply -k deploy/k8s/
+# ──────────────────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mcp
+
+resources:
+  - namespace.yaml
+  - oci-config.yaml
+  - gateway-configmap.yaml
+  - server-deployment.yaml
+  - gateway-deployment.yaml
+  - network-policy.yaml
+  - ingress.yaml

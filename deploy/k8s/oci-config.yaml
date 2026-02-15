@@ -1,0 +1,52 @@
+# ──────────────────────────────────────────────────────────────────
+# OCI MCP Configuration - Non-sensitive settings
+#
+# Create:
+#   kubectl apply -f oci-config.yaml -n mcp
+#
+# Customize the values below for your OCI tenancy.
+# ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oci-mcp-config
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp
+    app.kubernetes.io/component: config
+data:
+  # OCI region for the MCP server
+  oci-region: "us-ashburn-1"
+
+  # Default compartment OCID (scope for tool queries)
+  compartment-ocid: ""
+
+  # Tenancy OCID (optional override)
+  tenancy-ocid: ""
+---
+# ──────────────────────────────────────────────────────────────────
+# Secrets template (do NOT commit actual values)
+#
+# Create manually:
+#   kubectl create secret generic oci-mcp-secrets -n mcp \
+#     --from-literal=redis-url="redis://redis:6379"
+#
+#   kubectl create secret generic gateway-jwt-keys -n mcp \
+#     --from-file=public.pem=/path/to/public.pem
+#
+#   kubectl create secret docker-registry ocir-secret -n mcp \
+#     --docker-server=<region>.ocir.io \
+#     --docker-username='<namespace>/<username>' \
+#     --docker-password='<auth-token>'
+# ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-mcp-secrets
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp
+    app.kubernetes.io/component: secrets
+type: Opaque
+stringData:
+  redis-url: ""  # Set if using Redis cache

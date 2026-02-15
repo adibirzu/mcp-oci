@@ -377,6 +377,53 @@ result = await oci_compute_list_instances(
 | `OCI_LOGGING_LOG_ID` | - | Log OCID for ingestion |
 | `OCI_LOGAN_NAMESPACE` | - | Log Analytics namespace |
 
+## Deployment on OCI
+
+### Container Images
+
+```bash
+# Build MCP Server image
+docker build --target server -t oci-mcp-server .
+
+# Build MCP Gateway image
+docker build --target gateway -t oci-mcp-gateway .
+
+# Push to OCI Container Registry (OCIR)
+docker tag oci-mcp-server ${OCIR_REGION}.ocir.io/${OCIR_NAMESPACE}/oci-mcp-server:latest
+docker push ${OCIR_REGION}.ocir.io/${OCIR_NAMESPACE}/oci-mcp-server:latest
+```
+
+### Deploy on OKE (Kubernetes)
+
+```bash
+# Apply all Kubernetes manifests
+kubectl apply -k deploy/k8s/
+
+# Verify
+kubectl get pods -n mcp
+kubectl get svc -n mcp
+```
+
+### Hosting Options
+
+| Platform | Use Case | Guide |
+|----------|----------|-------|
+| **OKE** | Production, multi-server, gateway | [Deployment Guide](docs/deployment-guide.md) |
+| **OCI Data Science** | ML teams, notebook workflows | [Deployment Guide](docs/deployment-guide.md#deployment-option-2-oci-data-science) |
+| **Container Instances** | Simple, single server | [Deployment Guide](docs/deployment-guide.md#deployment-option-3-oci-container-instances) |
+| **OCI Functions** | Serverless, event-driven | [Deployment Guide](docs/deployment-guide.md#deployment-option-4-oci-functions-serverless) |
+
+### External LLM Access
+
+| Client | Connection Method |
+|--------|------------------|
+| Claude Desktop / Cline | Streamable HTTP + Bearer token |
+| ChatGPT (Actions) | REST adapter + OAuth 2.0 |
+| Google Gemini | Function calling + HTTP proxy |
+| OCI AI Agents | Private VCN + resource principal |
+
+See the [Knowledge Base](docs/oci-mcp-knowledge-base.md) for detailed integration guides.
+
 ## Development
 
 ### Running Tests

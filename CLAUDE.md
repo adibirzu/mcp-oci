@@ -304,6 +304,51 @@ except Exception as e:
 | `OCI_LOGAN_NAMESPACE` | - | Log Analytics namespace |
 | `OCI_LOGAN_LOG_GROUP_ID` | - | Log Analytics log group OCID |
 
+## Deployment
+
+### Container Images
+
+```bash
+# Build MCP Server image (Streamable HTTP)
+docker build --target server -t oci-mcp-server .
+
+# Build MCP Gateway image
+docker build --target gateway -t oci-mcp-gateway .
+```
+
+### OKE (Kubernetes) Deployment
+
+```bash
+# Deploy all manifests to OKE
+kubectl apply -k deploy/k8s/
+
+# Verify
+kubectl get pods -n mcp
+kubectl get svc -n mcp
+```
+
+Manifests in `deploy/k8s/`:
+- `namespace.yaml` - `mcp` namespace
+- `server-deployment.yaml` - MCP Server (Deployment + Service + ServiceAccount)
+- `gateway-deployment.yaml` - MCP Gateway (Deployment + public/internal Services)
+- `gateway-configmap.yaml` - Gateway configuration
+- `oci-config.yaml` - OCI settings + secrets template
+- `network-policy.yaml` - Pod-level network isolation
+- `ingress.yaml` - OCI Native Ingress for external TLS access
+- `kustomization.yaml` - Kustomize base
+
+### OCI Auth on Kubernetes
+
+On OKE, use **resource principals** (workload identity). Requires:
+1. Dynamic group matching OKE cluster/compartment
+2. IAM policy granting the dynamic group access to OCI resources
+3. `OCI_CLI_AUTH=resource_principal` env var in pods
+
+### Documentation
+
+- `docs/deployment-guide.md` - Full deployment guide (OKE, Data Science, Container Instances, Functions)
+- `docs/oci-mcp-knowledge-base.md` - KB for running any MCP server on OCI + external LLM integration
+
 ## CI/CD
 
 Three GitHub Actions workflows in `.github/workflows/`:

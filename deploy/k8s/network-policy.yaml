@@ -1,0 +1,57 @@
+# ──────────────────────────────────────────────────────────────────
+# Network Policies for MCP namespace
+#
+# Controls traffic flow between gateway, servers, and external clients.
+# ──────────────────────────────────────────────────────────────────
+
+# Default deny all ingress in the mcp namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: mcp
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow gateway to receive traffic from external (LB / Ingress)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-ingress
+  namespace: mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: oci-mcp-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    # From load balancer / ingress controller
+    - ports:
+        - port: 9000
+          protocol: TCP
+
+---
+# Allow MCP server to receive traffic only from gateway (in-cluster)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-server-from-gateway
+  namespace: mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: oci-mcp-server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: oci-mcp-gateway
+      ports:
+        - port: 8000
+          protocol: TCP

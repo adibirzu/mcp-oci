@@ -1,0 +1,170 @@
+# ──────────────────────────────────────────────────────────────────
+# MCP Gateway Deployment
+#
+# Runs the MCP Gateway as the single entry point for all MCP clients.
+# Exposes a Streamable HTTP endpoint with JWT/OAuth authentication.
+#
+# The gateway proxies requests to backend MCP servers via:
+#   - In-cluster HTTP (to oci-mcp-server service)
+#   - Remote Streamable HTTP (to external MCP servers)
+#
+# Access patterns:
+#   - Internal (OKE pods, OCI services): via ClusterIP or private LB
+#   - External (Claude Desktop, ChatGPT, etc.): via public LB or API GW
+# ──────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oci-mcp-gateway
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp-gateway
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: oci-mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oci-mcp-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oci-mcp-gateway
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/part-of: oci-mcp
+    spec:
+      serviceAccountName: oci-mcp-gateway
+      containers:
+        - name: gateway
+          image: ${OCIR_REGION}.ocir.io/${OCIR_NAMESPACE}/oci-mcp-gateway:latest  # Replace with your OCIR image
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: MCP_GATEWAY_CONFIG
+              value: "/etc/mcp/gateway/gateway.json"
+            - name: MCP_GATEWAY_HOST
+              value: "0.0.0.0"
+            - name: MCP_GATEWAY_PORT
+              value: "9000"
+            - name: MCP_GATEWAY_LOG_LEVEL
+              value: "INFO"
+          args:
+            - "--config"
+            - "/etc/mcp/gateway/gateway.json"
+            - "--stateless"
+          volumeMounts:
+            - name: gateway-config
+              mountPath: /etc/mcp/gateway
+              readOnly: true
+            - name: jwt-keys
+              mountPath: /etc/mcp/jwt
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /mcp
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /mcp
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: gateway-config
+          configMap:
+            name: gateway-config
+        - name: jwt-keys
+          secret:
+            secretName: gateway-jwt-keys
+            optional: true
+      imagePullSecrets:
+        - name: ocir-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oci-mcp-gateway
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp-gateway
+    app.kubernetes.io/component: gateway
+  annotations:
+    # OCI Load Balancer annotations for internal access
+    # For private LB (internal OCI access only):
+    #   service.beta.kubernetes.io/oci-load-balancer-internal: "true"
+    #   service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet..."
+    # For public LB (external access from Claude Desktop, ChatGPT, etc.):
+    #   Remove the internal annotation
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "100"
+spec:
+  type: LoadBalancer
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+      protocol: TCP
+    - name: http
+      port: 9000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: oci-mcp-gateway
+---
+# Internal-only service for OCI private access
+apiVersion: v1
+kind: Service
+metadata:
+  name: oci-mcp-gateway-internal
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp-gateway
+    app.kubernetes.io/component: gateway-internal
+  annotations:
+    service.beta.kubernetes.io/oci-load-balancer-internal: "true"
+    service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
+    # Uncomment and set your private subnet OCID:
+    # service.beta.kubernetes.io/oci-load-balancer-subnet1: "ocid1.subnet.oc1..."
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: oci-mcp-gateway
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oci-mcp-gateway
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp-gateway

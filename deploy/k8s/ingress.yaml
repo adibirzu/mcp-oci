@@ -1,0 +1,55 @@
+# ──────────────────────────────────────────────────────────────────
+# OCI Native Ingress Controller configuration
+#
+# This provides HTTPS termination and path-based routing for
+# the MCP Gateway. Required for external access from:
+#   - Claude Desktop, Cline (remote MCP server via Streamable HTTP)
+#   - ChatGPT Actions (OpenAPI + OAuth flow)
+#   - Google Gemini (function calling via HTTP)
+#
+# Prerequisites:
+#   - OCI Native Ingress Controller installed on OKE
+#   - OCI Certificate for TLS (via OCI Certificates service)
+#   - DNS record pointing to the Ingress LB IP
+#
+# Alternative: Use OCI API Gateway (see deploy/oci/api-gateway.tf)
+# ──────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oci-mcp-ingress
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: oci-mcp
+    app.kubernetes.io/component: ingress
+  annotations:
+    # OCI Native Ingress Controller annotations
+    oci-native-ingress.oraclecloud.com/id: ""  # Set after LB is created
+    # TLS via OCI Certificates service
+    oci-native-ingress.oraclecloud.com/certificate-ocid: ""  # Set your cert OCID
+spec:
+  ingressClassName: native
+  tls:
+    - hosts:
+        - mcp.example.com  # Replace with your domain
+      secretName: mcp-tls  # Managed by OCI cert controller
+  rules:
+    - host: mcp.example.com  # Replace with your domain
+      http:
+        paths:
+          # Gateway endpoint - main entry point for all MCP clients
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: oci-mcp-gateway
+                port:
+                  number: 9000
+          # Direct server access (optional, for debugging)
+          - path: /server/mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: oci-mcp-server
+                port:
+                  number: 8000
