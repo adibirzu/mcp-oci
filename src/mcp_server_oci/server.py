@@ -66,12 +66,6 @@ async def app_lifespan(server: FastMCP) -> AsyncGenerator[None, None]:
     """
     logger.info("Starting OCI MCP Server", version=config.server.version)
 
-    # Initialize observability (OCI APM + Logging)
-    init_observability(
-        service_name=config.server.name,
-        service_version=config.server.version
-    )
-
     # Initialize OCI client
     client_manager = get_client_manager()
     try:
@@ -836,12 +830,18 @@ async def get_instance_metrics_alias(params: GetInstanceMetricsInput, ctx: Conte
 
 def main() -> None:
     """Entry point supporting multiple transports."""
+    # Initialize observability early so logs go to stderr instead of stdout
+    init_observability(
+        service_name=config.server.name,
+        service_version=config.server.version
+    )
     if config.server.transport == "streamable_http":
         logger.info(f"Starting HTTP server on port {config.server.port}")
         mcp.run(transport="streamable-http", port=config.server.port)
     else:
         logger.info("Starting stdio server")
-        mcp.run()
+        # Suppress banner so stdout is kept clean for JSON-RPC
+        mcp.run(show_banner=False)
 
 
 if __name__ == "__main__":
