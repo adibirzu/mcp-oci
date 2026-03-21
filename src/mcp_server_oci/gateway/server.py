@@ -134,22 +134,39 @@ def create_gateway(config: GatewayConfig | None = None) -> FastMCP:
                 error=str(e),
             )
 
-    if config.stateless:
-        mcp_kwargs["stateless_http"] = True
+    # Note: stateless_http is set via FASTMCP_STATELESS_HTTP env var or
+    # passed to run_http_async(), not via constructor (FastMCP 3.x change)
 
-    # Build the composite proxy from backend configs
+    # Build individual proxies and mount them on a gateway server.
+    # FastMCP 3.x: as_proxy(MCPConfig) doesn't aggregate tools correctly in
+    # stateless mode. Instead, create_proxy() per backend + mount() works.
+    from fastmcp.server.server import create_proxy
+
     backends = config.get_enabled_backends()
     proxy_configs = _build_proxy_configs(backends)
 
-    if proxy_configs:
-        # Use FastMCP.as_proxy() for backend aggregation
-        gateway = FastMCP.as_proxy(
-            {"mcpServers": proxy_configs},
-            **mcp_kwargs,
-        )
-    else:
-        # No backends configured - create a standalone gateway
-        gateway = FastMCP(**mcp_kwargs)
+    gateway = FastMCP(**mcp_kwargs)
+
+    for backend in backends:
+        name = backend.name
+        if name not in proxy_configs:
+            continue
+
+        pcfg = proxy_configs[name]
+        try:
+            # For HTTP backends, pass URL directly to create_proxy
+            if backend.transport == BackendTransport.STREAMABLE_HTTP and backend.url:
+                proxy = create_proxy(backend.url, name=f"{name}-proxy")
+            else:
+                proxy = create_proxy(
+                    {"mcpServers": {name: pcfg}},
+                    name=f"{name}-proxy",
+                )
+            namespace = name if backend.namespace_tools else None
+            gateway.mount(proxy, namespace=namespace)
+            logger.info("Mounted backend proxy", backend=name, namespace=namespace)
+        except Exception as e:
+            logger.warning("Failed to mount backend proxy", backend=name, error=str(e))
 
     # Attach config, registry, and auth to the server for lifespan access
     gateway._gateway_config = config  # type: ignore[attr-defined]
@@ -458,9 +475,13 @@ def run_gateway(config: GatewayConfig | None = None) -> None:
         backends=len(config.get_enabled_backends()),
     )
 
-    gateway.run(
-        transport="streamable-http",
-        host=config.host,
-        port=config.port,
-        path=config.path,
-    )
+    run_kwargs: dict[str, Any] = {
+        "transport": "streamable-http",
+        "host": config.host,
+        "port": config.port,
+        "path": config.path,
+    }
+    if config.stateless:
+        run_kwargs["stateless_http"] = True
+
+    gateway.run(**run_kwargs)
