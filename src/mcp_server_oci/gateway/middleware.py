@@ -40,9 +40,13 @@ _WRITE_VERBS = frozenset({
 
 
 def _is_write_tool(tool_name: str) -> bool:
-    """Return True if the tool name contains a write-operation verb."""
-    lower = tool_name.lower()
-    return any(verb in lower for verb in _WRITE_VERBS)
+    """Return True if any underscore-delimited segment is a write verb.
+
+    Uses word-level matching (split on _) rather than substring to avoid
+    misclassifying tools like 'list_started_instances' as write ops.
+    """
+    parts = set(tool_name.lower().split("_"))
+    return bool(parts & _WRITE_VERBS)
 
 
 # ── Composite Token Verifier ────────────────────────────────────────────────
@@ -188,17 +192,23 @@ class GatewayGuardrailMiddleware(Middleware):
         # ── 1. AuthZ: scope check ──────────────────────────────────────
         if self._auth_enabled:
             access_token = get_access_token()
-            if access_token is not None:
-                scopes = access_token.scopes or []
-                required = "write:tools" if write_op else "read:tools"
-                if required not in scopes:
-                    self._record(tool_name, client_id, "unauthorized")
-                    raise McpError(
-                        ErrorData(
-                            code=-32001,
-                            message=f"Scope '{required}' required for '{tool_name}'",
-                        )
+            if access_token is None:
+                # No token = unauthenticated. Reject at the MCP layer as a
+                # defense-in-depth backstop even if the HTTP layer let it through.
+                self._record(tool_name, client_id, "unauthorized")
+                raise McpError(
+                    ErrorData(code=-32001, message="Authentication required")
+                )
+            scopes = access_token.scopes or []
+            required = "write:tools" if write_op else "read:tools"
+            if required not in scopes:
+                self._record(tool_name, client_id, "unauthorized")
+                raise McpError(
+                    ErrorData(
+                        code=-32001,
+                        message=f"Scope '{required}' required for '{tool_name}'",
                     )
+                )
 
         # ── 2. Rate limit: general ─────────────────────────────────────
         limiter = self._general_limiters[client_id]
@@ -224,40 +234,55 @@ class GatewayGuardrailMiddleware(Middleware):
                 )
 
         # ── 4. Execute with OTEL span ──────────────────────────────────
-        span = None
         if self._tracer:
-            span = self._tracer.start_span(
-                "mcp.tool_call",
-                attributes={
-                    "mcp.tool": tool_name,
-                    "mcp.client_id": client_id,
-                    "mcp.write_op": write_op,
-                },
+            return await self._execute_with_span(
+                context, call_next, tool_name, client_id, t0
             )
 
+        # No tracer — execute without span
         try:
             result = await call_next(context)
             elapsed_ms = (time.monotonic() - t0) * 1000
-
-            if span:
-                span.set_attribute("mcp.status", "success")
-                span.set_attribute("mcp.latency_ms", round(elapsed_ms, 1))
-                span.end()
-
             self._record_metrics(tool_name, client_id, elapsed_ms, "success")
             self._record(tool_name, client_id, "success")
             return result
-
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
-            if span:
-                span.set_attribute("mcp.status", "error")
-                span.set_attribute("mcp.error", str(exc)[:200])
-                span.end()
-
             self._record_metrics(tool_name, client_id, elapsed_ms, "error")
             self._record(tool_name, client_id, "error", {"error": str(exc)[:200]})
             raise
+
+    async def _execute_with_span(
+        self,
+        context: MiddlewareContext,
+        call_next: CallNext,
+        tool_name: str,
+        client_id: str,
+        t0: float,
+    ) -> ToolResult:
+        """Execute tool call inside an OTEL span (guaranteed end on exit)."""
+        with self._tracer.start_as_current_span(
+            "mcp.tool_call",
+            attributes={
+                "mcp.tool": tool_name,
+                "mcp.client_id": client_id,
+            },
+        ) as span:
+            try:
+                result = await call_next(context)
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                span.set_attribute("mcp.status", "success")
+                span.set_attribute("mcp.latency_ms", round(elapsed_ms, 1))
+                self._record_metrics(tool_name, client_id, elapsed_ms, "success")
+                self._record(tool_name, client_id, "success")
+                return result
+            except Exception as exc:
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                span.set_attribute("mcp.status", "error")
+                span.set_attribute("mcp.error", str(exc)[:200])
+                self._record_metrics(tool_name, client_id, elapsed_ms, "error")
+                self._record(tool_name, client_id, "error", {"error": str(exc)[:200]})
+                raise
 
     def _record_metrics(
         self, tool: str, client: str, latency_ms: float, status: str
