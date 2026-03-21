@@ -31,6 +31,7 @@ from fastmcp import FastMCP
 
 from .auth import GatewayAuthProvider, create_auth_provider
 from .config import BackendConfig, BackendTransport, GatewayConfig, load_gateway_config
+from .middleware import GatewayGuardrailMiddleware, create_composite_verifier
 from .registry import BackendRegistry
 
 logger = structlog.get_logger("oci-mcp.gateway")
@@ -114,25 +115,27 @@ def create_gateway(config: GatewayConfig | None = None) -> FastMCP:
         "instructions": _build_instructions(config),
     }
 
-    # Configure auth if using JWT with a public key
-    if config.auth.enabled and config.auth.jwt_public_key_file:
-        try:
-            from fastmcp.server.auth import BearerAuthProvider
+    # AuthN: composite verifier (static tokens → JWT).
+    # Returns None when auth is disabled; FastMCP will not enforce tokens.
+    verifier = create_composite_verifier(config.auth)
+    if verifier is not None:
+        mcp_kwargs["auth"] = verifier
+        logger.info(
+            "auth_configured",
+            static_tokens=len(config.auth.static_tokens),
+            jwt_enabled=bool(config.auth.jwt_public_key_file),
+        )
 
-            with open(config.auth.jwt_public_key_file) as f:
-                public_key = f.read()
-
-            mcp_kwargs["auth"] = BearerAuthProvider(
-                public_key=public_key,
-                issuer=config.auth.jwt_issuer,
-                audience=config.auth.jwt_audience,
-            )
-            logger.info("FastMCP Bearer auth configured via JWT public key")
-        except (ImportError, FileNotFoundError) as e:
-            logger.warning(
-                "FastMCP BearerAuthProvider not available, using custom auth",
-                error=str(e),
-            )
+    # AuthZ + Guardrails: MCP-layer middleware for scope checks,
+    # rate limiting, OTEL tracing, and audit logging on every tool call.
+    mcp_kwargs["middleware"] = [
+        GatewayGuardrailMiddleware(
+            auth_enabled=config.auth.enabled,
+            general_limit=100,
+            write_limit=10,
+            window_seconds=60,
+        ),
+    ]
 
     # Note: stateless_http is set via FASTMCP_STATELESS_HTTP env var or
     # passed to run_http_async(), not via constructor (FastMCP 3.x change)
