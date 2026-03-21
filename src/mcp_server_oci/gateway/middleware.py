@@ -94,14 +94,30 @@ def create_composite_verifier(
     """Build a CompositeTokenVerifier from gateway auth config.
 
     Returns None when auth is disabled so FastMCP skips token enforcement.
+
+    Static tokens can be injected via MCP_GATEWAY_STATIC_TOKEN env var
+    (avoids hardcoding tokens in ConfigMaps). Format: the raw token string.
+    The env-injected token gets client_id="env-token" with read+write scopes.
     """
+    import os
+
     if not config.enabled:
         return None
+
+    # Inject static token from env var (Secret-backed in K8s)
+    env_token = os.getenv("MCP_GATEWAY_STATIC_TOKEN", "")
+    if env_token and env_token not in config.static_tokens:
+        config.static_tokens[env_token] = {
+            "client_id": "env-token",
+            "scopes": ["read:tools", "write:tools"],
+            "subject": "control-plane",
+        }
+        logger.info("static_token_injected_from_env")
 
     if not config.static_tokens and not config.jwt_public_key_file:
         logger.warning(
             "auth_enabled_but_no_credentials",
-            hint="Set static_tokens or jwt_public_key_file — all requests will be rejected",
+            hint="Set MCP_GATEWAY_STATIC_TOKEN env or jwt_public_key_file",
         )
 
     gateway_auth = GatewayAuthProvider(config)
