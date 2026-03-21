@@ -1,0 +1,287 @@
+"""
+MCP Gateway guardrail middleware and composite token verifier.
+
+Provides:
+- CompositeTokenVerifier: FastMCP TokenVerifier that tries static tokens
+  first, then JWT — bridges the existing GatewayAuthProvider into
+  FastMCP's auth= constructor parameter.
+- GatewayGuardrailMiddleware: MCP-layer middleware enforcing per-tool
+  scope-based AuthZ, rate limiting, OTEL tracing, and audit logging.
+"""
+
+from __future__ import annotations
+
+import time
+from collections import defaultdict
+from typing import Any
+
+import structlog
+from mcp import McpError
+from mcp.types import ErrorData
+
+from fastmcp.server.auth import AccessToken, TokenVerifier
+from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimiter
+from fastmcp.tools.tool import ToolResult
+
+from .auth import GatewayAuthProvider
+from .config import GatewayAuthConfig
+
+logger = structlog.get_logger("oci-mcp.gateway.middleware")
+
+# ── Tool classification ─────────────────────────────────────────────────────
+
+_WRITE_VERBS = frozenset({
+    "create", "delete", "stop", "terminate", "update", "modify",
+    "patch", "remove", "drop", "kill", "start", "reboot",
+    "remediate", "import", "clear", "disconnect",
+})
+
+
+def _is_write_tool(tool_name: str) -> bool:
+    """Return True if the tool name contains a write-operation verb."""
+    lower = tool_name.lower()
+    return any(verb in lower for verb in _WRITE_VERBS)
+
+
+# ── Composite Token Verifier ────────────────────────────────────────────────
+
+
+class CompositeTokenVerifier(TokenVerifier):
+    """FastMCP TokenVerifier that delegates to GatewayAuthProvider.
+
+    Tries static token lookup first (O(1) dict), then JWT verification.
+    Bridges the existing auth.py logic into FastMCP's HTTP-layer auth
+    enforcement so that unauthenticated requests are rejected before
+    reaching any MCP handler.
+    """
+
+    def __init__(self, gateway_auth: GatewayAuthProvider) -> None:
+        super().__init__(
+            required_scopes=list(gateway_auth._config.required_scopes)
+            if gateway_auth._config.required_scopes
+            else None,
+        )
+        self._gateway_auth = gateway_auth
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Verify via static map first, then JWT."""
+        try:
+            identity = await self._gateway_auth.authenticate(token)
+        except Exception:
+            return None
+
+        if identity is None:
+            return None
+
+        return AccessToken(
+            token=token,
+            client_id=identity.client_id,
+            scopes=identity.scopes,
+            expires_at=int(identity.expires_at) if identity.expires_at else None,
+            claims=dict(identity.claims),
+        )
+
+
+def create_composite_verifier(
+    config: GatewayAuthConfig,
+) -> CompositeTokenVerifier | None:
+    """Build a CompositeTokenVerifier from gateway auth config.
+
+    Returns None when auth is disabled so FastMCP skips token enforcement.
+    """
+    if not config.enabled:
+        return None
+
+    if not config.static_tokens and not config.jwt_public_key_file:
+        logger.warning(
+            "auth_enabled_but_no_credentials",
+            hint="Set static_tokens or jwt_public_key_file — all requests will be rejected",
+        )
+
+    gateway_auth = GatewayAuthProvider(config)
+    return CompositeTokenVerifier(gateway_auth)
+
+
+# ── Guardrail Middleware ────────────────────────────────────────────────────
+
+
+def _get_client_id_from_token() -> str:
+    """Extract client_id from the current request's AccessToken."""
+    token = get_access_token()
+    return token.client_id if token else "anonymous"
+
+
+class GatewayGuardrailMiddleware(Middleware):
+    """MCP-layer middleware enforcing AuthZ, rate limits, tracing, and audit.
+
+    Runs on every tools/call and:
+    1. Reads the AccessToken injected by FastMCP's BearerAuthBackend.
+    2. Enforces read:tools / write:tools scopes based on tool name.
+    3. Applies per-client sliding-window rate limits.
+    4. Creates OTEL spans per tool call (if tracer available).
+    5. Records audit events for every invocation.
+    """
+
+    def __init__(
+        self,
+        auth_enabled: bool = True,
+        general_limit: int = 100,
+        write_limit: int = 10,
+        window_seconds: int = 60,
+    ) -> None:
+        self._auth_enabled = auth_enabled
+        self._general_limit = general_limit
+        self._write_limit = write_limit
+        self._window_seconds = window_seconds
+
+        # Per-client sliding window limiters
+        self._general_limiters: dict[str, SlidingWindowRateLimiter] = defaultdict(
+            lambda: SlidingWindowRateLimiter(general_limit, window_seconds)
+        )
+        self._write_limiters: dict[str, SlidingWindowRateLimiter] = defaultdict(
+            lambda: SlidingWindowRateLimiter(write_limit, window_seconds)
+        )
+
+        # OTEL tracer (lazy init)
+        self._tracer = None
+        self._call_counter = None
+        self._latency_histogram = None
+        self._init_otel()
+
+    def _init_otel(self) -> None:
+        """Try to get the OTEL tracer and metrics if already initialized."""
+        try:
+            from opentelemetry import trace, metrics
+
+            tp = trace.get_tracer_provider()
+            # Only use if a real provider is set (not the no-op default)
+            if hasattr(tp, "get_tracer") and type(tp).__name__ != "ProxyTracerProvider":
+                self._tracer = tp.get_tracer("oci-mcp-gateway.guardrail")
+
+            mp = metrics.get_meter_provider()
+            if type(mp).__name__ != "ProxyMeterProvider":
+                meter = mp.get_meter("oci-mcp-gateway")
+                self._call_counter = meter.create_counter(
+                    "mcp.tool_calls",
+                    description="Total MCP tool invocations",
+                )
+                self._latency_histogram = meter.create_histogram(
+                    "mcp.tool_latency",
+                    description="MCP tool call latency",
+                    unit="ms",
+                )
+        except ImportError:
+            pass
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext,
+        call_next: CallNext,
+    ) -> ToolResult:
+        tool_name: str = context.message.name
+        write_op = _is_write_tool(tool_name)
+        client_id = _get_client_id_from_token()
+        t0 = time.monotonic()
+
+        # ── 1. AuthZ: scope check ──────────────────────────────────────
+        if self._auth_enabled:
+            access_token = get_access_token()
+            if access_token is not None:
+                scopes = access_token.scopes or []
+                required = "write:tools" if write_op else "read:tools"
+                if required not in scopes:
+                    self._record(tool_name, client_id, "unauthorized")
+                    raise McpError(
+                        ErrorData(
+                            code=-32001,
+                            message=f"Scope '{required}' required for '{tool_name}'",
+                        )
+                    )
+
+        # ── 2. Rate limit: general ─────────────────────────────────────
+        limiter = self._general_limiters[client_id]
+        if not await limiter.is_allowed():
+            self._record(tool_name, client_id, "rate_limited")
+            raise McpError(
+                ErrorData(
+                    code=-32000,
+                    message=f"Rate limit exceeded: {self._general_limit}/{self._window_seconds}s",
+                )
+            )
+
+        # ── 3. Rate limit: write-specific ──────────────────────────────
+        if write_op:
+            wl = self._write_limiters[client_id]
+            if not await wl.is_allowed():
+                self._record(tool_name, client_id, "rate_limited_write")
+                raise McpError(
+                    ErrorData(
+                        code=-32000,
+                        message=f"Write rate limit exceeded: {self._write_limit}/{self._window_seconds}s",
+                    )
+                )
+
+        # ── 4. Execute with OTEL span ──────────────────────────────────
+        span = None
+        if self._tracer:
+            span = self._tracer.start_span(
+                "mcp.tool_call",
+                attributes={
+                    "mcp.tool": tool_name,
+                    "mcp.client_id": client_id,
+                    "mcp.write_op": write_op,
+                },
+            )
+
+        try:
+            result = await call_next(context)
+            elapsed_ms = (time.monotonic() - t0) * 1000
+
+            if span:
+                span.set_attribute("mcp.status", "success")
+                span.set_attribute("mcp.latency_ms", round(elapsed_ms, 1))
+                span.end()
+
+            self._record_metrics(tool_name, client_id, elapsed_ms, "success")
+            self._record(tool_name, client_id, "success")
+            return result
+
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            if span:
+                span.set_attribute("mcp.status", "error")
+                span.set_attribute("mcp.error", str(exc)[:200])
+                span.end()
+
+            self._record_metrics(tool_name, client_id, elapsed_ms, "error")
+            self._record(tool_name, client_id, "error", {"error": str(exc)[:200]})
+            raise
+
+    def _record_metrics(
+        self, tool: str, client: str, latency_ms: float, status: str
+    ) -> None:
+        """Record OTEL metrics for a tool call."""
+        attrs = {"mcp.tool": tool, "mcp.client_id": client, "mcp.status": status}
+        if self._call_counter:
+            self._call_counter.add(1, attrs)
+        if self._latency_histogram:
+            self._latency_histogram.record(latency_ms, attrs)
+
+    def _record(
+        self,
+        tool_name: str,
+        client_id: str,
+        status: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Record audit event (late import to avoid circular dependency)."""
+        try:
+            from .server import record_audit_event  # noqa: PLC0415
+
+            record_audit_event(
+                tool_name, client_id=client_id, status=status, details=details
+            )
+        except ImportError:
+            pass
