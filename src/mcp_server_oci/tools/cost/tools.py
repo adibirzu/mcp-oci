@@ -26,7 +26,16 @@ from .models import (
 
 
 def register_cost_tools(mcp: FastMCP) -> None:
-    """Register all cost domain tools with the MCP server."""
+    """Register all cost domain tools with the MCP server.
+
+    DEPRECATION NOTICE (2026-03-22): These basic cost tools are superseded by
+    finopsai-mcp which provides advanced multi-cloud FinOps analysis including
+    FOCUS v1.3 normalization, forecasting, rightsizing, carbon footprint, and
+    Kubernetes cost allocation. These tools are maintained for backward
+    compatibility but new integrations should use finopsai-mcp instead.
+
+    Canonical cost server: finopsai-mcp (~/dev/MCP/finopsai-mcp)
+    """
 
     @mcp.tool(
         name="oci_cost_get_summary",
