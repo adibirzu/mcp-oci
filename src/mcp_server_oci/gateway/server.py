@@ -110,9 +110,14 @@ def create_gateway(config: GatewayConfig | None = None) -> FastMCP:
     auth_provider = create_auth_provider(config.auth)
 
     # Build FastMCP kwargs
+    # The lifespan registers + connects backends into the health registry on
+    # startup and disconnects on shutdown. Without it the BackendRegistry stays
+    # empty, so gateway_health (and downstream readiness probes) report zero
+    # backends even though proxies are mounted and serving tools.
     mcp_kwargs: dict[str, Any] = {
         "name": config.name,
         "instructions": _build_instructions(config),
+        "lifespan": gateway_lifespan,
     }
 
     # AuthN: composite verifier (static tokens → JWT).
