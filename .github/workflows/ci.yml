@@ -1,10 +1,9 @@
 name: CI
 
+# TEMPORARILY MANUAL-ONLY while the GitHub account billing gate rejects jobs
+# before checkout. Local focused checks remain the implementation gate.
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   lint:
